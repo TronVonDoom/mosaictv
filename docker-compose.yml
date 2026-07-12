@@ -9,9 +9,10 @@ services:
     environment:
       - TZ=America/Chicago
       - PORT=8688
+      - DATABASE_URL=file:/app/data/mesatztv.db
     volumes:
-      # Persistent app data (database + config) — created automatically.
+      # Persistent app data (SQLite database + config) — keep this.
       - ./data:/app/data
-      # Your media library. EDIT the left side to your Unraid media share,
-      # e.g. /mnt/user/media:/media:ro  (read-only is recommended)
-      - ./media:/media:ro
+      # Your media library. EDIT the left side to your Unraid media share.
+      # Your libraries inside the app then point at subfolders, e.g. /media/TV.
+      - /mnt/user/media:/media:ro

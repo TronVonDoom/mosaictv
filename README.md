@@ -7,8 +7,9 @@ plugs straight into Plex, Jellyfin, Emby, or any IPTV player.
 Inspired by [ErsatzTV](https://ersatztv.org/), built to be simple to run and
 easy to update on Unraid.
 
-> **Status:** Milestone 1 — the deploy loop. The app boots, serves a web UI, and
-> confirms `ffmpeg` is available. Scheduling, streaming, and overlays come next.
+> **Status:** Milestone 2 — data + media indexing. The app scans your library
+> with ffprobe, parses Plex-style names into shows/episodes/movies, and browses
+> it all from the web UI. Scheduling, streaming, and overlays come next.
 
 ---
 
@@ -18,8 +19,8 @@ easy to update on Unraid.
 | ---------- | ---------------------------------------- |
 | Backend    | Express + TypeScript (`server/`)         |
 | Frontend   | React + Vite + Tailwind (`web/`)         |
-| Streaming  | ffmpeg (bundled in the Docker image)     |
-| Database   | SQLite via Prisma *(added in Milestone 2)* |
+| Streaming  | ffmpeg / ffprobe (bundled in the image)  |
+| Database   | SQLite via Prisma (`server/prisma/`)     |
 | Deploy     | A single Docker container                |
 
 ---
@@ -34,7 +35,8 @@ npm run dev           # backend on :8688, frontend on :5173
 ```
 
 Open <http://localhost:5173>. The React dev server proxies `/api/*` to the
-backend automatically.
+backend automatically. (First run creates a local SQLite DB at
+`server/prisma/dev.db` — run `npm --prefix server run db:push` if it's missing.)
 
 To test a production-style build locally:
 
@@ -121,10 +123,23 @@ Volumes:
 
 ---
 
+## Using it (Milestone 2)
+
+1. Open the web UI → **Libraries**.
+2. Add a library pointing at a folder **inside the container**, under your
+   mounted `/media` volume — e.g. name `TV Shows`, path `/media/TV`, type
+   `TV Shows`. Add another for `/media/Movies` as `Movies`.
+3. Click **Scan**. A progress bar shows files being probed. The scanner reads
+   duration/resolution/codecs via ffprobe and parses Plex-style names into
+   show / season / episode / year / title.
+4. Browse everything under **Media** (search + filter by type/library).
+   Re-scanning is incremental — unchanged files are skipped, and files that
+   disappeared are flagged as missing.
+
 ## Roadmap
 
 - [x] **M1 — Deploy loop:** repo, Docker, web UI, GitHub → Unraid update flow
-- [ ] **M2 — Data + media indexing:** SQLite/Prisma, scan library, build metadata
+- [x] **M2 — Data + media indexing:** SQLite/Prisma, scan library, build metadata
 - [ ] **M3 — Channels & scheduler:** define blocks by day/time, collections
 - [ ] **M4 — Guide output:** M3U playlist + XMLTV EPG generation
 - [ ] **M5 — Streaming pipeline:** continuous ffmpeg stream, seamless transitions

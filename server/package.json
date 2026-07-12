@@ -1,15 +1,19 @@
 {
   "name": "mesatztv-server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "prisma:generate": "prisma generate",
+    "db:push": "prisma db push --skip-generate"
   },
   "dependencies": {
-    "express": "^4.21.0"
+    "@prisma/client": "^6.2.0",
+    "express": "^4.21.0",
+    "prisma": "^6.2.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

@@ -10,11 +10,15 @@ server/public/
 
 # Runtime data (database, config, cache) — lives on a mounted volume
 data/
+*.db
+*.db-journal
 
 # Logs & env
 *.log
 .env
 .env.local
+# ...but the server's dev .env holds only a non-secret sqlite path — keep it
+!server/.env
 
 # OS / editor cruft
 .DS_Store

@@ -1,0 +1,48 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// A root folder the user registers for scanning (e.g. /media/TV).
+model Library {
+  id        Int         @id @default(autoincrement())
+  name      String
+  path      String      @unique
+  kind      String // "tv" | "movie" | "other"
+  createdAt DateTime    @default(now())
+  items     MediaItem[]
+}
+
+// A single video file discovered by the scanner.
+model MediaItem {
+  id          Int      @id @default(autoincrement())
+  library     Library  @relation(fields: [libraryId], references: [id], onDelete: Cascade)
+  libraryId   Int
+  path        String   @unique
+  type        String // "movie" | "episode" | "other"
+  title       String
+  showTitle   String?
+  season      Int?
+  episode     Int?
+  year        Int?
+  durationSec Float?
+  width       Int?
+  height      Int?
+  videoCodec  String?
+  audioCodec  String?
+  container   String?
+  sizeBytes   Float? // Float (not Int) — file sizes exceed 32-bit; avoids BigInt JSON pain
+  mtimeMs     Float? // used to skip re-probing unchanged files
+  missing     Boolean  @default(false)
+  addedAt     DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([libraryId])
+  @@index([type])
+  @@index([showTitle])
+}
