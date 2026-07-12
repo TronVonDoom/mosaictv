@@ -15,10 +15,15 @@ const YEAR_RE = /\((\d{4})\)/
 // Matches S01E02, s1e2, 1x02, etc.
 const SEASON_EP_RE = /\bS(\d{1,2})[\s._-]*E(\d{1,3})\b|\b(\d{1,2})x(\d{1,3})\b/i
 
-/** Strip a trailing "(2020)" and tidy separators/whitespace into a clean title. */
+// Parenthetical quality/source tags Plex users tack onto folder or file names.
+const QUALITY_TAG_RE =
+  /\((?:HD|SD|UHD|4K|1080p|720p|480p|x264|x265|h\.?264|h\.?265|hevc|Other|BluRay|Blu-Ray|WEB-?DL|WEBRip|HDR|DVD(?:Rip)?|Remux)\)/gi
+
+/** Strip a trailing "(2020)", quality tags, and tidy whitespace into a clean title. */
 function cleanTitle(raw: string): string {
   return raw
     .replace(YEAR_RE, '')
+    .replace(QUALITY_TAG_RE, '')
     .replace(/[._]/g, ' ')
     .replace(/\s{2,}/g, ' ')
     .replace(/\s*-\s*$/, '')
@@ -75,14 +80,19 @@ export function parseMedia(
   }
 
   if (kind === 'movie') {
-    const source = topFolder ?? baseName
+    // Plex movie *files* are named cleanly ("Title (Year).ext"), while the
+    // enclosing *folder* often carries quality tags — e.g.
+    // "Catch Me If You Can (2002) (HD) (x264)". Prefer the filename; fall back
+    // to the folder only if the filename yields nothing useful.
+    const title = cleanTitle(baseName) || (topFolder ? cleanTitle(topFolder) : baseName)
+    const year = extractYear(baseName) ?? (topFolder ? extractYear(topFolder) : null)
     return {
       type: 'movie',
-      title: cleanTitle(source) || cleanTitle(baseName),
+      title,
       showTitle: null,
       season: null,
       episode: null,
-      year: extractYear(source) ?? extractYear(baseName),
+      year,
     }
   }
 
