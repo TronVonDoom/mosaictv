@@ -1,11 +1,14 @@
 import { Router } from 'express'
 import { prisma } from '../db.js'
-import { collectionCount, collectionWhere } from '../collections.js'
+import { collectionCount, resolveCollection } from '../collections.js'
 
 export const collectionsRouter = Router()
 
 collectionsRouter.get('/', async (_req, res) => {
-  const cols = await prisma.collection.findMany({ orderBy: { createdAt: 'asc' } })
+  const cols = await prisma.collection.findMany({
+    orderBy: { createdAt: 'asc' },
+    include: { items: { orderBy: { order: 'asc' } } },
+  })
   const withCounts = await Promise.all(
     cols.map(async (c) => ({ ...c, itemCount: await collectionCount(c) })),
   )
@@ -24,24 +27,94 @@ collectionsRouter.post('/', async (req, res) => {
       filterSearch: filterSearch || null,
       filterGenre: filterGenre || null,
     },
+    include: { items: true },
   })
   res.status(201).json(c)
 })
 
+// Autocomplete: shows and movies matching a query, for adding as members.
+collectionsRouter.get('/search', async (req, res) => {
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+  if (!q) return res.json({ results: [] })
+
+  const [shows, movies, libs] = await Promise.all([
+    prisma.mediaItem.groupBy({
+      by: ['showTitle', 'libraryId'],
+      where: { type: 'episode', missing: false, showTitle: { contains: q } },
+      _count: { _all: true },
+      orderBy: { showTitle: 'asc' },
+      take: 8,
+    }),
+    prisma.mediaItem.findMany({
+      where: { type: 'movie', missing: false, title: { contains: q } },
+      select: { id: true, title: true, year: true },
+      orderBy: { title: 'asc' },
+      take: 8,
+    }),
+    prisma.library.findMany({ select: { id: true, name: true } }),
+  ])
+  const libName = new Map(libs.map((l) => [l.id, l.name]))
+
+  const results = [
+    ...shows.map((s) => ({
+      kind: 'show' as const,
+      showTitle: s.showTitle,
+      libraryId: s.libraryId,
+      libraryName: libName.get(s.libraryId) ?? '',
+      episodeCount: s._count._all,
+    })),
+    ...movies.map((m) => ({
+      kind: 'movie' as const,
+      mediaItemId: m.id,
+      title: m.title,
+      year: m.year,
+    })),
+  ]
+  res.json({ results })
+})
+
 collectionsRouter.get('/:id/preview', async (req, res) => {
   const id = Number(req.params.id)
-  const c = await prisma.collection.findUnique({ where: { id } })
+  const c = await prisma.collection.findUnique({ where: { id }, include: { items: true } })
   if (!c) return res.status(404).json({ error: 'Not found' })
-  const [count, sample] = await Promise.all([
-    collectionCount(c),
-    prisma.mediaItem.findMany({
-      where: collectionWhere(c),
-      take: 12,
-      orderBy: [{ showTitle: 'asc' }, { season: 'asc' }, { episode: 'asc' }, { title: 'asc' }],
-      select: { id: true, title: true, showTitle: true, season: true, episode: true, type: true, durationSec: true },
-    }),
-  ])
-  res.json({ count, sample })
+  const members = await resolveCollection(c, 'chronological')
+  res.json({ count: members.length, sample: members.slice(0, 12) })
+})
+
+// Add a member (a whole show, or a single movie).
+collectionsRouter.post('/:id/items', async (req, res) => {
+  const collectionId = Number(req.params.id)
+  const { kind, showTitle, libraryId, mediaItemId, label } = req.body ?? {}
+  if (kind !== 'show' && kind !== 'movie') {
+    return res.status(400).json({ error: 'kind must be "show" or "movie"' })
+  }
+  if (kind === 'show' && !showTitle) return res.status(400).json({ error: 'showTitle is required' })
+  if (kind === 'movie' && !mediaItemId) return res.status(400).json({ error: 'mediaItemId is required' })
+
+  const col = await prisma.collection.findUnique({ where: { id: collectionId } })
+  if (!col) return res.status(404).json({ error: 'Collection not found' })
+
+  const max = await prisma.collectionItem.aggregate({
+    where: { collectionId },
+    _max: { order: true },
+  })
+  const item = await prisma.collectionItem.create({
+    data: {
+      collectionId,
+      kind,
+      showTitle: kind === 'show' ? String(showTitle) : null,
+      libraryId: libraryId ? Number(libraryId) : null,
+      mediaItemId: kind === 'movie' ? Number(mediaItemId) : null,
+      label: label ? String(label) : kind === 'show' ? String(showTitle) : null,
+      order: (max._max.order ?? -1) + 1,
+    },
+  })
+  res.status(201).json(item)
+})
+
+collectionsRouter.delete('/:id/items/:itemId', async (req, res) => {
+  await prisma.collectionItem.delete({ where: { id: Number(req.params.itemId) } }).catch(() => {})
+  res.status(204).end()
 })
 
 collectionsRouter.delete('/:id', async (req, res) => {

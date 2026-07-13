@@ -58,18 +58,36 @@ model Season {
   @@unique([showId, number])
 }
 
-// A named, filtered set of media used to program channels.
+// A named set of media used to program channels. Members are hand-picked shows
+// and movies; the optional smart filter adds a query-based set (unioned in).
 model Collection {
-  id           Int            @id @default(autoincrement())
+  id           Int              @id @default(autoincrement())
   name         String
-  libraryId    Int? // limit to one library
+  // Optional smart filter (advanced).
+  libraryId    Int?
   filterType   String? // "movie" | "episode" | "other"
-  filterShow   String? // exact show title
+  filterShow   String? // exact show title (legacy; prefer members)
   filterSearch String? // title/show contains
   filterGenre  String? // genre contains
-  createdAt    DateTime       @default(now())
+  createdAt    DateTime         @default(now())
+  items        CollectionItem[]
   rotationItems RotationItem[]
   timeBlocks   TimeBlock[]
+}
+
+// A hand-picked member of a collection: a whole show, or a single movie.
+model CollectionItem {
+  id           Int        @id @default(autoincrement())
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  collectionId Int
+  kind         String // "show" | "movie"
+  showTitle    String? // for kind "show"
+  libraryId    Int? // for kind "show" (which library the show is in)
+  mediaItemId  Int? // for kind "movie"
+  label        String? // denormalized display name
+  order        Int        @default(0)
+
+  @@index([collectionId])
 }
 
 // A virtual TV channel: a rotation (24/7 default) + optional time blocks.

@@ -40,8 +40,11 @@ export async function buildPlayout(channelId: number, until: Date): Promise<numb
   const channel = await prisma.channel.findUnique({
     where: { id: channelId },
     include: {
-      rotationItems: { orderBy: { order: 'asc' }, include: { collection: true } },
-      timeBlocks: { include: { collection: true } },
+      rotationItems: {
+        orderBy: { order: 'asc' },
+        include: { collection: { include: { items: true } } },
+      },
+      timeBlocks: { include: { collection: { include: { items: true } } } },
     },
   })
   if (!channel) throw new Error(`Channel ${channelId} not found`)

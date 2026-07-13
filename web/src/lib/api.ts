@@ -139,6 +139,16 @@ export type ScanStatus = {
   error: string | null
 }
 
+export type CollectionItem = {
+  id: number
+  kind: 'show' | 'movie'
+  showTitle: string | null
+  libraryId: number | null
+  mediaItemId: number | null
+  label: string | null
+  order: number
+}
+
 export type Collection = {
   id: number
   name: string
@@ -147,8 +157,13 @@ export type Collection = {
   filterShow: string | null
   filterSearch: string | null
   filterGenre: string | null
+  items: CollectionItem[]
   itemCount: number
 }
+
+export type MediaSearchResult =
+  | { kind: 'show'; showTitle: string; libraryId: number; libraryName: string; episodeCount: number }
+  | { kind: 'movie'; mediaItemId: number; title: string; year: number | null }
 
 export type RotationItem = {
   id: number
@@ -296,6 +311,20 @@ export const api = {
     request<void>(`/api/collections/${id}`, { method: 'DELETE' }),
   collectionPreview: (id: number) =>
     request<{ count: number; sample: MediaItem[] }>(`/api/collections/${id}/preview`),
+  searchMedia: (q: string) =>
+    request<{ results: MediaSearchResult[] }>(`/api/collections/search?q=${encodeURIComponent(q)}`),
+  addCollectionItem: (
+    collectionId: number,
+    member:
+      | { kind: 'show'; showTitle: string; libraryId: number; label: string }
+      | { kind: 'movie'; mediaItemId: number; label: string },
+  ) =>
+    request<CollectionItem>(`/api/collections/${collectionId}/items`, {
+      method: 'POST',
+      body: JSON.stringify(member),
+    }),
+  deleteCollectionItem: (collectionId: number, itemId: number) =>
+    request<void>(`/api/collections/${collectionId}/items/${itemId}`, { method: 'DELETE' }),
 
   // --- channels ---
   channels: () => request<Channel[]>('/api/channels'),
