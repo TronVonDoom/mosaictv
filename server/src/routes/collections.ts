@@ -73,6 +73,28 @@ collectionsRouter.get('/search', async (req, res) => {
   res.json({ results })
 })
 
+collectionsRouter.patch('/:id', async (req, res) => {
+  const id = Number(req.params.id)
+  const { name, libraryId, filterType, filterShow, filterSearch, filterGenre } = req.body ?? {}
+  const data: {
+    name?: string
+    libraryId?: number | null
+    filterType?: string | null
+    filterShow?: string | null
+    filterSearch?: string | null
+    filterGenre?: string | null
+  } = {}
+  if (name !== undefined) data.name = String(name).trim()
+  if (libraryId !== undefined) data.libraryId = libraryId ? Number(libraryId) : null
+  if (filterType !== undefined) data.filterType = filterType || null
+  if (filterShow !== undefined) data.filterShow = filterShow || null
+  if (filterSearch !== undefined) data.filterSearch = filterSearch || null
+  if (filterGenre !== undefined) data.filterGenre = filterGenre || null
+  const c = await prisma.collection.update({ where: { id }, data }).catch(() => null)
+  if (!c) return res.status(404).json({ error: 'Not found' })
+  res.json(c)
+})
+
 collectionsRouter.get('/:id/preview', async (req, res) => {
   const id = Number(req.params.id)
   const c = await prisma.collection.findUnique({ where: { id }, include: { items: true } })

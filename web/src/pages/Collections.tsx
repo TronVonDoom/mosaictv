@@ -16,6 +16,36 @@ export default function Collections() {
   const [form, setForm] = useState(emptyForm)
   const [advanced, setAdvanced] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [editId, setEditId] = useState<number | null>(null)
+  const [editForm, setEditForm] = useState({ name: '', libraryId: '', filterType: '', filterSearch: '', filterGenre: '' })
+
+  function startEdit(c: Collection) {
+    setEditId(c.id)
+    setEditForm({
+      name: c.name,
+      libraryId: c.libraryId ? String(c.libraryId) : '',
+      filterType: c.filterType ?? '',
+      filterSearch: c.filterSearch ?? '',
+      filterGenre: c.filterGenre ?? '',
+    })
+  }
+  async function saveEdit() {
+    if (editId == null) return
+    setError(null)
+    try {
+      await api.updateCollection(editId, {
+        name: editForm.name,
+        libraryId: editForm.libraryId ? Number(editForm.libraryId) : null,
+        filterType: editForm.filterType || null,
+        filterSearch: editForm.filterSearch || null,
+        filterGenre: editForm.filterGenre || null,
+      })
+      setEditId(null)
+      refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    }
+  }
 
   const refresh = () => api.collections().then(setCols).catch(() => {})
   useEffect(() => {
@@ -149,8 +179,36 @@ export default function Collections() {
                 <div className="flex items-center gap-3 mb-3">
                   <div className="font-medium flex-1">{c.name}</div>
                   <span className="text-sm text-slate-400">{c.itemCount} items</span>
+                  <button onClick={() => (editId === c.id ? setEditId(null) : startEdit(c))} className="rounded-lg border border-slate-700 hover:border-indigo-500 hover:text-indigo-300 px-3 py-1.5 text-sm">
+                    {editId === c.id ? 'Close' : 'Edit'}
+                  </button>
                   <button onClick={() => del(c.id)} className="rounded-lg border border-slate-800 text-slate-500 hover:border-rose-500/50 hover:text-rose-400 px-3 py-1.5 text-sm">Delete</button>
                 </div>
+
+                {editId === c.id && (
+                  <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/5 p-3 mb-3 space-y-2">
+                    <input className={input + ' w-full'} placeholder="Name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      <select className={input} value={editForm.libraryId} onChange={(e) => setEditForm({ ...editForm, libraryId: e.target.value })}>
+                        <option value="">Any library</option>
+                        {libs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                      </select>
+                      <select className={input} value={editForm.filterType} onChange={(e) => setEditForm({ ...editForm, filterType: e.target.value })}>
+                        <option value="">Any type</option>
+                        <option value="episode">Episodes</option>
+                        <option value="movie">Movies</option>
+                        <option value="other">Other</option>
+                      </select>
+                      <input className={input} placeholder="Title contains" value={editForm.filterSearch} onChange={(e) => setEditForm({ ...editForm, filterSearch: e.target.value })} />
+                      <input className={input} placeholder="Genre contains" value={editForm.filterGenre} onChange={(e) => setEditForm({ ...editForm, filterGenre: e.target.value })} />
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button onClick={() => setEditId(null)} className="rounded-lg border border-slate-700 hover:border-slate-500 px-3 py-1.5 text-sm">Cancel</button>
+                      <button onClick={saveEdit} className="rounded-lg bg-indigo-500 hover:bg-indigo-400 px-4 py-1.5 text-sm font-medium">Save</button>
+                    </div>
+                    <p className="text-[11px] text-slate-500">Smart filter is optional and unions with the shows/movies below. Leave all blank to use only the picked members.</p>
+                  </div>
+                )}
 
                 {filterSummary && (
                   <div className="text-xs text-violet-300/80 mb-3">smart filter: {filterSummary}</div>

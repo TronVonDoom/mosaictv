@@ -312,6 +312,16 @@ export const api = {
   }) => request<Collection>('/api/collections', { method: 'POST', body: JSON.stringify(data) }),
   deleteCollection: (id: number) =>
     request<void>(`/api/collections/${id}`, { method: 'DELETE' }),
+  updateCollection: (
+    id: number,
+    data: {
+      name?: string
+      libraryId?: number | null
+      filterType?: string | null
+      filterSearch?: string | null
+      filterGenre?: string | null
+    },
+  ) => request<Collection>(`/api/collections/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   collectionPreview: (id: number) =>
     request<{ count: number; sample: MediaItem[] }>(`/api/collections/${id}/preview`),
   searchMedia: (q: string) =>
@@ -347,6 +357,11 @@ export const api = {
     channelId: number,
     data: { collectionId: number; days: string; startMinute: number; endMinute: number; playbackOrder: string; logoUrl?: string | null },
   ) => request<TimeBlock>(`/api/channels/${channelId}/blocks`, { method: 'POST', body: JSON.stringify(data) }),
+  updateBlock: (
+    channelId: number,
+    blockId: number,
+    data: { collectionId: number; days: string; startMinute: number; endMinute: number; playbackOrder: string; logoUrl?: string | null },
+  ) => request<TimeBlock>(`/api/channels/${channelId}/blocks/${blockId}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteBlock: (channelId: number, blockId: number) =>
     request<void>(`/api/channels/${channelId}/blocks/${blockId}`, { method: 'DELETE' }),
   buildPlayout: (channelId: number, hours = 48) =>

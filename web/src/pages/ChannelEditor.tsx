@@ -15,6 +15,9 @@ function timeToMin(t: string): number {
   const [h, m] = t.split(':').map(Number)
   return h * 60 + m
 }
+function minToTimeStr(min: number): string {
+  return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+}
 function fmtClock(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
@@ -54,6 +57,7 @@ export default function ChannelEditor() {
     playbackOrder: 'chronological',
     logoUrl: '',
   })
+  const [editingBlock, setEditingBlock] = useState<number | null>(null)
 
   const load = () => api.channel(channelId).then(setCh).catch(() => {})
   const loadPlayout = () => api.playout(channelId, 24).then(setPlayout).catch(() => {})
@@ -106,23 +110,41 @@ export default function ChannelEditor() {
     setRot({ collectionId: '', mode: 'one', count: '1', playbackOrder: 'chronological' })
   }
 
-  async function addBlock(e: React.FormEvent) {
+  function resetBlockForm() {
+    setEditingBlock(null)
+    setBlk({ collectionId: '', days: [1, 2, 3, 4, 5], start: '18:00', end: '21:00', playbackOrder: 'chronological', logoUrl: '' })
+  }
+
+  function editBlock(b: ChannelDetail['timeBlocks'][number]) {
+    setEditingBlock(b.id)
+    setBlk({
+      collectionId: String(b.collectionId),
+      days: b.days.split(',').map(Number).filter((n) => !Number.isNaN(n)),
+      start: minToTimeStr(b.startMinute),
+      end: minToTimeStr(b.endMinute),
+      playbackOrder: b.playbackOrder,
+      logoUrl: b.logoUrl ?? '',
+    })
+  }
+
+  async function submitBlock(e: React.FormEvent) {
     e.preventDefault()
     if (!blk.collectionId || blk.days.length === 0) {
       setError('Pick a collection and at least one day.')
       return
     }
+    const payload = {
+      collectionId: Number(blk.collectionId),
+      days: [...blk.days].sort().join(','),
+      startMinute: timeToMin(blk.start),
+      endMinute: timeToMin(blk.end),
+      playbackOrder: blk.playbackOrder,
+      logoUrl: blk.logoUrl || null,
+    }
     await guard(() =>
-      api.addBlock(channelId, {
-        collectionId: Number(blk.collectionId),
-        days: [...blk.days].sort().join(','),
-        startMinute: timeToMin(blk.start),
-        endMinute: timeToMin(blk.end),
-        playbackOrder: blk.playbackOrder,
-        logoUrl: blk.logoUrl || null,
-      }),
+      editingBlock ? api.updateBlock(channelId, editingBlock, payload) : api.addBlock(channelId, payload),
     )
-    setBlk({ ...blk, collectionId: '', logoUrl: '' })
+    resetBlockForm()
   }
 
   async function build() {
@@ -253,11 +275,13 @@ export default function ChannelEditor() {
                     {b.logoUrl && ' · 🖼 logo'}
                   </div>
                 </div>
+                <button onClick={() => editBlock(b)} className="text-xs text-slate-500 hover:text-indigo-300" aria-label="Edit">Edit</button>
                 <button onClick={() => guard(() => api.deleteBlock(channelId, b.id))} className="text-slate-600 hover:text-rose-400" aria-label="Remove">×</button>
               </div>
             ))}
           </div>
-          <form onSubmit={addBlock} className="space-y-2 border-t border-slate-800 pt-4">
+          <form onSubmit={submitBlock} className="space-y-2 border-t border-slate-800 pt-4">
+            {editingBlock && <div className="text-xs text-indigo-300">Editing a block — change values and Save.</div>}
             <div className="flex gap-1">
               {DAY_NAMES.map((d, i) => {
                 const on = blk.days.includes(i)
@@ -291,7 +315,10 @@ export default function ChannelEditor() {
                 <option value="rotate">rotate shows</option>
                 <option value="shuffle">shuffle</option>
               </select>
-              <button type="submit" className="rounded-lg bg-indigo-500 hover:bg-indigo-400 px-3 py-2 text-sm font-medium">Add</button>
+              <button type="submit" className="rounded-lg bg-indigo-500 hover:bg-indigo-400 px-3 py-2 text-sm font-medium">{editingBlock ? 'Save' : 'Add'}</button>
+              {editingBlock && (
+                <button type="button" onClick={resetBlockForm} className="rounded-lg border border-slate-700 hover:border-slate-500 px-3 py-2 text-sm">Cancel</button>
+              )}
             </div>
           </form>
         </section>

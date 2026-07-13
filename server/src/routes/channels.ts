@@ -121,6 +121,31 @@ channelsRouter.post('/:id/blocks', async (req, res) => {
   res.status(201).json(b)
 })
 
+channelsRouter.patch('/:id/blocks/:blockId', async (req, res) => {
+  const blockId = Number(req.params.blockId)
+  const { collectionId, days, startMinute, endMinute, playbackOrder, logoUrl } = req.body ?? {}
+  const data: {
+    collectionId?: number
+    days?: string
+    startMinute?: number
+    endMinute?: number
+    playbackOrder?: string
+    logoUrl?: string | null
+  } = {}
+  if (collectionId !== undefined) data.collectionId = Number(collectionId)
+  if (days !== undefined) data.days = String(days)
+  if (startMinute !== undefined) data.startMinute = Number(startMinute)
+  if (endMinute !== undefined) data.endMinute = Number(endMinute)
+  if (playbackOrder !== undefined) data.playbackOrder = asOrder(playbackOrder)
+  if (logoUrl !== undefined) data.logoUrl = logoUrl || null
+  if (data.startMinute != null && data.endMinute != null && data.endMinute <= data.startMinute) {
+    return res.status(400).json({ error: 'End time must be after start time.' })
+  }
+  const b = await prisma.timeBlock.update({ where: { id: blockId }, data }).catch(() => null)
+  if (!b) return res.status(404).json({ error: 'Block not found.' })
+  res.json(b)
+})
+
 channelsRouter.delete('/:id/blocks/:blockId', async (req, res) => {
   await prisma.timeBlock.delete({ where: { id: Number(req.params.blockId) } }).catch(() => {})
   res.status(204).end()
