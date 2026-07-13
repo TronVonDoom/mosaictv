@@ -10,6 +10,7 @@ const navItems = [
 ]
 
 export default function Layout() {
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex">
       <aside className="w-56 shrink-0 border-r border-slate-800 bg-slate-900/40 flex flex-col">
@@ -37,8 +38,26 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div className="px-5 py-4 text-xs text-slate-600 border-t border-slate-800">
-          Milestone 2 — media library
+        <div className="p-3 border-t border-slate-800 space-y-0.5">
+          <div className="px-3 pb-1 text-[10px] uppercase tracking-wide text-slate-600">
+            IPTV
+          </div>
+          <a
+            href={`${origin}/iptv/channels.m3u`}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition-colors"
+          >
+            <span>🎞️</span> M3U playlist
+          </a>
+          <a
+            href={`${origin}/iptv/xmltv.xml`}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition-colors"
+          >
+            <span>🗓️</span> XMLTV guide
+          </a>
         </div>
       </aside>
 
