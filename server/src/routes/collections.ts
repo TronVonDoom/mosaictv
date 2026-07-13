@@ -4,8 +4,10 @@ import { collectionCount, resolveCollection } from '../collections.js'
 
 export const collectionsRouter = Router()
 
-collectionsRouter.get('/', async (_req, res) => {
+collectionsRouter.get('/', async (req, res) => {
+  const channelId = req.query.channelId != null ? Number(req.query.channelId) : undefined
   const cols = await prisma.collection.findMany({
+    where: channelId != null ? { channelId } : {},
     orderBy: { createdAt: 'asc' },
     include: { items: { orderBy: { order: 'asc' } } },
   })
@@ -16,11 +18,13 @@ collectionsRouter.get('/', async (_req, res) => {
 })
 
 collectionsRouter.post('/', async (req, res) => {
-  const { name, libraryId, filterType, filterShow, filterSearch, filterGenre } = req.body ?? {}
+  const { name, channelId, logoId, libraryId, filterType, filterShow, filterSearch, filterGenre } = req.body ?? {}
   if (!name || !String(name).trim()) return res.status(400).json({ error: 'name is required' })
   const c = await prisma.collection.create({
     data: {
       name: String(name).trim(),
+      channelId: channelId != null ? Number(channelId) : null,
+      logoId: logoId != null ? Number(logoId) : null,
       libraryId: libraryId ? Number(libraryId) : null,
       filterType: filterType || null,
       filterShow: filterShow || null,
@@ -75,9 +79,10 @@ collectionsRouter.get('/search', async (req, res) => {
 
 collectionsRouter.patch('/:id', async (req, res) => {
   const id = Number(req.params.id)
-  const { name, libraryId, filterType, filterShow, filterSearch, filterGenre } = req.body ?? {}
+  const { name, logoId, libraryId, filterType, filterShow, filterSearch, filterGenre } = req.body ?? {}
   const data: {
     name?: string
+    logoId?: number | null
     libraryId?: number | null
     filterType?: string | null
     filterShow?: string | null
@@ -85,6 +90,7 @@ collectionsRouter.patch('/:id', async (req, res) => {
     filterGenre?: string | null
   } = {}
   if (name !== undefined) data.name = String(name).trim()
+  if (logoId !== undefined) data.logoId = logoId ? Number(logoId) : null
   if (libraryId !== undefined) data.libraryId = libraryId ? Number(libraryId) : null
   if (filterType !== undefined) data.filterType = filterType || null
   if (filterShow !== undefined) data.filterShow = filterShow || null

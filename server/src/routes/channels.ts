@@ -52,11 +52,19 @@ channelsRouter.get('/', async (_req, res) => {
 })
 
 channelsRouter.post('/', async (req, res) => {
-  const { number, name, group } = req.body ?? {}
-  if (number == null || !name) return res.status(400).json({ error: 'number and name are required' })
+  const { number, name, group, logoId } = req.body ?? {}
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'name is required' })
+  // Number is optional — a channel with no number is a draft.
+  const num = number == null || number === '' ? null : Number(number)
+  if (num != null && !Number.isInteger(num)) return res.status(400).json({ error: 'number must be a whole number' })
   try {
     const c = await prisma.channel.create({
-      data: { number: Number(number), name: String(name).trim(), group: group || null },
+      data: {
+        number: num,
+        name: String(name).trim(),
+        group: group || null,
+        logoId: logoId != null ? Number(logoId) : null,
+      },
     })
     res.status(201).json(c)
   } catch {
@@ -79,12 +87,12 @@ channelsRouter.get('/:id', async (req, res) => {
 channelsRouter.patch('/:id', async (req, res) => {
   const id = Number(req.params.id)
   const { name, group, logoUrl, number, logoId } = req.body ?? {}
-  const data: { name?: string; group?: string | null; logoUrl?: string | null; number?: number; logoId?: number | null } = {}
+  const data: { name?: string; group?: string | null; logoUrl?: string | null; number?: number | null; logoId?: number | null } = {}
   if (name !== undefined) data.name = String(name).trim()
   if (group !== undefined) data.group = group || null
   if (logoUrl !== undefined) data.logoUrl = logoUrl || null
   if (logoId !== undefined) data.logoId = logoId ? Number(logoId) : null
-  if (number !== undefined) data.number = Number(number)
+  if (number !== undefined) data.number = number === null || number === '' ? null : Number(number)
   try {
     const c = await prisma.channel.update({ where: { id }, data })
     res.json(c)

@@ -53,6 +53,7 @@ model Logo {
   createdAt DateTime    @default(now())
   channels  Channel[]
   blocks    TimeBlock[]
+  collections Collection[]
 }
 
 // Show-level metadata (one row per distinct show title in a TV library).
@@ -85,11 +86,19 @@ model Season {
   @@unique([showId, number])
 }
 
-// A named set of media used to program channels. Members are hand-picked shows
-// and movies; the optional smart filter adds a query-based set (unioned in).
+// A named set of media used to program channels — the "branded unit" (e.g. a
+// sub-brand like "Nick Jr."). Owned by one channel; carries its own logo (and,
+// later, filler). Members are hand-picked shows and movies; the optional smart
+// filter adds a query-based set (unioned in).
 model Collection {
   id           Int              @id @default(autoincrement())
   name         String
+  // Owning channel (null = orphan/unassigned). Cascade-deletes with the channel.
+  channel      Channel?         @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  channelId    Int?
+  // The collection's own on-screen logo (falls back to the channel logo).
+  logo         Logo?            @relation(fields: [logoId], references: [id], onDelete: SetNull)
+  logoId       Int?
   // Optional smart filter (advanced).
   libraryId    Int?
   filterType   String? // "movie" | "episode" | "other"
@@ -100,6 +109,8 @@ model Collection {
   items        CollectionItem[]
   rotationItems RotationItem[]
   timeBlocks   TimeBlock[]
+
+  @@index([channelId])
 }
 
 // A hand-picked member of a collection: a whole show, or a single movie.
@@ -117,10 +128,12 @@ model CollectionItem {
   @@index([collectionId])
 }
 
-// A virtual TV channel: a rotation (24/7 default) + optional time blocks.
+// A virtual TV channel: a container for its collections, a rotation (24/7
+// default) + optional time blocks. `number` is optional — a channel with no
+// number is a draft (not exposed in the M3U/guide/stream until it gets one).
 model Channel {
   id            Int            @id @default(autoincrement())
-  number        Int            @unique
+  number        Int?           @unique
   name          String
   group         String?
   logoUrl       String? // legacy free-form logo URL (fallback)
@@ -131,6 +144,7 @@ model Channel {
   playoutAnchor DateTime?
   playoutCursor DateTime?
   playoutState  String? // JSON { rotationIndex, positions }
+  collections   Collection[]
   rotationItems RotationItem[]
   timeBlocks    TimeBlock[]
   playout       PlayoutItem[]
@@ -142,7 +156,7 @@ model RotationItem {
   channel       Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)
   channelId     Int
   order         Int
-  collection    Collection @relation(fields: [collectionId], references: [id])
+  collection    Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   collectionId  Int
   playbackOrder String     @default("chronological") // "chronological" | "shuffle"
   mode          String     @default("one") // "one" | "multiple"
@@ -159,7 +173,7 @@ model TimeBlock {
   days          String // CSV of day numbers, Sun=0 .. Sat=6, e.g. "1,2,3,4,5"
   startMinute   Int // minutes from local midnight
   endMinute     Int
-  collection    Collection @relation(fields: [collectionId], references: [id])
+  collection    Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   collectionId  Int
   playbackOrder String     @default("chronological")
   logoUrl       String? // legacy free-form logo URL (fallback)

@@ -51,7 +51,7 @@ export default function Channels() {
     setError(null)
     try {
       await api.addChannel({
-        number: Number(form.number),
+        number: form.number.trim() ? Number(form.number) : null,
         name: form.name,
         group: form.group || null,
       })
@@ -91,8 +91,8 @@ export default function Channels() {
 
       <form onSubmit={add} className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 mb-6 grid grid-cols-1 md:grid-cols-[100px_1fr_1fr_auto] gap-3 items-end">
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-400">Number</span>
-          <input className={input} type="number" placeholder="1" value={form.number} onChange={(e) => setForm({ ...form, number: e.target.value })} required />
+          <span className="text-slate-400">Number (optional)</span>
+          <input className={input} type="number" placeholder="draft" value={form.number} onChange={(e) => setForm({ ...form, number: e.target.value })} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-slate-400">Name</span>
@@ -113,7 +113,9 @@ export default function Channels() {
         <div className="space-y-2">
           {channels.map((c) => (
             <div key={c.id} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 flex items-center gap-4">
-              <div className="text-lg font-mono text-indigo-300 w-12 text-center shrink-0">{c.number}</div>
+              <div className="text-lg font-mono w-12 text-center shrink-0" title={c.number == null ? 'Draft — no number assigned' : undefined}>
+                {c.number == null ? <span className="text-xs text-slate-600 uppercase">draft</span> : <span className="text-indigo-300">{c.number}</span>}
+              </div>
               <Link to={`/channels/${c.id}`} className="flex-1 min-w-0 group">
                 <div className="font-medium group-hover:text-indigo-300 transition-colors">
                   {c.name}

@@ -172,6 +172,8 @@ export type CollectionItem = {
 export type Collection = {
   id: number
   name: string
+  channelId: number | null
+  logoId: number | null
   libraryId: number | null
   filterType: string | null
   filterShow: string | null
@@ -228,7 +230,7 @@ export type TimeBlock = {
 
 export type Channel = {
   id: number
-  number: number
+  number: number | null
   name: string
   group: string | null
   logoUrl: string | null
@@ -241,7 +243,7 @@ export type Channel = {
 
 export type ChannelDetail = {
   id: number
-  number: number
+  number: number | null
   name: string
   group: string | null
   logoUrl: string | null
@@ -366,9 +368,12 @@ export const api = {
     request<{ ok: boolean; watermark: WatermarkConfig }>('/api/settings/watermark', { method: 'POST', body: JSON.stringify(wm) }),
 
   // --- collections ---
-  collections: () => request<Collection[]>('/api/collections'),
+  collections: (channelId?: number) =>
+    request<Collection[]>(`/api/collections${channelId != null ? `?channelId=${channelId}` : ''}`),
   addCollection: (data: {
     name: string
+    channelId?: number | null
+    logoId?: number | null
     libraryId?: number | null
     filterType?: string | null
     filterShow?: string | null
@@ -406,7 +411,7 @@ export const api = {
 
   // --- channels ---
   channels: () => request<Channel[]>('/api/channels'),
-  addChannel: (data: { number: number; name: string; group?: string | null }) =>
+  addChannel: (data: { number?: number | null; name: string; group?: string | null; logoId?: number | null }) =>
     request<Channel>('/api/channels', { method: 'POST', body: JSON.stringify(data) }),
   channel: (id: number) => request<ChannelDetail>(`/api/channels/${id}`),
   updateChannel: (id: number, data: { name?: string; group?: string | null; logoUrl?: string | null; logoId?: number | null }) =>

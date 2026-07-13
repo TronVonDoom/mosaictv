@@ -195,10 +195,11 @@ export default function ChannelEditor() {
       <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
         <Link to="/channels" className="hover:text-indigo-300">Channels</Link>
         <span>/</span>
-        <span className="text-slate-300">#{ch.number} {ch.name}</span>
+        <span className="text-slate-300">{ch.number != null ? `#${ch.number} ` : ''}{ch.name}</span>
       </div>
       <h1 className="text-2xl font-bold mb-6">
-        <span className="font-mono text-indigo-300">{ch.number}</span> {ch.name}
+        {ch.number != null ? <span className="font-mono text-indigo-300">{ch.number} </span> : <span className="text-xs uppercase tracking-wide text-slate-600 mr-2 align-middle">draft</span>}
+        {ch.name}
       </h1>
 
       {error && (
