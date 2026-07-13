@@ -18,6 +18,7 @@ channelsRouter.get('/', async (_req, res) => {
       number: c.number,
       name: c.name,
       group: c.group,
+      logoUrl: c.logoUrl,
       rotationCount: c._count.rotationItems,
       blockCount: c._count.timeBlocks,
       playoutCount: c._count.playout,
@@ -49,6 +50,22 @@ channelsRouter.get('/:id', async (req, res) => {
   })
   if (!c) return res.status(404).json({ error: 'Not found' })
   res.json(c)
+})
+
+channelsRouter.patch('/:id', async (req, res) => {
+  const id = Number(req.params.id)
+  const { name, group, logoUrl, number } = req.body ?? {}
+  const data: { name?: string; group?: string | null; logoUrl?: string | null; number?: number } = {}
+  if (name !== undefined) data.name = String(name).trim()
+  if (group !== undefined) data.group = group || null
+  if (logoUrl !== undefined) data.logoUrl = logoUrl || null
+  if (number !== undefined) data.number = Number(number)
+  try {
+    const c = await prisma.channel.update({ where: { id }, data })
+    res.json(c)
+  } catch {
+    res.status(409).json({ error: 'Update failed — is that channel number already in use?' })
+  }
 })
 
 channelsRouter.delete('/:id', async (req, res) => {
@@ -83,7 +100,7 @@ channelsRouter.delete('/:id/rotation/:itemId', async (req, res) => {
 // --- time blocks ---
 channelsRouter.post('/:id/blocks', async (req, res) => {
   const channelId = Number(req.params.id)
-  const { collectionId, days, startMinute, endMinute, playbackOrder } = req.body ?? {}
+  const { collectionId, days, startMinute, endMinute, playbackOrder, logoUrl } = req.body ?? {}
   if (!collectionId || !days || startMinute == null || endMinute == null) {
     return res.status(400).json({ error: 'collectionId, days, startMinute, endMinute are required' })
   }
@@ -98,6 +115,7 @@ channelsRouter.post('/:id/blocks', async (req, res) => {
       startMinute: Number(startMinute),
       endMinute: Number(endMinute),
       playbackOrder: asOrder(playbackOrder),
+      logoUrl: logoUrl || null,
     },
   })
   res.status(201).json(b)

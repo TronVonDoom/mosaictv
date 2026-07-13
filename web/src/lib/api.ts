@@ -182,6 +182,7 @@ export type TimeBlock = {
   startMinute: number
   endMinute: number
   playbackOrder: string
+  logoUrl: string | null
   collection: { id: number; name: string }
 }
 
@@ -190,6 +191,7 @@ export type Channel = {
   number: number
   name: string
   group: string | null
+  logoUrl: string | null
   rotationCount: number
   blockCount: number
   playoutCount: number
@@ -201,6 +203,7 @@ export type ChannelDetail = {
   number: number
   name: string
   group: string | null
+  logoUrl: string | null
   rotationItems: RotationItem[]
   timeBlocks: TimeBlock[]
 }
@@ -331,6 +334,8 @@ export const api = {
   addChannel: (data: { number: number; name: string; group?: string | null }) =>
     request<Channel>('/api/channels', { method: 'POST', body: JSON.stringify(data) }),
   channel: (id: number) => request<ChannelDetail>(`/api/channels/${id}`),
+  updateChannel: (id: number, data: { name?: string; group?: string | null; logoUrl?: string | null }) =>
+    request<Channel>(`/api/channels/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteChannel: (id: number) => request<void>(`/api/channels/${id}`, { method: 'DELETE' }),
   addRotation: (
     channelId: number,
@@ -340,7 +345,7 @@ export const api = {
     request<void>(`/api/channels/${channelId}/rotation/${itemId}`, { method: 'DELETE' }),
   addBlock: (
     channelId: number,
-    data: { collectionId: number; days: string; startMinute: number; endMinute: number; playbackOrder: string },
+    data: { collectionId: number; days: string; startMinute: number; endMinute: number; playbackOrder: string; logoUrl?: string | null },
   ) => request<TimeBlock>(`/api/channels/${channelId}/blocks`, { method: 'POST', body: JSON.stringify(data) }),
   deleteBlock: (channelId: number, blockId: number) =>
     request<void>(`/api/channels/${channelId}/blocks/${blockId}`, { method: 'DELETE' }),

@@ -96,6 +96,7 @@ model Channel {
   number        Int            @unique
   name          String
   group         String?
+  logoUrl       String? // guide logo + default on-screen watermark
   createdAt     DateTime       @default(now())
   // Playout build state (see playout engine).
   playoutAnchor DateTime?
@@ -132,6 +133,7 @@ model TimeBlock {
   collection    Collection @relation(fields: [collectionId], references: [id])
   collectionId  Int
   playbackOrder String     @default("chronological")
+  logoUrl       String? // on-screen watermark while this block airs (else channel logo)
 
   @@index([channelId])
 }

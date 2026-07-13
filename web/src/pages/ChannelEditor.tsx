@@ -44,24 +44,43 @@ export default function ChannelEditor() {
   const [error, setError] = useState<string | null>(null)
   const [building, setBuilding] = useState(false)
 
+  const [chForm, setChForm] = useState({ name: '', group: '', logoUrl: '' })
   const [rot, setRot] = useState({ collectionId: '', mode: 'one', count: '1', playbackOrder: 'chronological' })
-  const [blk, setBlk] = useState<{ collectionId: string; days: number[]; start: string; end: string; playbackOrder: string }>({
+  const [blk, setBlk] = useState<{ collectionId: string; days: number[]; start: string; end: string; playbackOrder: string; logoUrl: string }>({
     collectionId: '',
     days: [1, 2, 3, 4, 5],
     start: '18:00',
     end: '21:00',
     playbackOrder: 'chronological',
+    logoUrl: '',
   })
 
   const load = () => api.channel(channelId).then(setCh).catch(() => {})
   const loadPlayout = () => api.playout(channelId, 24).then(setPlayout).catch(() => {})
 
   useEffect(() => {
-    load()
+    api
+      .channel(channelId)
+      .then((c) => {
+        setCh(c)
+        setChForm({ name: c.name, group: c.group ?? '', logoUrl: c.logoUrl ?? '' })
+      })
+      .catch(() => {})
     loadPlayout()
     api.collections().then(setCols).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId])
+
+  async function saveSettings(e: React.FormEvent) {
+    e.preventDefault()
+    await guard(() =>
+      api.updateChannel(channelId, {
+        name: chForm.name,
+        group: chForm.group || null,
+        logoUrl: chForm.logoUrl || null,
+      }),
+    )
+  }
 
   async function guard<T>(fn: () => Promise<T>) {
     setError(null)
@@ -100,9 +119,10 @@ export default function ChannelEditor() {
         startMinute: timeToMin(blk.start),
         endMinute: timeToMin(blk.end),
         playbackOrder: blk.playbackOrder,
+        logoUrl: blk.logoUrl || null,
       }),
     )
-    setBlk({ ...blk, collectionId: '' })
+    setBlk({ ...blk, collectionId: '', logoUrl: '' })
   }
 
   async function build() {
@@ -150,6 +170,34 @@ export default function ChannelEditor() {
       {error && (
         <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-300 text-sm p-3 mb-5">{error}</div>
       )}
+
+      {/* Channel settings */}
+      <form onSubmit={saveSettings} className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 mb-6">
+        <h2 className="font-semibold mb-3">Channel settings</h2>
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_2fr_auto] gap-3 items-end">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-400">Name</span>
+            <input className={input} value={chForm.name} onChange={(e) => setChForm({ ...chForm, name: e.target.value })} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-400">Group</span>
+            <input className={input} placeholder="Entertainment" value={chForm.group} onChange={(e) => setChForm({ ...chForm, group: e.target.value })} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-400">Logo URL</span>
+            <div className="flex gap-2 items-center">
+              <input className={input + ' flex-1 min-w-0'} placeholder="https://…/logo.png" value={chForm.logoUrl} onChange={(e) => setChForm({ ...chForm, logoUrl: e.target.value })} />
+              {chForm.logoUrl && (
+                <img src={chForm.logoUrl} alt="" className="w-9 h-9 rounded object-contain bg-slate-950 border border-slate-800 shrink-0" onError={(ev) => ((ev.target as HTMLImageElement).style.visibility = 'hidden')} />
+              )}
+            </div>
+          </label>
+          <button type="submit" className="rounded-lg bg-indigo-500 hover:bg-indigo-400 px-4 py-2 text-sm font-medium">Save</button>
+        </div>
+        <p className="text-xs text-slate-500 mt-2">
+          Logo shows in the guide (M3U/XMLTV) and is the default on-screen watermark. Time blocks can override the on-screen logo (rendered once live streaming lands).
+        </p>
+      </form>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Rotation */}
@@ -202,6 +250,7 @@ export default function ChannelEditor() {
                   <div className="truncate">{b.collection.name}</div>
                   <div className="text-xs text-slate-500">
                     {formatDays(b.days)} · {minutesToTime(b.startMinute)}–{minutesToTime(b.endMinute)} · {b.playbackOrder}
+                    {b.logoUrl && ' · 🖼 logo'}
                   </div>
                 </div>
                 <button onClick={() => guard(() => api.deleteBlock(channelId, b.id))} className="text-slate-600 hover:text-rose-400" aria-label="Remove">×</button>
@@ -224,6 +273,12 @@ export default function ChannelEditor() {
                 )
               })}
             </div>
+            <input
+              className={input + ' w-full'}
+              placeholder="On-screen logo URL (optional — defaults to channel logo)"
+              value={blk.logoUrl}
+              onChange={(e) => setBlk({ ...blk, logoUrl: e.target.value })}
+            />
             <div className="flex flex-wrap gap-2 items-end">
               <select className={input + ' flex-1 min-w-32'} value={blk.collectionId} onChange={(e) => setBlk({ ...blk, collectionId: e.target.value })} required>
                 <option value="">Collection…</option>

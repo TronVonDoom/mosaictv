@@ -32,12 +32,13 @@ function xmltvTime(d: Date): string {
 iptvRouter.get('/channels.m3u', async (req, res) => {
   const channels = await prisma.channel.findMany({ orderBy: { number: 'asc' } })
   const base = baseUrl(req)
-  const logo = `${base}/mesatztv-icon.png`
+  const fallback = `${base}/mesatztv-icon.png`
   let out = '#EXTM3U\n'
   for (const c of channels) {
+    const logo = c.logoUrl || fallback
     out +=
       `#EXTINF:-1 tvg-id="${c.number}" tvg-chno="${c.number}" ` +
-      `tvg-name="${escapeXml(c.name)}" tvg-logo="${logo}" ` +
+      `tvg-name="${escapeXml(c.name)}" tvg-logo="${escapeXml(logo)}" ` +
       `group-title="${escapeXml(c.group || 'MeSatzTV')}",${c.name}\n`
     out += `${base}/iptv/channel/${c.number}.ts\n`
   }
@@ -65,7 +66,7 @@ iptvRouter.get('/xmltv.xml', async (req, res) => {
   for (const c of channels) {
     xml += `  <channel id="${c.number}">\n`
     xml += `    <display-name>${escapeXml(c.name)}</display-name>\n`
-    xml += `    <icon src="${base}/mesatztv-icon.png" />\n`
+    xml += `    <icon src="${escapeXml(c.logoUrl || `${base}/mesatztv-icon.png`)}" />\n`
     xml += '  </channel>\n'
   }
   for (const it of items) {
