@@ -4,12 +4,12 @@ import {
   api,
   formatDays,
   minutesToTime,
-  logoImageUrl,
   type ChannelDetail,
   type Collection,
-  type Logo,
   type Playout,
 } from '../lib/api'
+import CollectionManager from '../components/CollectionManager'
+import LogoPicker from '../components/LogoPicker'
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -49,7 +49,6 @@ export default function ChannelEditor() {
   const [error, setError] = useState<string | null>(null)
   const [building, setBuilding] = useState(false)
 
-  const [logos, setLogos] = useState<Logo[]>([])
   const [chForm, setChForm] = useState<{ name: string; group: string; logoUrl: string; logoId: number | null }>({ name: '', group: '', logoUrl: '', logoId: null })
   const [rot, setRot] = useState({ collectionId: '', mode: 'one', count: '1', playbackOrder: 'chronological' })
   const [blk, setBlk] = useState<{ collectionId: string; days: number[]; start: string; end: string; playbackOrder: string; logoUrl: string; logoId: number | null; fillerMode: string }>({
@@ -66,6 +65,7 @@ export default function ChannelEditor() {
 
   const load = () => api.channel(channelId).then(setCh).catch(() => {})
   const loadPlayout = () => api.playout(channelId, 24).then(setPlayout).catch(() => {})
+  const loadCols = () => api.collections(channelId).then(setCols).catch(() => {})
 
   useEffect(() => {
     api
@@ -76,8 +76,7 @@ export default function ChannelEditor() {
       })
       .catch(() => {})
     loadPlayout()
-    api.collections().then(setCols).catch(() => {})
-    api.logos().then(setLogos).catch(() => {})
+    loadCols()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId])
 
@@ -220,24 +219,17 @@ export default function ChannelEditor() {
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-400">Logo</span>
-            <div className="flex gap-2 items-center">
-              <select className={input + ' flex-1 min-w-0'} value={chForm.logoId ?? ''} onChange={(e) => setChForm({ ...chForm, logoId: e.target.value ? Number(e.target.value) : null })}>
-                <option value="">No logo</option>
-                {logos.map((l) => (
-                  <option key={l.id} value={l.id}>{l.name}</option>
-                ))}
-              </select>
-              {chForm.logoId && (
-                <img src={logoImageUrl(chForm.logoId)} alt="" className="w-9 h-9 rounded object-contain bg-slate-950 border border-slate-800 shrink-0" />
-              )}
-            </div>
+            <LogoPicker value={chForm.logoId} onChange={(id) => setChForm({ ...chForm, logoId: id })} />
           </label>
           <button type="submit" className="rounded-lg bg-indigo-500 hover:bg-indigo-400 px-4 py-2 text-sm font-medium">Save</button>
         </div>
         <p className="text-xs text-slate-500 mt-2">
-          Upload logos under <Link to="/logos" className="text-indigo-300">Logos</Link>. The channel logo shows in the guide and is the on-screen watermark; time blocks can override it.
+          The channel logo shows in the guide and is the default on-screen watermark; a collection or time block can override it. Manage all images on the <Link to="/media" className="text-indigo-300">Media</Link> page.
         </p>
       </form>
+
+      {/* Collections owned by this channel */}
+      <CollectionManager channelId={channelId} onChange={loadCols} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Rotation */}
@@ -316,16 +308,7 @@ export default function ChannelEditor() {
                 )
               })}
             </div>
-            <select
-              className={input + ' w-full'}
-              value={blk.logoId ?? ''}
-              onChange={(e) => setBlk({ ...blk, logoId: e.target.value ? Number(e.target.value) : null })}
-            >
-              <option value="">On-screen logo: use channel logo</option>
-              {logos.map((l) => (
-                <option key={l.id} value={l.id}>Logo: {l.name}</option>
-              ))}
-            </select>
+            <LogoPicker value={blk.logoId} onChange={(id) => setBlk({ ...blk, logoId: id })} noneLabel="On-screen logo: use collection/channel logo" />
             <div className="flex flex-wrap gap-2 items-end">
               <select className={input + ' flex-1 min-w-32'} value={blk.collectionId} onChange={(e) => setBlk({ ...blk, collectionId: e.target.value })} required>
                 <option value="">Collection…</option>

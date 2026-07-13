@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { api, type Channel } from '../lib/api'
+import LogoPicker from '../components/LogoPicker'
 
 function IptvEndpoints() {
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
@@ -38,8 +39,9 @@ function IptvEndpoints() {
 
 export default function Channels() {
   const [channels, setChannels] = useState<Channel[]>([])
-  const [form, setForm] = useState({ number: '', name: '', group: '' })
+  const [form, setForm] = useState<{ number: string; name: string; group: string; logoId: number | null }>({ number: '', name: '', group: '', logoId: null })
   const [error, setError] = useState<string | null>(null)
+  const navigate = useNavigate()
 
   const refresh = () => api.channels().then(setChannels).catch(() => {})
   useEffect(() => {
@@ -50,13 +52,15 @@ export default function Channels() {
     e.preventDefault()
     setError(null)
     try {
-      await api.addChannel({
+      // Two-step: create the shell, then drop straight into the editor to
+      // build its collections, rotation, and blocks.
+      const created = await api.addChannel({
         number: form.number.trim() ? Number(form.number) : null,
         name: form.name,
         group: form.group || null,
+        logoId: form.logoId,
       })
-      setForm({ number: '', name: '', group: '' })
-      refresh()
+      navigate(`/channels/${created.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create channel')
     }
@@ -89,22 +93,30 @@ export default function Channels() {
 
       <IptvEndpoints />
 
-      <form onSubmit={add} className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 mb-6 grid grid-cols-1 md:grid-cols-[100px_1fr_1fr_auto] gap-3 items-end">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-400">Number (optional)</span>
-          <input className={input} type="number" placeholder="draft" value={form.number} onChange={(e) => setForm({ ...form, number: e.target.value })} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-400">Name</span>
-          <input className={input} placeholder="Cartoon Channel" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-400">Group (optional)</span>
-          <input className={input} placeholder="Kids" value={form.group} onChange={(e) => setForm({ ...form, group: e.target.value })} />
-        </label>
-        <button type="submit" className="rounded-lg bg-indigo-500 hover:bg-indigo-400 px-4 py-2 font-medium text-sm">
-          Add
-        </button>
+      <form onSubmit={add} className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-[110px_1fr_1fr] gap-3 mb-3">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-400">Number (optional)</span>
+            <input className={input} type="number" placeholder="draft" value={form.number} onChange={(e) => setForm({ ...form, number: e.target.value })} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-400">Name</span>
+            <input className={input} placeholder="Nickelodeon" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-400">Group (optional)</span>
+            <input className={input} placeholder="Kids" value={form.group} onChange={(e) => setForm({ ...form, group: e.target.value })} />
+          </label>
+        </div>
+        <div className="flex flex-wrap gap-3 items-end">
+          <label className="flex flex-col gap-1 text-sm flex-1 min-w-56">
+            <span className="text-slate-400">Logo (optional)</span>
+            <LogoPicker value={form.logoId} onChange={(id) => setForm({ ...form, logoId: id })} />
+          </label>
+          <button type="submit" className="rounded-lg bg-indigo-500 hover:bg-indigo-400 px-5 py-2 font-medium text-sm">
+            Create &amp; configure →
+          </button>
+        </div>
       </form>
 
       {channels.length === 0 ? (

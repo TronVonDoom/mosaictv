@@ -386,6 +386,7 @@ export const api = {
     id: number,
     data: {
       name?: string
+      logoId?: number | null
       libraryId?: number | null
       filterType?: string | null
       filterSearch?: string | null
