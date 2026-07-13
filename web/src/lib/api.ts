@@ -169,9 +169,11 @@ export type CollectionItem = {
   order: number
 }
 
+export type FillerOwner = { channelId?: number; timeBlockId?: number }
 export type Filler = {
   id: number
-  collectionId: number
+  channelId: number | null
+  timeBlockId: number | null
   name: string | null
   style: 'animated' | 'frosted' | 'custom'
   assetId: number | null
@@ -188,6 +190,9 @@ export type FillerInput = {
   durationMode: 'fixed' | 'audio'
   durationSec: number
 }
+export function fillerClipUrl(id: number): string {
+  return `/api/fillers/${id}/clip`
+}
 
 export type Collection = {
   id: number
@@ -200,7 +205,6 @@ export type Collection = {
   filterSearch: string | null
   filterGenre: string | null
   items: CollectionItem[]
-  fillers: Filler[]
   itemCount: number
 }
 
@@ -444,12 +448,15 @@ export const api = {
     }),
   deleteCollectionItem: (collectionId: number, itemId: number) =>
     request<void>(`/api/collections/${collectionId}/items/${itemId}`, { method: 'DELETE' }),
-  addFiller: (collectionId: number, data: FillerInput) =>
-    request<Filler>(`/api/collections/${collectionId}/fillers`, { method: 'POST', body: JSON.stringify(data) }),
-  updateFiller: (collectionId: number, fillerId: number, data: FillerInput) =>
-    request<Filler>(`/api/collections/${collectionId}/fillers/${fillerId}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  deleteFiller: (collectionId: number, fillerId: number) =>
-    request<void>(`/api/collections/${collectionId}/fillers/${fillerId}`, { method: 'DELETE' }),
+  fillers: (owner: FillerOwner) => {
+    const qs = owner.channelId != null ? `channelId=${owner.channelId}` : `timeBlockId=${owner.timeBlockId}`
+    return request<Filler[]>(`/api/fillers?${qs}`)
+  },
+  addFiller: (owner: FillerOwner, data: FillerInput) =>
+    request<Filler>('/api/fillers', { method: 'POST', body: JSON.stringify({ ...owner, ...data }) }),
+  updateFiller: (id: number, data: FillerInput) =>
+    request<Filler>(`/api/fillers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteFiller: (id: number) => request<void>(`/api/fillers/${id}`, { method: 'DELETE' }),
 
   // --- channels ---
   channels: () => request<Channel[]>('/api/channels'),

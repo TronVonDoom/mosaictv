@@ -1,29 +1,15 @@
 import { Router } from 'express'
 import { prisma } from '../db.js'
 import { collectionCount, resolveCollection } from '../collections.js'
-import { warmFiller } from '../stream.js'
 
 export const collectionsRouter = Router()
-
-// Clamp an incoming collection Filler payload.
-function fillerData(body: Record<string, unknown>) {
-  const style = ['animated', 'frosted', 'custom'].includes(String(body?.style)) ? String(body.style) : 'frosted'
-  return {
-    name: body?.name ? String(body.name).trim() : null,
-    style,
-    assetId: body?.assetId != null && body.assetId !== '' ? Number(body.assetId) : null,
-    audioAssetId: body?.audioAssetId != null && body.audioAssetId !== '' ? Number(body.audioAssetId) : null,
-    durationMode: body?.durationMode === 'audio' ? 'audio' : 'fixed',
-    durationSec: Math.max(5, Math.min(600, Number(body?.durationSec) || 30)),
-  }
-}
 
 collectionsRouter.get('/', async (req, res) => {
   const channelId = req.query.channelId != null ? Number(req.query.channelId) : undefined
   const cols = await prisma.collection.findMany({
     where: channelId != null ? { channelId } : {},
     orderBy: { createdAt: 'asc' },
-    include: { items: { orderBy: { order: 'asc' } }, fillers: { orderBy: { order: 'asc' } } },
+    include: { items: { orderBy: { order: 'asc' } } },
   })
   const withCounts = await Promise.all(
     cols.map(async (c) => ({ ...c, itemCount: await collectionCount(c) })),
@@ -45,7 +31,7 @@ collectionsRouter.post('/', async (req, res) => {
       filterSearch: filterSearch || null,
       filterGenre: filterGenre || null,
     },
-    include: { items: true, fillers: true },
+    include: { items: true },
   })
   res.status(201).json(c)
 })
@@ -156,29 +142,6 @@ collectionsRouter.post('/:id/items', async (req, res) => {
 
 collectionsRouter.delete('/:id/items/:itemId', async (req, res) => {
   await prisma.collectionItem.delete({ where: { id: Number(req.params.itemId) } }).catch(() => {})
-  res.status(204).end()
-})
-
-// --- collection fillers ---
-collectionsRouter.post('/:id/fillers', async (req, res) => {
-  const collectionId = Number(req.params.id)
-  const col = await prisma.collection.findUnique({ where: { id: collectionId } })
-  if (!col) return res.status(404).json({ error: 'Collection not found' })
-  const max = await prisma.filler.aggregate({ where: { collectionId }, _max: { order: true } })
-  const f = await prisma.filler.create({ data: { collectionId, ...fillerData(req.body ?? {}), order: (max._max.order ?? -1) + 1 } })
-  warmFiller().catch(() => {}) // pre-generate in the background
-  res.status(201).json(f)
-})
-
-collectionsRouter.patch('/:id/fillers/:fid', async (req, res) => {
-  const f = await prisma.filler.update({ where: { id: Number(req.params.fid) }, data: fillerData(req.body ?? {}) }).catch(() => null)
-  if (!f) return res.status(404).json({ error: 'Filler not found' })
-  warmFiller().catch(() => {})
-  res.json(f)
-})
-
-collectionsRouter.delete('/:id/fillers/:fid', async (req, res) => {
-  await prisma.filler.delete({ where: { id: Number(req.params.fid) } }).catch(() => {})
   res.status(204).end()
 })
 

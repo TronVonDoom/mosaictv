@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { api, type Collection, type Library, type MediaSearchResult } from '../lib/api'
 import MediaSearchInput from './MediaSearchInput'
 import LogoPicker from './LogoPicker'
-import CollectionFillers from './CollectionFillers'
 
 const input = 'rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm focus:border-indigo-500 outline-none'
 
@@ -168,7 +167,6 @@ export default function CollectionManager({
                       <button onClick={() => setEditId(null)} className="rounded-lg border border-slate-700 hover:border-slate-500 px-3 py-1.5 text-sm">Cancel</button>
                       <button onClick={saveEdit} className="rounded-lg bg-indigo-500 hover:bg-indigo-400 px-4 py-1.5 text-sm font-medium">Save</button>
                     </div>
-                    <CollectionFillers collectionId={c.id} fillers={c.fillers} onChange={refresh} />
                   </div>
                 )}
 

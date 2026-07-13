@@ -129,21 +129,29 @@ model Collection {
   @@index([channelId])
 }
 
-// A branded interstitial for a collection — played during gaps in a block using
-// that collection. A collection can have several (a pool the stream rotates).
+// A branded interstitial played during gaps. Owned by a channel (its default) or
+// a specific time block (which overrides the channel default). collectionId is
+// kept nullable only so the retired collection-level rows migrate cleanly; the
+// app uses channel/block ownership.
 model Filler {
-  id           Int        @id @default(autoincrement())
-  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  collectionId Int
+  id           Int         @id @default(autoincrement())
+  channel      Channel?    @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  channelId    Int?
+  timeBlock    TimeBlock?  @relation(fields: [timeBlockId], references: [id], onDelete: Cascade)
+  timeBlockId  Int?
+  collection   Collection? @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  collectionId Int?
   name         String?
-  style        String     @default("frosted") // "animated" | "frosted" | "custom"
+  style        String      @default("frosted") // "animated" | "frosted" | "custom"
   assetId      Int? // custom visual (Asset kind "filler"); null for generated styles
-  audioAssetId Int? // ambient audio (Asset kind "audio"); loops under the visual
-  durationMode String     @default("fixed") // "fixed" | "audio" (match the audio length)
-  durationSec  Int        @default(30)
-  order        Int        @default(0)
-  createdAt    DateTime   @default(now())
+  audioAssetId Int? // ambient audio (Asset kind "audio"); baked into generated clips
+  durationMode String      @default("fixed") // "fixed" | "audio" (match the audio length)
+  durationSec  Int         @default(30)
+  order        Int         @default(0)
+  createdAt    DateTime    @default(now())
 
+  @@index([channelId])
+  @@index([timeBlockId])
   @@index([collectionId])
 }
 
@@ -185,6 +193,7 @@ model Channel {
   rotationItems RotationItem[]
   timeBlocks    TimeBlock[]
   playout       PlayoutItem[]
+  fillers       Filler[]
 }
 
 // One step in a channel's 24/7 rotation.
@@ -217,6 +226,7 @@ model TimeBlock {
   logo          Logo?      @relation(fields: [logoId], references: [id], onDelete: SetNull)
   logoId        Int?
   fillerMode    String     @default("none") // "none" | "between" | "end"
+  fillers       Filler[]
 
   @@index([channelId])
 }

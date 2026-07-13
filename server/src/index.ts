@@ -22,6 +22,7 @@ import { logsRouter } from './routes/logs.js'
 import { adminRouter } from './routes/admin.js'
 import { assetsRouter } from './routes/assets.js'
 import { profilesRouter } from './routes/profiles.js'
+import { fillersRouter } from './routes/fillers.js'
 
 const app = express()
 const PORT = Number(process.env.PORT ?? 8688)
@@ -98,6 +99,7 @@ app.use('/api/logs', logsRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api/assets', assetsRouter)
 app.use('/api/profiles', profilesRouter)
+app.use('/api/fillers', fillersRouter)
 app.use('/iptv', iptvRouter)
 
 // --- Static frontend (production only) --------------------------------------

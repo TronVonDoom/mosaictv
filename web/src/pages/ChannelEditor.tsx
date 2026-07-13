@@ -11,6 +11,7 @@ import {
 } from '../lib/api'
 import CollectionManager from '../components/CollectionManager'
 import LogoPicker from '../components/LogoPicker'
+import FillerManager from '../components/FillerManager'
 import TimelineView from '../components/TimelineView'
 import WeeklyBlockGrid from '../components/WeeklyBlockGrid'
 
@@ -67,6 +68,7 @@ export default function ChannelEditor() {
   })
   const [editingBlock, setEditingBlock] = useState<number | null>(null)
   const [guideView, setGuideView] = useState<'timeline' | 'list'>('timeline')
+  const [fillerBlockId, setFillerBlockId] = useState<number | null>(null)
 
   const load = () => api.channel(channelId).then(setCh).catch(() => {})
   const loadPlayout = () => api.playout(channelId, 24).then(setPlayout).catch(() => {})
@@ -252,6 +254,16 @@ export default function ChannelEditor() {
         </p>
       </form>
 
+      {/* Channel-level default filler */}
+      <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 mb-6">
+        <h2 className="font-semibold mb-1">Channel filler <span className="text-slate-600 font-normal">(default)</span></h2>
+        <p className="text-slate-500 text-xs mb-3">
+          Plays during a block's gaps unless that block has its own filler. Frosted uses this channel's logo + the
+          MeSatzTV logo. Pick an audio track to bake it in and match the clip length.
+        </p>
+        <FillerManager owner={{ channelId }} hint="channel default" />
+      </section>
+
       {/* Collections owned by this channel */}
       <CollectionManager channelId={channelId} onChange={loadCols} />
 
@@ -305,17 +317,25 @@ export default function ChannelEditor() {
 
           <div className="space-y-2 mb-4">
             {ch.timeBlocks.map((b) => (
-              <div key={b.id} className="flex items-center gap-3 text-sm rounded-lg bg-slate-950/60 border border-slate-800 px-3 py-2">
-                <div className="flex-1 min-w-0">
-                  <div className="truncate">{b.collection.name}</div>
-                  <div className="text-xs text-slate-500">
-                    {formatDays(b.days)} · {minutesToTime(b.startMinute)}–{minutesToTime(b.endMinute)} · {b.playbackOrder}
-                    {(b.logoId || b.logoUrl) && ' · 🖼 logo'}
-                    {b.fillerMode && b.fillerMode !== 'none' && ` · filler: ${b.fillerMode}`}
+              <div key={b.id} className="rounded-lg bg-slate-950/60 border border-slate-800">
+                <div className="flex items-center gap-3 text-sm px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate">{b.collection.name}</div>
+                    <div className="text-xs text-slate-500">
+                      {formatDays(b.days)} · {minutesToTime(b.startMinute)}–{minutesToTime(b.endMinute)} · {b.playbackOrder}
+                      {(b.logoId || b.logoUrl) && ' · 🖼 logo'}
+                      {b.fillerMode && b.fillerMode !== 'none' && ` · filler: ${b.fillerMode}`}
+                    </div>
                   </div>
+                  <button onClick={() => setFillerBlockId(fillerBlockId === b.id ? null : b.id)} className="text-xs text-slate-500 hover:text-indigo-300">{fillerBlockId === b.id ? 'Hide fillers' : 'Fillers'}</button>
+                  <button onClick={() => editBlock(b)} className="text-xs text-slate-500 hover:text-indigo-300" aria-label="Edit">Edit</button>
+                  <button onClick={() => guard(() => api.deleteBlock(channelId, b.id))} className="text-slate-600 hover:text-rose-400" aria-label="Remove">×</button>
                 </div>
-                <button onClick={() => editBlock(b)} className="text-xs text-slate-500 hover:text-indigo-300" aria-label="Edit">Edit</button>
-                <button onClick={() => guard(() => api.deleteBlock(channelId, b.id))} className="text-slate-600 hover:text-rose-400" aria-label="Remove">×</button>
+                {fillerBlockId === b.id && (
+                  <div className="px-3 pb-3">
+                    <FillerManager owner={{ timeBlockId: b.id }} hint={`overrides the channel filler during ${b.collection.name}`} />
+                  </div>
+                )}
               </div>
             ))}
           </div>
