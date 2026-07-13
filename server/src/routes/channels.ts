@@ -104,8 +104,8 @@ channelsRouter.post('/:id/blocks', async (req, res) => {
   if (!collectionId || !days || startMinute == null || endMinute == null) {
     return res.status(400).json({ error: 'collectionId, days, startMinute, endMinute are required' })
   }
-  if (Number(endMinute) <= Number(startMinute)) {
-    return res.status(400).json({ error: 'End time must be after start time.' })
+  if (Number(endMinute) === Number(startMinute)) {
+    return res.status(400).json({ error: 'Start and end time cannot be the same.' })
   }
   const b = await prisma.timeBlock.create({
     data: {
@@ -138,8 +138,8 @@ channelsRouter.patch('/:id/blocks/:blockId', async (req, res) => {
   if (endMinute !== undefined) data.endMinute = Number(endMinute)
   if (playbackOrder !== undefined) data.playbackOrder = asOrder(playbackOrder)
   if (logoUrl !== undefined) data.logoUrl = logoUrl || null
-  if (data.startMinute != null && data.endMinute != null && data.endMinute <= data.startMinute) {
-    return res.status(400).json({ error: 'End time must be after start time.' })
+  if (data.startMinute != null && data.endMinute != null && data.endMinute === data.startMinute) {
+    return res.status(400).json({ error: 'Start and end time cannot be the same.' })
   }
   const b = await prisma.timeBlock.update({ where: { id: blockId }, data }).catch(() => null)
   if (!b) return res.status(404).json({ error: 'Block not found.' })

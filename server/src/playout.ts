@@ -14,10 +14,19 @@ function truncateToMinute(d: Date): Date {
 /** The time block (if any) active at the given local date/time. First match wins. */
 function activeBlock(blocks: BlockWithCollection[], date: Date): BlockWithCollection | null {
   const day = date.getDay()
+  const prevDay = (day + 6) % 7
   const tod = date.getHours() * 60 + date.getMinutes()
   for (const b of blocks) {
     const days = b.days.split(',').map((s) => Number(s.trim()))
-    if (days.includes(day) && tod >= b.startMinute && tod < b.endMinute) return b
+    if (b.endMinute > b.startMinute) {
+      // Same-day block.
+      if (days.includes(day) && tod >= b.startMinute && tod < b.endMinute) return b
+    } else {
+      // Wraps past midnight: evening part today, or the morning tail of a block
+      // that started the previous day.
+      if (days.includes(day) && tod >= b.startMinute) return b
+      if (days.includes(prevDay) && tod < b.endMinute) return b
+    }
   }
   return null
 }
