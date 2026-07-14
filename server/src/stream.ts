@@ -537,6 +537,23 @@ function fileKey(f?: string): string {
   }
 }
 
+// Generate `out` via `gen(tmp)`, writing to a unique temp file and atomically
+// renaming to `out` only on success — so `out` never exists half-written (a
+// concurrent build would otherwise be picked up as a truncated clip).
+async function generateToCache(out: string, gen: (tmp: string) => Promise<void>): Promise<string | undefined> {
+  if (fs.existsSync(out)) return out
+  const tmp = `${out}.${process.pid}.${Date.now()}.tmp.mp4`
+  try {
+    await gen(tmp)
+    if (fs.existsSync(tmp)) fs.renameSync(tmp, out)
+  } catch (e) {
+    log('warn', 'system', 'Filler generation failed', String(e))
+  } finally {
+    fs.rmSync(tmp, { force: true }) // no-op once renamed
+  }
+  return fs.existsSync(out) ? out : undefined
+}
+
 // Animated filler for a given loop length + optional baked-in audio (persisted).
 async function ensureAnimatedFiller(dur = 30, audioFile?: string, onProgress?: ProgressCb): Promise<string | undefined> {
   const d = clampDur(dur)
@@ -544,13 +561,7 @@ async function ensureAnimatedFiller(dur = 30, audioFile?: string, onProgress?: P
   const out = path.join(dataDir(), `filler-anim-v${FILLER_VERSION}-${suffix}.mp4`)
   if (fs.existsSync(out)) return out
   log('info', 'system', `Generating animated filler (${d}s${audioFile ? ' + audio' : ''})…`)
-  const ok = await generateFiller(out, d, audioFile, onProgress)
-    .then(() => true)
-    .catch((e) => {
-      log('error', 'system', 'Filler generation failed', String(e))
-      return false
-    })
-  return ok && fs.existsSync(out) ? out : undefined
+  return generateToCache(out, (tmp) => generateFiller(tmp, d, audioFile, onProgress))
 }
 
 // Frosted-glass filler, cached by logo + duration + baked audio.
@@ -560,13 +571,9 @@ async function ensureFrostedFiller(logoFile: string, dur = 30, audioFile?: strin
   const out = path.join(dataDir(), `filler-frosted-${key}.mp4`)
   if (fs.existsSync(out)) return out
   log('info', 'system', `Generating frosted-glass filler for logo ${path.basename(logoFile)} (${d}s${audioFile ? ' + audio' : ''})…`)
-  const ok = await generateFrostedFiller(out, logoFile, mesatztvLogoFile(), d, audioFile, onProgress)
-    .then(() => true)
-    .catch((e) => {
-      log('warn', 'system', 'Frosted filler generation failed — falling back to animated', String(e))
-      return false
-    })
-  return ok && fs.existsSync(out) ? out : undefined
+  const clip = await generateToCache(out, (tmp) => generateFrostedFiller(tmp, logoFile, mesatztvLogoFile(), d, audioFile, onProgress))
+  if (!clip) log('warn', 'system', 'Frosted filler generation failed — falling back to animated')
+  return clip
 }
 
 type FillerRow = { style: string; assetId: number | null; audioAssetId: number | null; durationMode: string; durationSec: number }
