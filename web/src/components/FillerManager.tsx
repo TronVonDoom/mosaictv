@@ -57,7 +57,7 @@ export default function FillerManager({ owner, hint }: { owner: FillerOwner; hin
     setGeneratingId(id)
     setGenError(null)
     try {
-      await api.generateFiller(id)
+      await api.generateFillerClip(id)
       await refresh()
       setPreviewId(id)
     } catch (e) {
