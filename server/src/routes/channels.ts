@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { prisma } from '../db.js'
 import { buildPlayout, prunePlayout, resetPlayout } from '../playout.js'
+import { viewerCount } from '../stream.js'
 
 export const channelsRouter = Router()
 
@@ -32,23 +33,47 @@ function intervalsOverlap(a: [number, number][], b: [number, number][]): boolean
   return false
 }
 
+// Label for the program airing right now (mirrors the EPG naming).
+function nowLabel(it: { title: string | null; mediaItem: { title: string; showTitle: string | null; season: number | null; episode: number | null; type: string } | null }): string {
+  const m = it.mediaItem
+  if (!m) return it.title || 'Station break'
+  if (m.type === 'episode' && m.showTitle) {
+    const se = m.season != null && m.episode != null ? ` S${String(m.season).padStart(2, '0')}E${String(m.episode).padStart(2, '0')}` : ''
+    return `${m.showTitle}${se}`
+  }
+  return m.title
+}
+
 channelsRouter.get('/', async (_req, res) => {
   const chs = await prisma.channel.findMany({
     orderBy: { number: 'asc' },
     include: { _count: { select: { rotationItems: true, timeBlocks: true, playout: true } } },
   })
+  // What's airing right now on each channel (one query for all).
+  const now = new Date()
+  const airing = await prisma.playoutItem.findMany({
+    where: { startTime: { lte: now }, stopTime: { gt: now } },
+    include: { mediaItem: { select: { title: true, showTitle: true, season: true, episode: true, type: true } } },
+  })
+  const nowBy = new Map(airing.map((it) => [it.channelId, it]))
   res.json(
-    chs.map((c) => ({
-      id: c.id,
-      number: c.number,
-      name: c.name,
-      group: c.group,
-      logoUrl: c.logoUrl,
-      rotationCount: c._count.rotationItems,
-      blockCount: c._count.timeBlocks,
-      playoutCount: c._count.playout,
-      playoutCursor: c.playoutCursor,
-    })),
+    chs.map((c) => {
+      const cur = nowBy.get(c.id)
+      return {
+        id: c.id,
+        number: c.number,
+        name: c.name,
+        group: c.group,
+        logoUrl: c.logoUrl,
+        logoId: c.logoId,
+        rotationCount: c._count.rotationItems,
+        blockCount: c._count.timeBlocks,
+        playoutCount: c._count.playout,
+        playoutCursor: c.playoutCursor,
+        viewers: viewerCount(c.number),
+        nowPlaying: cur ? nowLabel(cur) : null,
+      }
+    }),
   )
 })
 

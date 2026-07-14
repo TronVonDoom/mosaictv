@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { api, formatDuration, type Health, type Stats } from '../lib/api'
+import { Link } from 'react-router-dom'
+import { api, formatDuration, type Channel, type Health, type Stats } from '../lib/api'
 
 function Card({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -14,14 +15,16 @@ function Card({ label, value, sub }: { label: string; value: string; sub?: strin
 export default function Dashboard() {
   const [health, setHealth] = useState<Health | null>(null)
   const [stats, setStats] = useState<Stats | null>(null)
+  const [channels, setChannels] = useState<Channel[]>([])
   const [reachable, setReachable] = useState<boolean | null>(null)
 
   useEffect(() => {
     const load = () => {
-      Promise.all([api.health(), api.stats()])
-        .then(([h, s]) => {
+      Promise.all([api.health(), api.stats(), api.channels()])
+        .then(([h, s, c]) => {
           setHealth(h)
           setStats(s)
+          setChannels(c)
           setReachable(true)
         })
         .catch(() => setReachable(false))
@@ -30,6 +33,8 @@ export default function Dashboard() {
     const id = setInterval(load, 5000)
     return () => clearInterval(id)
   }, [])
+
+  const onAir = channels.filter((c) => c.number != null)
 
   return (
     <div>
@@ -78,6 +83,29 @@ export default function Dashboard() {
             sub="across all indexed media"
           />
           <Card label="Other clips" value={String(stats.byType.other ?? 0)} />
+        </div>
+      )}
+
+      {onAir.length > 0 && (
+        <div className="mt-6">
+          <h2 className="font-semibold mb-3">On air</h2>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 divide-y divide-slate-800/60">
+            {onAir.map((c) => (
+              <Link key={c.id} to={`/channels/${c.id}#guide`} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-800/40 transition-colors">
+                <span className="font-mono text-indigo-300 w-10 shrink-0">{c.number}</span>
+                <span className="font-medium w-44 shrink-0 truncate">{c.name}</span>
+                <span className={'flex-1 min-w-0 truncate ' + (c.nowPlaying ? 'text-slate-300' : 'text-slate-600 italic')}>
+                  {c.nowPlaying ? `▶ ${c.nowPlaying}` : c.playoutCount > 0 ? 'nothing airing right now' : 'guide not built'}
+                </span>
+                {c.viewers > 0 && (
+                  <span className="shrink-0 inline-flex items-center gap-1.5 text-xs text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-full px-2.5 py-0.5">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
+                    {c.viewers}
+                  </span>
+                )}
+              </Link>
+            ))}
+          </div>
         </div>
       )}
 

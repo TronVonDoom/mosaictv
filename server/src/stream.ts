@@ -705,6 +705,11 @@ function clientInfo(req?: Request): string {
 // Count of live viewers per channel number, for logging concurrency.
 const viewers = new Map<number, number>()
 
+/** Live viewer count for a channel number (0 for drafts/unknown). */
+export function viewerCount(channelNumber: number | null): number {
+  return channelNumber != null ? viewers.get(channelNumber) ?? 0 : 0
+}
+
 /** Stream a channel's playout as a continuous MPEG-TS to `res`. */
 export async function streamChannel(channelNumber: number, res: Response, req?: Request): Promise<void> {
   const channel = await prisma.channel.findFirst({

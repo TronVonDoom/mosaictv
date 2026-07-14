@@ -259,6 +259,8 @@ export type Channel = {
   blockCount: number
   playoutCount: number
   playoutCursor: string | null
+  viewers: number
+  nowPlaying: string | null
 }
 
 export type ChannelDetail = {
