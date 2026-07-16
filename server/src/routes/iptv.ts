@@ -66,10 +66,67 @@ iptvRouter.get('/xmltv.xml', async (req, res) => {
     orderBy: [{ channelId: 'asc' }, { startTime: 'asc' }],
     include: {
       mediaItem: {
-        select: { title: true, showTitle: true, season: true, episode: true, type: true, overview: true },
+        select: {
+          id: true,
+          title: true,
+          showTitle: true,
+          season: true,
+          episode: true,
+          type: true,
+          overview: true,
+          libraryId: true,
+          posterPath: true,
+          showPosterPath: true,
+          tmdbPosterPath: true,
+        },
       },
     },
   })
+
+  // Episodes rarely carry their own TMDB art, so fall back to the show's poster.
+  // Show is unique on (libraryId, title); the maps nest by those two rather than
+  // joining them into one key, since a title may contain any separator.
+  const wantedShows = new Map<number, Set<string>>()
+  for (const it of items) {
+    const m = it.mediaItem
+    if (m?.type === 'episode' && m.showTitle) {
+      let titles = wantedShows.get(m.libraryId)
+      if (!titles) wantedShows.set(m.libraryId, (titles = new Set()))
+      titles.add(m.showTitle)
+    }
+  }
+  const showPosters = new Map<number, Map<string, string>>()
+  if (wantedShows.size) {
+    const shows = await prisma.show.findMany({
+      where: {
+        OR: [...wantedShows].map(([libraryId, titles]) => ({
+          libraryId,
+          title: { in: [...titles] },
+        })),
+      },
+      select: { libraryId: true, title: true, tmdbPosterPath: true },
+    })
+    for (const s of shows) {
+      if (!s.tmdbPosterPath) continue
+      let byTitle = showPosters.get(s.libraryId)
+      if (!byTitle) showPosters.set(s.libraryId, (byTitle = new Map()))
+      byTitle.set(s.title, s.tmdbPosterPath)
+    }
+  }
+
+  const tmdbImage = (p: string) => `https://image.tmdb.org/t/p/w500${p}`
+
+  function programmeIcon(m: (typeof items)[number]['mediaItem']): string | null {
+    if (!m) return null
+    if (m.type === 'episode' && m.showTitle) {
+      if (m.showPosterPath) return `${base}/api/artwork/${m.id}?type=show`
+      const tmdb = showPosters.get(m.libraryId)?.get(m.showTitle)
+      if (tmdb) return tmdbImage(tmdb)
+    }
+    if (m.posterPath) return `${base}/api/artwork/${m.id}?type=poster`
+    if (m.tmdbPosterPath) return tmdbImage(m.tmdbPosterPath)
+    return null
+  }
 
   let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<tv generator-info-name="MeSatzTV">\n'
   for (const c of channels) {
@@ -89,6 +146,8 @@ iptvRouter.get('/xmltv.xml', async (req, res) => {
     xml += `    <title>${escapeXml(title)}</title>\n`
     if (isEp && m && m.title) xml += `    <sub-title>${escapeXml(m.title)}</sub-title>\n`
     if (m && m.overview) xml += `    <desc>${escapeXml(m.overview)}</desc>\n`
+    const icon = programmeIcon(m)
+    if (icon) xml += `    <icon src="${escapeXml(icon)}" />\n`
     if (m && m.type === 'episode' && m.season != null && m.episode != null) {
       xml += `    <episode-num system="onscreen">S${String(m.season).padStart(2, '0')}E${String(m.episode).padStart(2, '0')}</episode-num>\n`
       xml += `    <episode-num system="xmltv_ns">${m.season - 1}.${m.episode - 1}.0</episode-num>\n`
