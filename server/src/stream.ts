@@ -288,6 +288,35 @@ async function resolveEncoder(hwaccel: StreamProfile['hwaccel']): Promise<string
   return avail // auto
 }
 
+// The outer concat process gets a connect-time buffer cushion from
+// -readrate_initial_burst (ffmpeg 6.1+) and -readrate_catchup (7.0+). These
+// don't exist on older ffmpeg (Debian bookworm ships 5.1), where passing an
+// unknown option makes ffmpeg exit immediately — which would kill every
+// stream. Probe once at first use; if unsupported, omit them and fall back to
+// plain -readrate (supported since 5.1), i.e. the previous behaviour.
+let readrateBurstCache: boolean | undefined
+function detectReadrateBurst(): Promise<boolean> {
+  if (readrateBurstCache !== undefined) return Promise.resolve(readrateBurstCache)
+  return new Promise((resolve) => {
+    let err = ''
+    const p = spawn('ffmpeg', [
+      '-hide_banner',
+      '-readrate_initial_burst', '1',
+      '-readrate_catchup', '1.5',
+      '-f', 'lavfi', '-i', 'color=c=black:s=32x32:d=0.1',
+      '-f', 'null', '-',
+    ])
+    p.stderr?.on('data', (d) => (err += d))
+    p.on('error', () => resolve((readrateBurstCache = false)))
+    p.on('close', (code) => {
+      const ok = code === 0
+      if (ok) log('info', 'ffmpeg', 'readrate burst/catchup supported — streams get a connect-time cushion')
+      else log('warn', 'ffmpeg', 'ffmpeg lacks -readrate_initial_burst/-readrate_catchup (needs 6.1/7.0+) — streaming with plain readrate')
+      resolve((readrateBurstCache = ok))
+    })
+  })
+}
+
 // Burned-in text (coming-up-next, schedule filler) needs drawtext, which is
 // only present when ffmpeg was built with libfreetype, plus a font file on
 // disk. Both are detected ONCE; if either is missing, text overlays are
@@ -1335,6 +1364,14 @@ export async function streamChannel(channelNumber: number, res: Response, req?: 
     clientInfo(req),
   )
 
+  // Send the first few seconds unmetered so the player starts with a buffer
+  // cushion, and re-earn that cushion (at 1.5x) after per-item startup stalls.
+  // Only on ffmpeg new enough to know these options — on 5.1 they'd abort the
+  // process. The item picker compensates for boundaries arriving early (and is
+  // harmless when they don't) — see TAIL_SKIP_SEC in streamChannelItem.
+  const burst = (await detectReadrateBurst())
+    ? ['-readrate_initial_burst', String(READ_BURST_SEC), '-readrate_catchup', '1.5']
+    : []
   const args = [
     '-hide_banner', '-loglevel', 'error', '-nostdin',
     '-f', 'concat',
@@ -1345,12 +1382,7 @@ export async function streamChannel(channelNumber: number, res: Response, req?: 
     // whole session — the per-item encoders then run flat out until backpressure
     // stops them, which keeps a little of the next program ready to go.
     '-readrate', '1.0',
-    // Send the first few seconds unmetered so the player starts with a buffer
-    // cushion, and re-earn that cushion (at 1.5x) after per-item startup
-    // stalls. The item picker compensates for boundaries arriving early — see
-    // TAIL_SKIP_SEC in streamChannelItem.
-    '-readrate_initial_burst', String(READ_BURST_SEC),
-    '-readrate_catchup', '1.5',
+    ...burst,
     '-stream_loop', '-1',
     '-i', `${internalBase()}/internal/concat/${channelNumber}`,
     '-c', 'copy',
