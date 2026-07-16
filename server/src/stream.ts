@@ -189,6 +189,40 @@ type Segment = {
   tsOffsetSec: number // cumulative output timestamp offset (keeps PTS monotonic across segments)
 }
 
+// Sample aspect ratio per file. The scanner records coded dimensions, but
+// anamorphic sources (720x480 DVD rips at SAR 8:9) *display* at a different
+// shape — and the stream de-anamorphizes with scale=iw*sar:ih, so the picture
+// on the canvas is the SAR-corrected one. Using coded dims to place the
+// watermark puts it on the pillarbars. Probed once per file, then cached.
+const sarCache = new Map<string, number>()
+function probeSar(filePath: string): Promise<number> {
+  const hit = sarCache.get(filePath)
+  if (hit !== undefined) return Promise.resolve(hit)
+  return new Promise((resolve) => {
+    const done = (v: number) => {
+      sarCache.set(filePath, v)
+      resolve(v)
+    }
+    let out = ''
+    const p = spawn('ffprobe', [
+      '-v', 'error',
+      '-select_streams', 'v:0',
+      '-show_entries', 'stream=sample_aspect_ratio',
+      '-of', 'default=nw=1:nk=1',
+      filePath,
+    ])
+    p.stdout.on('data', (d) => (out += d))
+    p.on('error', () => done(1))
+    p.on('close', () => {
+      // "8:9" -> 0.888…; "N/A", "0:1" and anything odd mean square pixels.
+      const m = out.trim().match(/^(\d+):(\d+)$/)
+      const n = m ? Number(m[1]) : 0
+      const d = m ? Number(m[2]) : 0
+      done(n > 0 && d > 0 ? n / d : 1)
+    })
+  })
+}
+
 // The rectangle the picture occupies inside the WxH output canvas after
 // aspect-preserving fit (pillar/letterbox). Used to constrain the watermark to
 // the media. When not constraining, this is the whole canvas.
@@ -214,11 +248,18 @@ function mediaRect(mediaW: number, mediaH: number, constrain: boolean, cw: numbe
 // every `frequencyMinutes`, aligned to wall-clock time so every viewer sees it
 // at the same moment. `wmEpochSec` is the segment's absolute start time in
 // seconds; `t` inside the expression is the segment-relative time.
+/** Whether the watermark needs a per-frame alpha ramp (vs a static alpha). */
+function wantsFade(wm: WatermarkConfig): boolean {
+  return wm.mode === 'intermittent' && Math.min(wm.fadeSeconds, wm.durationSeconds / 2) > 0
+}
+
 function watermarkGraph(
   wm: WatermarkConfig,
   logoIdx: number,
   wmEpochSec: number,
   rect: Rect,
+  fps: number,
+  fading: boolean,
 ): { logoChain: string; overlayPos: string; overlayExtra: string } {
   const LW = Math.max(2, Math.round((rect.mw * wm.widthPercent) / 100))
   const MX = Math.round((rect.mw * wm.horizontalMarginPercent) / 100)
@@ -234,24 +275,57 @@ function watermarkGraph(
     'bottom-right': `${right}-w:${bottom}-h`,
   }
   const overlayPos = positions[wm.position] ?? positions['bottom-right']
-  const BO = Math.max(0, Math.min(1, wm.opacityPercent / 100)).toFixed(3)
+  const opacity = Math.max(0, Math.min(1, wm.opacityPercent / 100))
+  const BO = opacity.toFixed(3)
+  const scale = `[${logoIdx}:v]scale=${LW}:-2`
 
-  // Static alpha via colorchannelmixer — reliable on all builds (unlike geq,
-  // which needs planar RGBA and silently mangles packed formats).
-  const logoChain = `[${logoIdx}:v]scale=${LW}:-2,format=rgba,colorchannelmixer=aa=${BO}[lg]`
-
-  let overlayExtra = ''
-  if (wm.mode === 'intermittent') {
-    const P = Math.max(1, Math.round(wm.frequencyMinutes * 60)) // period, seconds
-    const D = Math.max(1, Math.round(wm.durationSeconds)) // visible window, seconds
-    // Single-quoted so the commas aren't parsed as filtergraph separators.
-    overlayExtra = `:enable='lt(mod(t+${wmEpochSec.toFixed(1)},${P}),${D})'`
+  if (wm.mode !== 'intermittent') {
+    // Always-on: static alpha via colorchannelmixer — cheap and reliable.
+    return { logoChain: `${scale},format=rgba,colorchannelmixer=aa=${BO}[lg]`, overlayPos, overlayExtra: '' }
   }
-  return { logoChain, overlayPos, overlayExtra }
+
+  const P = Math.max(1, Math.round(wm.frequencyMinutes * 60)) // period, seconds
+  const D = Math.max(1, Math.round(wm.durationSeconds)) // visible window, seconds
+  const fade = Math.max(0, Math.min(wm.fadeSeconds, D / 2)) // can't fade longer than half the window
+
+  if (!fading) {
+    // Hard cut: gate the overlay on a wall-clock-aligned window.
+    return {
+      logoChain: `${scale},format=rgba,colorchannelmixer=aa=${BO}[lg]`,
+      overlayPos,
+      // Single-quoted so the commas aren't parsed as filtergraph separators.
+      overlayExtra: `:enable='lt(mod(t+${wmEpochSec.toFixed(1)},${P}),${D})'`,
+    }
+  }
+
+  // Fading: ramp the logo's alpha in and out around the visible window. This
+  // needs a per-frame alpha, which `enable` (a hard on/off) can't express and
+  // colorchannelmixer (one static value) can't either — so drive it with geq.
+  //
+  // Two constraints, both learned the hard way:
+  //  - geq must get PLANAR rgba (gbrap); on packed rgba it silently corrupts.
+  //  - geq's `T` is broken in ffmpeg 8.1, but frame number `N` works, so the
+  //    envelope is expressed in frames.
+  // Phase-shift by the segment's wall-clock start so the cycle stays continuous
+  // across segment boundaries and every viewer sees the logo at the same moment.
+  const PF = Math.max(1, Math.round(P * fps))
+  const DF = Math.max(1, Math.round(D * fps))
+  const FF = Math.max(1, Math.round(fade * fps))
+  const PH = Math.round(wmEpochSec * fps) % PF
+  const n = `mod(N+${PH},${PF})` // frames since the window opened
+  // Ramp up over FF, hold, ramp down to zero at DF, stay dark until the period wraps.
+  const env = `clip(min(${n}/${FF},(${DF}-${n})/${FF}),0,1)`
+  const alpha = `${(opacity * 255).toFixed(1)}*${env}`
+  const logoChain = `${scale},format=gbrap,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='${alpha}'[lg]`
+  return { logoChain, overlayPos, overlayExtra: '' }
 }
 
 function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: StreamProfile): string[] {
   const useWatermark = wm.mode !== 'none' && !!seg.logo
+  // Fading loops the still logo into an endless stream, which only terminates
+  // because `-t` caps the output — so require a known positive duration and
+  // fall back to a hard cut otherwise rather than risk a stream that never ends.
+  const fading = useWatermark && wantsFade(wm) && (seg.durationSec ?? 0) > 0
   const a: string[] = ['-hide_banner', '-loglevel', 'error', '-nostdin', '-fflags', '+genpts']
   if (seg.offsetSec > 0.1) a.push('-ss', seg.offsetSec.toFixed(3))
   if (seg.loop) a.push('-stream_loop', '-1')
@@ -261,6 +335,10 @@ function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: StreamPro
   let logoIdx = -1
   if (useWatermark) {
     logoIdx = idx++
+    // A still logo decodes to a single frame, which overlay just repeats — fine
+    // for a static alpha, but the fade envelope is driven by the logo's own
+    // frame counter, so it needs a real stream ticking at the profile's rate.
+    if (fading) a.push('-loop', '1', '-framerate', String(p.fps))
     a.push('-i', seg.logo as string)
   }
   // Audio source: ambient music (looped) overrides the clip's own audio; else
@@ -282,7 +360,7 @@ function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: StreamPro
   let vf: string
   if (useWatermark) {
     const rect = mediaRect(seg.mediaWidth, seg.mediaHeight, wm.constrainToMedia, p.width, p.height)
-    const wg = watermarkGraph(wm, logoIdx, seg.wmEpochSec, rect)
+    const wg = watermarkGraph(wm, logoIdx, seg.wmEpochSec, rect, p.fps, fading)
     vf = `${base}[bg];${wg.logoChain};[bg][lg]overlay=${wg.overlayPos}${wg.overlayExtra}[v]`
   } else {
     vf = `${base}[v]`
@@ -981,7 +1059,11 @@ export async function streamChannel(channelNumber: number, res: Response, req?: 
           label = `filler (${Math.round(segDur)}s)${music ? ' +music' : ''}${src}`
           if (!clip) log('error', 'stream', `Channel ${channelNumber}: no filler clip — a ${Math.round(segDur)}s gap will play black`)
         } else if (fs.existsSync(mi.path)) {
-          seg = { filePath: mi.path, offsetSec: offset, loop: false, durationSec: segDur, hasAudio: !!mi.audioCodec, logo, wmEpochSec, mediaWidth: mi.width ?? W, mediaHeight: mi.height ?? H, tsOffsetSec: tsOffset }
+          // Only anamorphic sources need correcting, and only a constrained
+          // watermark cares — skip the probe otherwise.
+          const sar = wm.constrainToMedia && wm.mode !== 'none' && logo ? await probeSar(mi.path) : 1
+          const dispW = Math.round((mi.width ?? W) * sar)
+          seg = { filePath: mi.path, offsetSec: offset, loop: false, durationSec: segDur, hasAudio: !!mi.audioCodec, logo, wmEpochSec, mediaWidth: dispW, mediaHeight: mi.height ?? H, tsOffsetSec: tsOffset }
           label = mi.showTitle
             ? `${mi.showTitle}${mi.season != null && mi.episode != null ? ` S${String(mi.season).padStart(2, '0')}E${String(mi.episode).padStart(2, '0')}` : ''}${mi.title ? ` — ${mi.title}` : ''}`
             : mi.title
