@@ -1,8 +1,12 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, logoImageUrl, type Channel } from '../lib/api'
 import { copyText } from '../lib/clipboard'
 import LogoPicker from '../components/LogoPicker'
+
+// mpegts.js is ~280 kB and only needed once a preview is actually opened, so
+// keep it out of the main bundle.
+const ChannelPreview = lazy(() => import('../components/ChannelPreview'))
 
 const input = 'rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm focus:border-indigo-500 outline-none'
 
@@ -58,6 +62,7 @@ export default function Channels() {
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState<{ number: string; name: string; group: string; logoId: number | null }>({ number: '', name: '', group: '', logoId: null })
   const [error, setError] = useState<string | null>(null)
+  const [previewing, setPreviewing] = useState<Channel | null>(null)
   const navigate = useNavigate()
 
   const refresh = () => api.channels().then(setChannels).catch(() => {})
@@ -188,6 +193,14 @@ export default function Channels() {
                   {c.viewers} watching
                 </span>
               )}
+              <button
+                onClick={() => setPreviewing(c)}
+                disabled={c.number == null}
+                title={c.number == null ? 'Draft channels have no number to stream from' : `Preview channel ${c.number}`}
+                className="rounded-lg border border-slate-700 enabled:hover:border-indigo-500 enabled:hover:text-indigo-300 disabled:opacity-30 disabled:cursor-not-allowed px-3 py-1.5 text-sm shrink-0"
+              >
+                ▶ Preview
+              </button>
               <Link to={`/channels/${c.id}`} className="rounded-lg border border-slate-700 hover:border-indigo-500 hover:text-indigo-300 px-3 py-1.5 text-sm shrink-0">
                 Edit
               </Link>
@@ -197,6 +210,18 @@ export default function Channels() {
             </div>
           ))}
         </div>
+      )}
+
+      {previewing?.number != null && (
+        <Suspense fallback={null}>
+          <ChannelPreview
+            key={previewing.id}
+            number={previewing.number}
+            name={previewing.name}
+            nowPlaying={previewing.nowPlaying}
+            onClose={() => setPreviewing(null)}
+          />
+        </Suspense>
       )}
     </div>
   )
