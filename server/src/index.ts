@@ -23,6 +23,7 @@ import { adminRouter } from './routes/admin.js'
 import { assetsRouter } from './routes/assets.js'
 import { profilesRouter } from './routes/profiles.js'
 import { fillersRouter } from './routes/fillers.js'
+import { internalRouter } from './routes/internal.js'
 
 const app = express()
 const PORT = Number(process.env.PORT ?? 8688)
@@ -101,6 +102,8 @@ app.use('/api/assets', assetsRouter)
 app.use('/api/profiles', profilesRouter)
 app.use('/api/fillers', fillersRouter)
 app.use('/iptv', iptvRouter)
+// Loopback-only: the channel's outer ffmpeg fetches its per-item streams here.
+app.use('/internal', internalRouter)
 
 // --- Static frontend (production only) --------------------------------------
 const publicDir = path.join(process.cwd(), 'public')

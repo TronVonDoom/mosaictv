@@ -260,7 +260,6 @@ type Segment = {
   mediaWidth: number // source pixel dims (for constrain-to-media watermark)
   mediaHeight: number
   musicPath?: string // looped ambient audio (filler only) — overrides clip audio
-  tsOffsetSec: number // cumulative output timestamp offset (keeps PTS monotonic across segments)
   isFiller: boolean
   // Ramp the watermark up/down across a boundary where it is about to appear or
   // disappear (i.e. next to filler that isn't showing it). 0 = no ramp.
@@ -436,7 +435,11 @@ function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: StreamPro
   const a: string[] = ['-hide_banner', '-loglevel', 'error', '-nostdin', '-fflags', '+genpts']
   if (seg.offsetSec > 0.1) a.push('-ss', seg.offsetSec.toFixed(3))
   if (seg.loop) a.push('-stream_loop', '-1')
-  a.push('-re', '-i', seg.filePath) // input 0 = main video
+  // Deliberately NOT -re: the outer concat process meters the session at real
+  // time, and two pacers in series just starve each other. Unpaced, this races
+  // ahead until the pipe backs up, which keeps a little of the item buffered
+  // and ready the moment the previous one ends.
+  a.push('-i', seg.filePath) // input 0 = main video
 
   let idx = 1
   let logoIdx = -1
@@ -499,11 +502,10 @@ function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: StreamPro
   if (p.threads > 0) a.push('-threads', String(p.threads))
   a.push(...encoderArgs(enc, p))
   a.push('-c:a', 'aac', '-ar', '48000', '-ac', String(p.audioChannels), '-b:a', `${p.audioBitrate}k`)
-  // Continuous timestamps: each segment's frames start at 0 (setpts above), and
-  // -output_ts_offset shifts them to follow the previous segment so the muxed
-  // MPEG-TS never jumps backwards. Backwards PTS at a boundary is what makes
-  // players freeze/black-out until they reconnect.
-  a.push('-output_ts_offset', seg.tsOffsetSec.toFixed(3))
+  // Each item starts at timestamp 0 (setpts above) and is stitched to the
+  // previous one by the outer concat process. We deliberately do NOT offset
+  // timestamps here any more: doing it by hand is what put DTS backwards at
+  // every seam.
   a.push('-mpegts_flags', '+resend_headers', '-f', 'mpegts', '-muxpreload', '0', '-muxdelay', '0', 'pipe:1')
   return a
 }
@@ -1035,15 +1037,69 @@ export function viewerCount(channelNumber: number | null): number {
 }
 
 /** Stream a channel's playout as a continuous MPEG-TS to `res`. */
+
+/**
+ * Valid black+silence in the channel's format. The concat demuxer treats an
+ * empty or unreadable entry as a broken input and gives up on the whole
+ * session, so every /internal/stream request must answer with real TS — even
+ * when there is nothing to play.
+ */
+function blackArgs(p: StreamProfile, enc: string, durSec: number): string[] {
+  return [
+    '-hide_banner', '-loglevel', 'error', '-nostdin',
+    '-f', 'lavfi', '-i', `color=c=black:s=${p.width}x${p.height}:r=${p.fps}`,
+    '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo',
+    '-t', Math.max(0.5, durSec).toFixed(3),
+    ...encoderArgs(enc, p),
+    '-c:a', 'aac', '-ar', '48000', '-ac', String(p.audioChannels), '-b:a', `${p.audioBitrate}k`,
+    '-mpegts_flags', '+resend_headers', '-f', 'mpegts', '-muxpreload', '0', '-muxdelay', '0', 'pipe:1',
+  ]
+}
+
+/** Stream black for `durSec` so the concat session survives a gap. */
+async function streamBlack(res: Response, p: StreamProfile, enc: string, durSec: number, why: string, channelNumber: number): Promise<void> {
+  log('warn', 'stream', `Channel ${channelNumber}: filling ${durSec.toFixed(1)}s with black — ${why}`)
+  if (!res.headersSent) res.writeHead(200, { 'Content-Type': 'video/mp2t', 'Cache-Control': 'no-cache, no-store' })
+  const proc = spawn('ffmpeg', blackArgs(p, enc, durSec))
+  res.on('close', () => proc.kill('SIGKILL'))
+  await pipeSegment(proc, res)
+  if (!res.writableEnded) res.end()
+}
+
+/** Base URL for the internal per-item endpoints the concat demuxer fetches. */
+function internalBase(): string {
+  return `http://127.0.0.1:${Number(process.env.PORT ?? 8688)}`
+}
+
+/**
+ * The playlist the outer ffmpeg's concat demuxer reads. Two identical entries is
+ * all it needs: `-stream_loop -1` cycles the list forever, and each pass re-opens
+ * the URL, which hands back whatever should be on air at that moment. (Same trick
+ * ErsatzTV uses.)
+ */
+export function concatPlaylist(channelNumber: number): string {
+  const url = `${internalBase()}/internal/stream/${channelNumber}`
+  return `ffconcat version 1.0\nfile ${url}\nfile ${url}\n`
+}
+
+/**
+ * The public stream: one long-lived ffmpeg that concatenates the per-item streams
+ * and remuxes them to the client.
+ *
+ * The point of the indirection is that ffmpeg — not us — owns timestamp
+ * continuity across programs. We used to spawn an encoder per item and splice
+ * their timestamps by hand with -output_ts_offset plus a fixed 40ms guard, which
+ * could not survive B-frame reorder delay (measured at 200ms) and put DTS
+ * backwards at every seam; players dropped video there and never recovered.
+ * The concat demuxer just does this correctly.
+ *
+ * `-c copy` here: the inner streams are already normalised to the channel's
+ * format, so the wrapper never re-encodes and costs no extra encoder session.
+ */
 export async function streamChannel(channelNumber: number, res: Response, req?: Request): Promise<void> {
   const channel = await prisma.channel.findFirst({
     where: { number: channelNumber },
-    include: {
-      timeBlocks: { include: { collection: true, fillers: { orderBy: { order: 'asc' } } } },
-      fillers: { orderBy: { order: 'asc' } },
-      rotationItems: true,
-      profile: true,
-    },
+    include: { rotationItems: true, profile: true },
   })
   if (!channel) {
     log('warn', 'stream', `Rejected stream: channel ${channelNumber} not found (${clientInfo(req)})`)
@@ -1051,22 +1107,10 @@ export async function streamChannel(channelNumber: number, res: Response, req?: 
     return
   }
 
-  // Auto-build the playout if it's empty or nearly exhausted.
-  const now = Date.now()
-  if (!channel.playoutCursor || channel.playoutCursor.getTime() < now + 30 * 60 * 1000) {
-    if (channel.rotationItems.length === 0 && channel.timeBlocks.length === 0) {
-      log('warn', 'stream', `Channel ${channelNumber} (${channel.name}) has nothing scheduled — no rotation or time blocks`)
-      res.status(409).end() // nothing scheduled
-      return
-    }
-    await prunePlayout(channel.id).catch((e) =>
-      log('warn', 'playout', `Prune failed for channel ${channelNumber}`, String(e)),
-    )
-    const built = await buildPlayout(channel.id, new Date(now + 4 * 3600 * 1000)).catch((e) => {
-      log('error', 'playout', `Playout build failed for channel ${channelNumber}`, String(e?.stack || e))
-      return -1
-    })
-    if (built >= 0) log('debug', 'playout', `Channel ${channelNumber}: built ${built} playout item(s) on connect`)
+  const built = await ensurePlayout(channel, channelNumber)
+  if (!built) {
+    res.status(409).end() // nothing scheduled
+    return
   }
 
   const nViewers = (viewers.get(channelNumber) ?? 0) + 1
@@ -1078,15 +1122,22 @@ export async function streamChannel(channelNumber: number, res: Response, req?: 
     clientInfo(req),
   )
 
-  const profile = resolveProfile(channel.profile)
-  const enc = await resolveEncoder(profile.hwaccel)
-  log('debug', 'ffmpeg', `Channel ${channelNumber}: ${profile.width}x${profile.height}@${profile.fps} ${profile.quality} audio ${profile.audioBitrate}k, encoder ${enc}`)
-  const defaultWm = await loadWatermark()
-  const logos = await prisma.logo.findMany()
-  const logoPath = new Map<number, string>(logos.map((l) => [l.id, path.join(logosDir(), l.filename)]))
-  // Each logo can carry its own watermark settings; legacy URL logos and the
-  // bundled fallback icon use the global default.
-  const logoWm = new Map<number, WatermarkConfig>(logos.map((l) => [l.id, parseWatermark(l.watermark, defaultWm)]))
+  const args = [
+    '-hide_banner', '-loglevel', 'error', '-nostdin',
+    '-f', 'concat',
+    '-safe', '0',
+    '-protocol_whitelist', 'file,http,tcp',
+    '-probesize', '32',
+    // Meter the output at real time here, in the one process that lives for the
+    // whole session — the per-item encoders then run flat out until backpressure
+    // stops them, which keeps a little of the next program ready to go.
+    '-readrate', '1.0',
+    '-stream_loop', '-1',
+    '-i', `${internalBase()}/internal/concat/${channelNumber}`,
+    '-c', 'copy',
+    '-f', 'mpegts', '-muxpreload', '0', '-muxdelay', '0', 'pipe:1',
+  ]
+  log('debug', 'ffmpeg', `Ch ${channelNumber} concat command`, 'ffmpeg ' + args.join(' '))
 
   res.writeHead(200, {
     'Content-Type': 'video/mp2t',
@@ -1094,77 +1145,126 @@ export async function streamChannel(channelNumber: number, res: Response, req?: 
     Connection: 'close',
   })
 
-  let aborted = false
   let reason = 'client disconnected'
-  let current: ChildProcess | null = null
-  res.on('close', () => {
-    aborted = true
-    current?.kill('SIGKILL')
-  })
+  const proc = spawn('ffmpeg', args)
+  res.on('close', () => proc.kill('SIGKILL'))
+  const result = await pipeSegment(proc, res)
+  if (result.spawnError) {
+    reason = 'failed to launch ffmpeg'
+    log('error', 'ffmpeg', `Channel ${channelNumber}: could not launch the concat process`, String(result.spawnError))
+  } else if (result.code && result.code !== 0 && !res.writableEnded) {
+    reason = `ffmpeg exited ${result.code}`
+    log('error', 'ffmpeg', `Channel ${channelNumber}: concat process exited ${result.code}`, result.stderr || '(no stderr)')
+  }
 
-  // Walk playout items from now forward, refilling as we go.
-  let cursor = new Date()
-  let first = true
-  // Cumulative output-timestamp offset so PTS climbs monotonically across every
-  // segment (no backwards jump at boundaries). A tiny epsilon per boundary biases
-  // slightly forward so frame-rounding never overlaps into the previous segment.
-  let tsOffset = 0
-  try {
-    while (!aborted) {
-      // A transient DB error must not kill an in-flight stream — retry briefly
-      // (WAL + busy_timeout make this rare, but a lock during another viewer's
-      // build could still surface here).
-      const items = await prisma.playoutItem
-        .findMany({
-          where: { channelId: channel.id, stopTime: { gt: cursor } },
-          orderBy: { startTime: 'asc' },
-          take: 100,
-          include: { mediaItem: true },
-        })
-        .catch((e) => {
-          log('warn', 'stream', `Channel ${channelNumber}: DB read failed, retrying`, String(e))
-          return null
-        })
-      if (items === null) {
-        await new Promise((r) => setTimeout(r, 500))
-        continue
-      }
-      if (items.length === 0) {
-        const built = await buildPlayout(channel.id, new Date(Date.now() + 4 * 3600 * 1000)).catch((e) => {
-          log('error', 'playout', `Playout refill failed for channel ${channelNumber}`, String(e?.stack || e))
-          return -1
-        })
-        if (built > 0) log('debug', 'playout', `Channel ${channelNumber}: refilled ${built} playout item(s) mid-stream`)
-        const more = await prisma.playoutItem
-          .count({ where: { channelId: channel.id, stopTime: { gt: cursor } } })
-          .catch(() => 0)
-        if (more === 0) {
-          reason = 'playout exhausted (nothing left to play)'
-          break
-        }
-        continue
-      }
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i]
-        if (aborted) break
+  const left = (viewers.get(channelNumber) ?? 1) - 1
+  viewers.set(channelNumber, Math.max(0, left))
+  log('info', 'stream', `⏹ Channel ${channelNumber} (${channel.name}) stream ended — ${reason}; ${Math.max(0, left)} viewer(s) still watching`)
+  if (!res.writableEnded) res.end()
+}
+
+/** Build the playout if it's empty or nearly exhausted. False = nothing scheduled. */
+async function ensurePlayout(
+  channel: { id: number; playoutCursor: Date | null; rotationItems: unknown[] },
+  channelNumber: number,
+): Promise<boolean> {
+  const now = Date.now()
+  if (channel.playoutCursor && channel.playoutCursor.getTime() >= now + 30 * 60 * 1000) return true
+
+  const blocks = await prisma.timeBlock.count({ where: { channelId: channel.id } })
+  if (channel.rotationItems.length === 0 && blocks === 0) {
+    log('warn', 'stream', `Channel ${channelNumber} has nothing scheduled — no rotation or time blocks`)
+    return false
+  }
+  await prunePlayout(channel.id).catch((e) =>
+    log('warn', 'playout', `Prune failed for channel ${channelNumber}`, String(e)),
+  )
+  const built = await buildPlayout(channel.id, new Date(now + 4 * 3600 * 1000)).catch((e) => {
+    log('error', 'playout', `Playout build failed for channel ${channelNumber}`, String(e?.stack || e))
+    return -1
+  })
+  if (built >= 0) log('debug', 'playout', `Channel ${channelNumber}: built ${built} playout item(s) on connect`)
+  return true
+}
+
+/**
+ * One program (or filler) — whatever is on air right now — encoded to the
+ * channel's format and streamed until it ends. The concat demuxer opens this
+ * once per item; because the item is chosen by wall clock, every viewer sees the
+ * same thing and no per-client session state is needed.
+ */
+export async function streamChannelItem(channelNumber: number, res: Response, req?: Request): Promise<void> {
+  const channel = await prisma.channel.findFirst({
+    where: { number: channelNumber },
+    include: {
+      timeBlocks: { include: { collection: true, fillers: { orderBy: { order: 'asc' } } } },
+      fillers: { orderBy: { order: 'asc' } },
+      rotationItems: true,
+      profile: true,
+    },
+  })
+  if (!channel) {
+    res.status(404).end()
+    return
+  }
+  if (!(await ensurePlayout(channel, channelNumber))) {
+    res.status(409).end()
+    return
+  }
+
+  const profile = resolveProfile(channel.profile)
+  const enc = await resolveEncoder(profile.hwaccel)
+  const defaultWm = await loadWatermark()
+  const logos = await prisma.logo.findMany()
+  const logoPath = new Map<number, string>(logos.map((l) => [l.id, path.join(logosDir(), l.filename)]))
+  // Each logo can carry its own watermark settings; legacy URL logos and the
+  // bundled fallback icon use the global default.
+  const logoWm = new Map<number, WatermarkConfig>(logos.map((l) => [l.id, parseWatermark(l.watermark, defaultWm)]))
+
+  let current: ChildProcess | null = null
+  res.on('close', () => current?.kill('SIGKILL'))
+
+  // Whatever is on air right now, plus its neighbours (the watermark fades
+  // across a filler boundary, so we need to know what sits either side).
+  const now = new Date()
+  const items = await prisma.playoutItem.findMany({
+    where: { channelId: channel.id, stopTime: { gt: new Date(now.getTime() - 1000) } },
+    orderBy: { startTime: 'asc' },
+    take: 3,
+    include: { mediaItem: true },
+  })
+  const prev = await prisma.playoutItem.findFirst({
+    where: { channelId: channel.id, stopTime: { lte: now } },
+    orderBy: { stopTime: 'desc' },
+    select: { kind: true },
+  })
+  const item = items[0]
+  if (!item) {
+    await streamBlack(res, profile, enc, 2, 'nothing on air (playout exhausted)', channelNumber)
+    return
+  }
+
+  {
+    {
+      {
         const active = activeLogo(channel, channel.timeBlocks, logoPath, item.startTime)
         const logo = await localLogo(active.raw)
         // Per-logo watermark settings, else the global default.
         const wm = active.id != null ? logoWm.get(active.id) ?? defaultWm : defaultWm
-        const wasFirst = first
-        const offset = first ? Math.max(0, (Date.now() - item.startTime.getTime()) / 1000) : 0
-        first = false
+        // Start where the clock says we are: the concat demuxer opens this once
+        // per item, so a mid-item open (a viewer tuning in) resumes correctly.
+        const offset = Math.max(0, (now.getTime() - item.startTime.getTime()) / 1000)
+        const midItem = offset > 1
 
         // The logo is hidden across filler unless asked otherwise, so ramp it
         // down into that boundary and back up out of it rather than popping.
         // Only meaningful on a program: filler itself either shows it or not.
         const thisIsFiller = item.kind === 'filler'
         const hiddenOnFiller = !wm.showOnFiller && wm.mode !== 'none'
-        const neighbourIsFiller = (j: number) => items[j]?.kind === 'filler'
         const edgeFade = hiddenOnFiller && !thisIsFiller ? Math.max(0, wm.fadeSeconds) : 0
-        const fadeOutSec = edgeFade > 0 && neighbourIsFiller(i + 1) ? edgeFade : 0
+        const fadeOutSec = edgeFade > 0 && items[1]?.kind === 'filler' ? edgeFade : 0
         // Don't fade in when tuning in mid-program — there was no filler on screen.
-        const fadeInSec = edgeFade > 0 && neighbourIsFiller(i - 1) && !wasFirst ? edgeFade : 0
+        const fadeInSec = edgeFade > 0 && prev?.kind === 'filler' && !midItem ? edgeFade : 0
         const mi = item.mediaItem
         // Absolute wall-clock start of the frames we're about to emit — anchors
         // the intermittent watermark so it fires on schedule for every viewer.
@@ -1172,7 +1272,7 @@ export async function streamChannel(channelNumber: number, res: Response, req?: 
         // Cap every segment to its scheduled slot so output timestamps stay
         // exactly continuous (a program overrunning its probed duration is what
         // could otherwise push the next segment's PTS backwards → a freeze).
-        const segDur = (item.stopTime.getTime() - item.startTime.getTime()) / 1000 - offset
+        const segDur = (item.stopTime.getTime() - now.getTime()) / 1000
         let seg: Segment | null = null
         let label: string
 
@@ -1196,15 +1296,21 @@ export async function streamChannel(channelNumber: number, res: Response, req?: 
           }
           const genMs = Date.now() - genStart
           if (genMs > 500) log('warn', 'system', `Channel ${channelNumber}: filler resolve blocked ${genMs}ms (should be pre-warmed)`)
-          if (clip && segDur > 0.3) seg = { filePath: clip, offsetSec: 0, loop: true, durationSec: segDur, hasAudio: true, logo, wmEpochSec, mediaWidth: W, mediaHeight: H, musicPath: music, tsOffsetSec: tsOffset, isFiller: true, fadeInSec: 0, fadeOutSec: 0 }
+          if (clip && segDur > 0.3) seg = { filePath: clip, offsetSec: 0, loop: true, durationSec: segDur, hasAudio: true, logo, wmEpochSec, mediaWidth: W, mediaHeight: H, musicPath: music, isFiller: true, fadeInSec: 0, fadeOutSec: 0 }
           label = `filler (${Math.round(segDur)}s)${music ? ' +music' : ''}${src}`
           if (!clip) log('error', 'stream', `Channel ${channelNumber}: no filler clip — a ${Math.round(segDur)}s gap will play black`)
+        } else if (fs.existsSync(mi.path) && offset >= (mi.durationSec ?? Infinity) - 0.2) {
+          // The file is shorter than the slot it was given. Seeking past its end
+          // would produce nothing, and concat would refetch this same item on a
+          // tight loop until the slot expired.
+          await streamBlack(res, profile, enc, Math.min(segDur, 10), `${mi.title} ran out ${offset.toFixed(1)}s in (file shorter than its slot)`, channelNumber)
+          return
         } else if (fs.existsSync(mi.path)) {
           // Only anamorphic sources need correcting, and only a constrained
           // watermark cares — skip the probe otherwise.
           const sar = wm.constrainToMedia && wm.mode !== 'none' && logo ? await probeSar(mi.path) : 1
           const dispW = Math.round((mi.width ?? W) * sar)
-          seg = { filePath: mi.path, offsetSec: offset, loop: false, durationSec: segDur, hasAudio: !!mi.audioCodec, logo, wmEpochSec, mediaWidth: dispW, mediaHeight: mi.height ?? H, tsOffsetSec: tsOffset, isFiller: false, fadeInSec, fadeOutSec }
+          seg = { filePath: mi.path, offsetSec: offset, loop: false, durationSec: segDur, hasAudio: !!mi.audioCodec, logo, wmEpochSec, mediaWidth: dispW, mediaHeight: mi.height ?? H, isFiller: false, fadeInSec, fadeOutSec }
           label = mi.showTitle
             ? `${mi.showTitle}${mi.season != null && mi.episode != null ? ` S${String(mi.season).padStart(2, '0')}E${String(mi.episode).padStart(2, '0')}` : ''}${mi.title ? ` — ${mi.title}` : ''}`
             : mi.title
@@ -1214,8 +1320,8 @@ export async function streamChannel(channelNumber: number, res: Response, req?: 
         }
 
         if (!seg) {
-          cursor = item.stopTime
-          continue
+          await streamBlack(res, profile, enc, Math.min(segDur, 10), `no playable segment for ${label}`, channelNumber)
+          return
         }
         const args = ffmpegArgs(seg, enc, wm, profile)
         let wmDesc: string
@@ -1235,21 +1341,18 @@ export async function streamChannel(channelNumber: number, res: Response, req?: 
           'info',
           'stream',
           `Ch ${channelNumber} ▶ ${label}${offset > 1 ? ` (resuming at ${Math.round(offset)}s)` : ''}`,
-          `source ${seg.mediaWidth}x${seg.mediaHeight}, logo ${active.id != null ? '#' + active.id : active.raw ? 'url' : 'none'}, ${wmDesc}, ts+${tsOffset.toFixed(1)}s`,
+          `source ${seg.mediaWidth}x${seg.mediaHeight}, logo ${active.id != null ? '#' + active.id : active.raw ? 'url' : 'none'}, ${wmDesc}`,
         )
         log('debug', 'ffmpeg', `Ch ${channelNumber} ffmpeg command`, 'ffmpeg ' + args.join(' '))
+        res.writeHead(200, { 'Content-Type': 'video/mp2t', 'Cache-Control': 'no-cache, no-store' })
         const segStart = Date.now()
         current = spawn('ffmpeg', args)
         const result = await pipeSegment(current, res)
         current = null
-        cursor = item.stopTime
-        // Advance the timestamp clock by the segment's intended output length
-        // (+40ms so rounding never overlaps backwards into the previous one).
-        tsOffset += Math.max(0, segDur) + 0.04
         // Log the outcome of every segment (bytes, wall time, first-byte delay)
         // — a slow first byte or zero bytes is the stall a viewer sees as a
-        // freeze/black screen. Skip the SIGKILL we send on disconnect.
-        if (!aborted) {
+        // freeze/black screen.
+        {
           const wallMs = Date.now() - segStart
           const wallS = (wallMs / 1000).toFixed(1)
           const mb = (result.bytes / 1e6).toFixed(1)
@@ -1272,13 +1375,8 @@ export async function streamChannel(channelNumber: number, res: Response, req?: 
         }
       }
     }
-  } catch (e) {
-    reason = 'internal error'
-    log('error', 'stream', `Channel ${channelNumber}: stream loop crashed`, String((e as Error)?.stack || e))
   }
-
-  const left = (viewers.get(channelNumber) ?? 1) - 1
-  viewers.set(channelNumber, Math.max(0, left))
-  log('info', 'stream', `⏹ Channel ${channelNumber} (${channel.name}) stream ended — ${reason}; ${Math.max(0, left)} viewer(s) still watching`)
+  // Viewer accounting lives on the outer /iptv stream; this endpoint is just one
+  // item of it. Ending here lets concat move straight on to the next item.
   if (!res.writableEnded) res.end()
 }
