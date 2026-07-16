@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, logsDownloadUrl, type LogCategory, type LogEntry, type LogLevel } from '../lib/api'
+import { copyText } from '../lib/clipboard'
 
 const LEVELS: { value: LogLevel | 'all'; label: string }[] = [
   { value: 'all', label: 'All levels' },
@@ -89,13 +90,11 @@ export default function Logs() {
         return s
       })
       .join('\n')
-    try {
-      await navigator.clipboard.writeText(text)
+    if (await copyText(text)) {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
-    } catch {
-      /* clipboard blocked — the download button still works */
     }
+    // if copying is blocked outright, the download button still works
   }
 
   async function clearAll() {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, logoImageUrl, type Channel } from '../lib/api'
+import { copyText } from '../lib/clipboard'
 import LogoPicker from '../components/LogoPicker'
 
 const input = 'rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm focus:border-indigo-500 outline-none'
@@ -9,11 +10,15 @@ const input = 'rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm
 function IptvBar() {
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   const [copied, setCopied] = useState<string | null>(null)
-  const copy = (url: string) => {
-    navigator.clipboard?.writeText(url).then(() => {
-      setCopied(url)
-      setTimeout(() => setCopied(null), 1500)
-    })
+  const [failed, setFailed] = useState<string | null>(null)
+  const copy = async (url: string) => {
+    const ok = await copyText(url)
+    setCopied(ok ? url : null)
+    setFailed(ok ? null : url)
+    setTimeout(() => {
+      setCopied(null)
+      setFailed(null)
+    }, 2500)
   }
   const rows = [
     { label: 'M3U', url: `${origin}/iptv/channels.m3u` },
@@ -22,16 +27,28 @@ function IptvBar() {
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-2.5 mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
       <span className="text-slate-400">📺 IPTV endpoints for Plex / Jellyfin / Threadfin:</span>
-      {rows.map((r) => (
-        <button
-          key={r.label}
-          onClick={() => copy(r.url)}
-          title={r.url}
-          className="rounded-lg border border-slate-700 hover:border-indigo-500 hover:text-indigo-300 px-2.5 py-1 text-xs"
-        >
-          {copied === r.url ? 'Copied!' : `Copy ${r.label}`}
-        </button>
-      ))}
+      {rows.map((r) =>
+        failed === r.url ? (
+          <input
+            key={r.label}
+            readOnly
+            autoFocus
+            value={r.url}
+            onFocus={(e) => e.currentTarget.select()}
+            title="Copying was blocked by the browser — copy this manually"
+            className="rounded-lg border border-amber-500/60 bg-slate-950 text-amber-200 px-2.5 py-1 text-xs font-mono w-72 max-w-full"
+          />
+        ) : (
+          <button
+            key={r.label}
+            onClick={() => copy(r.url)}
+            title={r.url}
+            className="rounded-lg border border-slate-700 hover:border-indigo-500 hover:text-indigo-300 px-2.5 py-1 text-xs"
+          >
+            {copied === r.url ? 'Copied!' : `Copy ${r.label}`}
+          </button>
+        ),
+      )}
     </div>
   )
 }
