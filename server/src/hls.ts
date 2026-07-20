@@ -3,7 +3,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { hlsDir } from './paths.js'
 import { log } from './logs.js'
-import { internalConcatUrl, ensureChannelReady, detectReadrateBurst } from './stream.js'
+import { internalConcatUrl, ensureChannelReady } from './streaming/channel.js'
+import { detectReadrateBurst } from './streaming/capabilities.js'
 
 // ── Shared HLS output ────────────────────────────────────────────────────────
 // One long-lived ffmpeg per channel muxes the channel's normalized item stream

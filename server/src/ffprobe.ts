@@ -1,5 +1,16 @@
 import { spawn } from 'node:child_process'
 
+/** Run ffprobe and resolve with its trimmed stdout ('' on any failure). */
+function ffprobeText(args: string[]): Promise<string> {
+  return new Promise((resolve) => {
+    let out = ''
+    const p = spawn('ffprobe', args)
+    p.stdout?.on('data', (d) => (out += d))
+    p.on('error', () => resolve(''))
+    p.on('close', () => resolve(out.trim()))
+  })
+}
+
 export type ProbeResult = {
   durationSec: number | null
   width: number | null
@@ -66,4 +77,60 @@ export function ffprobe(filePath: string): Promise<ProbeResult | null> {
       }
     })
   })
+}
+
+// ---- Single-question probes used by the streaming pipeline ------------------
+// Each is cached per file: the stream re-opens the same items over and over
+// (once per program airing), and these answers never change for a given file.
+
+// Sample aspect ratio. The scanner records coded dimensions, but anamorphic
+// sources (720x480 DVD rips at SAR 8:9) *display* at a different shape — and
+// the stream de-anamorphizes with scale=iw*sar:ih, so the picture on the canvas
+// is the SAR-corrected one. Using coded dims to place the watermark puts it on
+// the pillarbars.
+const sarCache = new Map<string, Promise<number>>()
+export function probeSar(filePath: string): Promise<number> {
+  const hit = sarCache.get(filePath)
+  if (hit) return hit
+  const probe = ffprobeText([
+    '-v', 'error',
+    '-select_streams', 'v:0',
+    '-show_entries', 'stream=sample_aspect_ratio',
+    '-of', 'default=nw=1:nk=1',
+    filePath,
+  ]).then((out) => {
+    // "8:9" -> 0.888…; "N/A", "0:1" and anything odd mean square pixels.
+    const m = out.match(/^(\d+):(\d+)$/)
+    const n = m ? Number(m[1]) : 0
+    const d = m ? Number(m[2]) : 0
+    return n > 0 && d > 0 ? n / d : 1
+  })
+  sarCache.set(filePath, probe)
+  return probe
+}
+
+/** Whether a source has at least one subtitle stream (for subtitle burn-in). */
+const subsCache = new Map<string, Promise<boolean>>()
+export function hasSubtitleStream(filePath: string): Promise<boolean> {
+  const hit = subsCache.get(filePath)
+  if (hit) return hit
+  const probe = ffprobeText([
+    '-v', 'error',
+    '-select_streams', 's',
+    '-show_entries', 'stream=index',
+    '-of', 'default=nw=1:nk=1',
+    filePath,
+  ]).then((out) => out.length > 0)
+  subsCache.set(filePath, probe)
+  return probe
+}
+
+/** A media file's duration in seconds (0 on failure). */
+export function probeDuration(filePath: string): Promise<number> {
+  return ffprobeText([
+    '-v', 'error',
+    '-show_entries', 'format=duration',
+    '-of', 'default=nw=1:nk=1',
+    filePath,
+  ]).then((out) => parseFloat(out) || 0)
 }

@@ -33,12 +33,18 @@ Install ffmpeg and make sure it's on the PATH.
 ### The stream stops when a second device tunes in
 That's your *player's* tuner limit, not MosaicTV: raise Jellyfin's
 *Simultaneous stream limit* (0 = unlimited), or give Threadfin/xTeVe more
-tuners for Plex. MosaicTV serves each client its own stream.
+tuners for Plex. MosaicTV happily serves them all — in MPEG-TS mode each
+client gets its own stream, and in shared-HLS mode they all read one.
 
 ### Playback stutters / CPU is pegged
+- If several people watch at once, switch **Settings → Streaming** to
+  **shared HLS** — one transcode per channel instead of one per viewer. This is
+  usually the single biggest win. See [Connecting Players](clients.md#streaming-mode-shared-hls-vs-mpeg-ts).
 - Lower the encoding profile (720p, faster preset), or
-- enable [NVIDIA hardware acceleration](hardware-acceleration.md).
+- enable [hardware acceleration](hardware-acceleration.md).
 - Remember: only channels **being watched** are encoded.
+- Look for `encoder slower than real-time` in **Logs** — that's the encoder
+  failing to keep up, and it's what viewers see as freezing.
 
 ### Schedule times are off by hours
 Set the `TZ` environment variable to your timezone and restart the container.
@@ -51,9 +57,17 @@ usually not what you want.)
 
 ### GPU isn't being used
 Check the [Hardware Acceleration](hardware-acceleration.md) setup for your
-platform, then look for a `Profile requests NVIDIA but nvenc is unavailable`
-warning in **Logs**. `docker exec mosaictv nvidia-smi` should list your GPU;
-if it doesn't, the container isn't seeing the card (runtime/toolkit issue).
+platform, then look in **Logs** for either:
+
+- `Video encoder selected: …` — what MosaicTV actually settled on, or
+- `Profile requests <vendor> but <encoder> does not work on this host` — the
+  encoder failed its startup test encode, so the stream fell back to the CPU.
+
+MosaicTV verifies an encoder by really using it, so this warning means the
+encoder is genuinely unusable here, not merely unlisted. On NVIDIA,
+`docker exec mosaictv nvidia-smi` should list your GPU; if it doesn't, the
+container isn't seeing the card (runtime/toolkit issue). On VAAPI, make sure
+`/dev/dri` is passed into the container.
 
 ---
 

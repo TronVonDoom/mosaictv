@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { getTmdbKey, setTmdbKey, validateKey } from '../tmdb.js'
-import { loadWatermark, sanitizeWatermark } from '../stream.js'
+import { loadWatermark, sanitizeWatermark } from '../streaming/overlays.js'
 import { prisma } from '../db.js'
 
 export const settingsRouter = Router()

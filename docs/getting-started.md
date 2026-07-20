@@ -17,7 +17,8 @@ last; the whole thing takes about ten minutes plus scan time.
   host mount is `/mnt/user/media` → `/media`, then the host folder
   `/mnt/user/media/tv` is `/media/tv` here. The folder picker only browses
   under `/media`.
-- **Type** — TV Shows or Movies. This controls how filenames are parsed.
+- **Type** — TV Shows, Movies, or Music Videos. This controls how filenames
+  are parsed.
 
 MosaicTV expects Plex-style naming, which you likely already have:
 
@@ -25,6 +26,18 @@ MosaicTV expects Plex-style naming, which you likely already have:
 TV/Show Name (2005)/Season 01/Show Name - S01E01 - Episode Title.mkv
 Movies/Movie Name (1999)/Movie Name (1999).mkv
 ```
+
+**Music Videos** parse artist and track out of the folder layout — any of
+these work:
+
+```
+Music/Artist/Album/Title.mkv
+Music/Artist/Title.mkv
+Music/Artist - Title.mkv
+```
+
+A music-video channel shows a lower-third naming the track as each one starts,
+and its guide entries read "Artist – Title" with the album as the sub-title.
 
 ## 2. Scan it
 

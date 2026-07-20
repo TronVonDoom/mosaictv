@@ -5,7 +5,7 @@ import { assetsDir } from './paths.js'
 import { log } from './logs.js'
 
 // Bundled starter tracks (web/public/defaults, shipped via the frontend build
-// the same way the fallback logo is — see localLogo() in stream.ts) so a
+// the same way the fallback logo is — see localLogo() in streaming/logo.ts) so a
 // fresh install has something to attach to filler right away. Each one seeds
 // independently and permanently (its flag persists even if the user later
 // deletes the asset), so adding a new default here also seeds it for

@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import type { Request } from 'express'
 import { prisma } from '../db.js'
-import { streamChannel } from '../stream.js'
+import { streamChannel } from '../streaming/channel.js'
 import { ensureHls, touchHls, hlsPlaylistFile, hlsSegmentFile } from '../hls.js'
 
 export const iptvRouter = Router()

@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { prisma } from '../db.js'
-import { resolveProfile, DEFAULT_PROFILE } from '../stream.js'
+import { resolveProfile, DEFAULT_PROFILE } from '../streaming/profile.js'
 
 export const profilesRouter = Router()
 

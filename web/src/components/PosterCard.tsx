@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { posterGradient } from '../lib/api'
+import { posterGradient } from '../lib/format'
 import Icon, { type IconName } from './Icon'
 
 /** "The Big Bang Theory" -> "BB", "Firefly" -> "FI". */

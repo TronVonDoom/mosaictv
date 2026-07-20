@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { prisma } from '../db.js'
 import { logosDir } from '../paths.js'
-import { parseWatermark, sanitizeWatermark } from '../stream.js'
+import { parseWatermark, sanitizeWatermark } from '../streaming/overlays.js'
 
 export const logosRouter = Router()
 

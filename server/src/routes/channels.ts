@@ -1,7 +1,8 @@
 import { Router } from 'express'
 import { prisma } from '../db.js'
 import { buildPlayout, prunePlayout, resetPlayout } from '../playout.js'
-import { sanitizeComingUp, viewerCount } from '../stream.js'
+import { sanitizeComingUp } from '../streaming/overlays.js'
+import { viewerCount } from '../streaming/channel.js'
 
 export const channelsRouter = Router()
 

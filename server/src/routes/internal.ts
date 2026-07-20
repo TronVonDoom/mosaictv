@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import type { Request, Response, NextFunction } from 'express'
-import { concatPlaylist, streamChannelItem } from '../stream.js'
+import { concatPlaylist, streamChannelItem } from '../streaming/channel.js'
 import { log } from '../logs.js'
 
 export const internalRouter = Router()

@@ -20,8 +20,9 @@ simple to run and pleasant to configure.
 
 ## Features
 
-- 📺 **Real live-TV channels** — continuous MPEG-TS streams; tune in
-  mid-program like broadcast TV. Channels resume where they left off, forever.
+- 📺 **Real live-TV channels** — tune in mid-program like broadcast TV.
+  Channels resume where they left off, forever. Serve them as shared HLS (one
+  transcode per channel, however many viewers) or per-client MPEG-TS.
 - 🗓 **Scheduling that thinks like a station** — 24/7 rotations (in order /
   round-robin across shows / shuffle) plus day/time blocks (*weekdays 6–9pm →
   Cartoons*) with soft or exact-time starts.
@@ -33,11 +34,12 @@ simple to run and pleasant to configure.
 - 📡 **Standard M3U + XMLTV output** — works with Jellyfin and Emby directly,
   Plex via Threadfin, VLC, TiviMate, and any IPTV player.
 - 🔍 **Library management built in** — Plex-style scanner (incremental,
-  ffprobe-backed), TMDB posters & metadata, local artwork support, a
-  poster-wall browser.
+  ffprobe-backed) for TV, movies, and music videos; TMDB posters & metadata,
+  local artwork support, a poster-wall browser.
 - ⚙️ **Per-channel encoding profiles** — resolution, fps, bitrate ladder,
-  deinterlacing, loudness normalization; **NVIDIA GPU** encode/decode when you
-  have one, clean CPU fallback when you don't.
+  deinterlacing, subtitle burn-in, loudness normalization; **GPU encoding** on
+  NVIDIA, Intel QuickSync, VAAPI, AMD AMF or Apple VideoToolbox, each verified
+  by a real test encode on your host, with a clean CPU fallback.
 - 📦 **One container** — web UI, database, and ffmpeg included. Runs on
   Unraid, any Docker host, or a NAS.
 

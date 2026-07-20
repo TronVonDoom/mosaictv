@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Icon from '../components/Icon'
 import TimelineView from '../components/TimelineView'
-import { api, formatDuration, logoImageUrl, type Channel, type Health, type Playout, type Stats } from '../lib/api'
+import { api, logoImageUrl, type Channel, type Health, type Playout, type Stats } from '../lib/api'
+import { formatDuration } from '../lib/format'
 
 type Step = { title: string; hint: string; to: string; done: boolean }
 

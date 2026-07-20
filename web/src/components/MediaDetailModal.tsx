@@ -4,11 +4,9 @@ import {
   api,
   artworkUrl,
   tmdbImage,
-  formatDuration,
-  formatSize,
-  posterGradient,
   type MediaItemDetail,
 } from '../lib/api'
+import { formatDuration, formatSize, posterGradient } from '../lib/format'
 
 function Row({ label, value }: { label: string; value: string }) {
   return (

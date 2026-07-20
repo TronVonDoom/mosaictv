@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { prisma } from '../db.js'
 import { assetsDir } from '../paths.js'
-import { warmFiller, resolveFillerClipById } from '../stream.js'
+import { warmFiller, resolveFillerClipById } from '../streaming/filler.js'
 
 export const fillersRouter = Router()
 

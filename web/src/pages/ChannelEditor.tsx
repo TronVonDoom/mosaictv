@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   api,
-  formatDays,
-  minutesToTime,
   parseComingUp,
   DEFAULT_COMINGUP,
   type ChannelDetail,
@@ -12,6 +10,7 @@ import {
   type EncodingProfile,
   type Playout,
 } from '../lib/api'
+import { formatDays, minutesToTime } from '../lib/format'
 import CollectionManager from '../components/CollectionManager'
 import LogoPicker from '../components/LogoPicker'
 import FillerAssignmentPicker from '../components/FillerAssignmentPicker'

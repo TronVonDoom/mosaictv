@@ -4,11 +4,10 @@ import {
   api,
   artworkUrl,
   tmdbImage,
-  formatDuration,
-  formatSize,
   type SeasonGroup,
   type ShowDetail,
 } from '../lib/api'
+import { formatDuration, formatSize } from '../lib/format'
 import MediaDetailModal from '../components/MediaDetailModal'
 import PosterCard from '../components/PosterCard'
 

@@ -7,9 +7,32 @@ MosaicTV speaks the two standards every IPTV-capable player understands:
 
 (Both URLs are shown, copyable, at the top of the **Channels** page.)
 
-Each channel streams as continuous MPEG-TS at
-`http://YOUR-SERVER:8688/iptv/channel/<number>.ts` — tune in mid-program and it
-picks up at the right spot, just like real TV.
+Tune in mid-program and a channel picks up at the right spot, just like real TV.
+
+---
+
+## Streaming mode (shared HLS vs MPEG-TS)
+
+**Settings → Streaming** decides which URL the M3U hands your players. Both
+endpoints are always live — this only changes what the playlist advertises.
+
+| Mode | URL | One transcode per… |
+| ---- | --- | ------------------ |
+| **MPEG-TS** (default) | `/iptv/channel/<number>.ts` | **viewer** |
+| **Shared HLS** | `/iptv/channel/<number>/index.m3u8` | **channel** |
+
+**Pick shared HLS if more than one person watches at a time.** A channel runs a
+single encoder that writes rolling segments, and every viewer reads the same
+ones — so three people on one channel cost one transcode instead of three. The
+encoder starts on the first request and shuts down 30 seconds after the last
+viewer leaves, so idle channels still cost nothing.
+
+MPEG-TS remains the default and is the better fit for a single viewer or a
+player that dislikes HLS: it's a continuous stream with no segment latency.
+
+> While a shared-HLS channel is warming up (a second or two), the playlist
+> returns **503** and players retry automatically. A channel with nothing
+> scheduled returns **409**.
 
 ---
 

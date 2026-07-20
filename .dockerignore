@@ -1,9 +1,22 @@
+# The image is built from server/ and web/ only (see Dockerfile). Everything
+# else is repo furniture that would just bloat the build context.
 node_modules
 **/node_modules
 **/dist
 server/public
 .git
+.github
 .gitignore
+.gitattributes
 *.log
 data
+
+# Docs, branding sources, and deploy helpers — none are copied into the image.
 README.md
+CHANGELOG.md
+LICENSE
+docs
+branding
+unraid
+scripts
+docker-compose.yml

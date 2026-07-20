@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.7.0 — Scale & polish (2026-07-20)
+
+- **Shared HLS output** — one transcode per channel instead of one per viewer,
+  the biggest gap vs ErsatzTV. A single long-lived encoder muxes the channel
+  into rolling segments served to everyone; it starts on first request and is
+  reaped 30s after the last viewer leaves.
+- **Selectable streaming mode** — **Settings → Streaming** picks what the M3U
+  advertises: shared HLS (recommended for multiple viewers) or per-client
+  MPEG-TS. Both endpoints stay live either way; the default stays MPEG-TS.
+- **Multi-vendor hardware acceleration** — beyond NVENC to Intel QuickSync,
+  VAAPI, AMD AMF, and Apple VideoToolbox. Support is *functionally probed* (a
+  real test encode on your host), so an encoder that's listed but unusable
+  falls back to CPU instead of breaking the stream. Hardware decode stays
+  NVIDIA-only (NVDEC).
+- **Subtitle burn-in** — a per-profile toggle renders the source's first
+  embedded subtitle track into the picture, sized for the output resolution.
+- **Music videos** — a `music` library type that parses Artist/Album/Title
+  layouts, plus an on-screen lower-third chyron naming the track as it starts
+  and "Artist – Title" programme entries in the guide.
+- The version reported on the Dashboard now comes from `package.json` rather
+  than a hardcoded constant that had drifted behind releases.
+
 ## 0.6.0 — MosaicTV (2026-07-19)
 
 - **Rebranded MeSatzTV → MosaicTV**: new name, logos, favicons, image

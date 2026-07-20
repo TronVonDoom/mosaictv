@@ -4,7 +4,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { prisma, initDb } from './db.js'
 import { log } from './logs.js'
-import { warmFiller } from './stream.js'
+import { warmFiller } from './streaming/filler.js'
 import { resetHls } from './hls.js'
 import { migrateCollectionOwnership, migrateFillersToLibrary } from './migrate.js'
 import { seedDefaultAudio } from './seedDefaults.js'
@@ -29,8 +29,22 @@ import { internalRouter } from './routes/internal.js'
 
 const app = express()
 const PORT = Number(process.env.PORT ?? 8688)
-const VERSION = process.env.APP_VERSION ?? '0.5.0'
 const startedAt = Date.now()
+
+// Single source of truth for the version: the server's own package.json, which
+// sits beside the compiled dist/ in the image and beside src/ in dev. Reading
+// it here means a release bump touches one file instead of drifting from a
+// hardcoded constant.
+function appVersion(): string {
+  if (process.env.APP_VERSION) return process.env.APP_VERSION
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'))
+    return String(pkg.version ?? 'unknown')
+  } catch {
+    return 'unknown'
+  }
+}
+const VERSION = appVersion()
 
 app.use(express.json({ limit: '10mb' })) // logo uploads arrive as base64 data URLs
 

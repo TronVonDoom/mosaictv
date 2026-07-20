@@ -2,7 +2,7 @@
 
 MosaicTV transcodes every channel to a consistent format so streams are
 seamless. That encoding can run on the **CPU** (works everywhere, default) or
-an **NVIDIA GPU** (much lower CPU load).
+on a **GPU** from any of the major vendors (much lower CPU load).
 
 | Hardware accel | Encoder | Platform |
 | -------------- | ------- | -------- |
@@ -93,9 +93,15 @@ Uncomment the NVIDIA lines in `docker-compose.yml`:
 | **Preset** | Encoder speed/quality trade-off (`veryfast`… for x264, `p1`–`p7` for nvenc) |
 | **Video bitrate / buffer** | Explicit rate control override |
 | **Scaling mode / deinterlace** | How source video is fitted; deinterlacing for older content |
+| **Burn in subtitles** | Render the source's first embedded subtitle track into the picture |
 | **Audio bitrate / channels** | AAC output settings |
 | **Normalize loudness** | Even out volume across different sources |
 | **Threads** | CPU thread cap for the encoder |
+
+> **Burn-in** is the only way to get subtitles onto a live channel — there's no
+> track for a player to switch on, because every viewer receives the same
+> encoded picture. It applies to programs (never filler) and only when the file
+> actually has a subtitle stream, so it costs nothing on sources without one.
 
 A practical split: a "HD" profile (1080p, `auto`) for your main channels and a
 "Light" profile (720p, `cpu`, capped threads) for background/filler-heavy ones.
