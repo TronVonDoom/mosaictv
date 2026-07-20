@@ -4,32 +4,32 @@ services:
     image: mosaictv:latest
     container_name: mosaictv
     restart: unless-stopped
-    # NVIDIA GPU passthrough for hardware transcoding (needs the Unraid
-    # Nvidia-Driver plugin / nvidia-container-runtime). Remove this line if the
-    # host has no NVIDIA GPU, or `docker compose up` will fail.
-    runtime: nvidia
+    # ── NVIDIA GPU (optional) ─────────────────────────────────────────────
+    # For hardware transcoding on an NVIDIA card, uncomment the `runtime`
+    # line and the two NVIDIA_* environment lines below. Requires the NVIDIA
+    # Container Toolkit (on Unraid: the Nvidia-Driver plugin). Without a GPU
+    # leave them commented out — MosaicTV encodes on the CPU (libx264).
+    # See docs/hardware-acceleration.md.
+    # runtime: nvidia
+    #
     # Unraid Docker integration: WebUI button, icon, and console.
     # [IP]/[PORT:8688] are Unraid placeholders it substitutes automatically.
-    # The icon is served by the container itself, so it works whether the repo
-    # is public or private. If your Unraid IP isn't 192.168.1.100, update it
-    # (or, if you make the repo public, point it at the GitHub raw URL:
-    #  https://raw.githubusercontent.com/TronVonDoom/mosaictv/main/web/public/mosaictv-icon.png)
     labels:
       net.unraid.docker.managed: "composeman"
       net.unraid.docker.webui: "http://[IP]:[PORT:8688]/"
-      net.unraid.docker.icon: "http://192.168.1.100:8688/mosaictv-icon.png"
+      net.unraid.docker.icon: "https://raw.githubusercontent.com/TronVonDoom/mosaictv/main/web/public/mosaictv-icon.png"
       net.unraid.docker.shell: "bash"
     ports:
       - "8688:8688"
     environment:
-      - TZ=America/Chicago
+      - TZ=America/Chicago            # your timezone — schedules & guide times
       - PORT=8688
       - DATABASE_URL=file:/app/data/mosaictv.db
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=all
+      # - NVIDIA_VISIBLE_DEVICES=all       # uncomment for NVIDIA GPU
+      # - NVIDIA_DRIVER_CAPABILITIES=all   # uncomment for NVIDIA GPU
     volumes:
       # Persistent app data (SQLite database + config) — keep this.
       - ./data:/app/data
-      # Your media library. EDIT the left side to your Unraid media share.
+      # Your media library. EDIT the left side to your media folder/share.
       # Your libraries inside the app then point at subfolders, e.g. /media/TV.
       - /mnt/user/media:/media:ro
