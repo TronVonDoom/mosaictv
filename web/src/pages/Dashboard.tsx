@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Icon from '../components/Icon'
-import { api, formatDuration, type Channel, type Health, type Stats } from '../lib/api'
+import TimelineView from '../components/TimelineView'
+import { api, formatDuration, logoImageUrl, type Channel, type Health, type Playout, type Stats } from '../lib/api'
 
 type Step = { title: string; hint: string; to: string; done: boolean }
 
@@ -94,6 +95,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [channels, setChannels] = useState<Channel[]>([])
   const [reachable, setReachable] = useState<boolean | null>(null)
+  const [guides, setGuides] = useState<Record<number, Playout>>({})
 
   useEffect(() => {
     const load = () => {
@@ -112,6 +114,24 @@ export default function Dashboard() {
   }, [])
 
   const onAir = channels.filter((c) => c.number != null)
+  // Fetch each on-air channel's guide once the set of on-air channels changes
+  // (not on the 5s stats poll — guides are heavier and change slowly).
+  const onAirKey = onAir.map((c) => c.id).join(',')
+  useEffect(() => {
+    let cancelled = false
+    Promise.all(
+      onAir.map((c) => api.playout(c.id, 24).then((p) => [c.id, p] as const).catch(() => null)),
+    ).then((entries) => {
+      if (cancelled) return
+      const map: Record<number, Playout> = {}
+      for (const e of entries) if (e) map[e[0]] = e[1]
+      setGuides(map)
+    })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onAirKey])
 
   return (
     <div>
@@ -165,23 +185,46 @@ export default function Dashboard() {
 
       {onAir.length > 0 && (
         <div className="mt-6">
-          <h2 className="font-semibold mb-3">On air</h2>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 divide-y divide-slate-800/60">
-            {onAir.map((c) => (
-              <Link key={c.id} to={`/channels/${c.id}#guide`} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-slate-800/40 transition-colors">
-                <span className="font-mono text-indigo-300 w-10 shrink-0">{c.number}</span>
-                <span className="font-medium w-44 shrink-0 truncate">{c.name}</span>
-                <span className={'flex-1 min-w-0 truncate ' + (c.nowPlaying ? 'text-slate-300' : 'text-slate-600 italic')}>
-                  {c.nowPlaying ? `▶ ${c.nowPlaying}` : c.playoutCount > 0 ? 'nothing airing right now' : 'guide not built'}
-                </span>
-                {c.viewers > 0 && (
-                  <span className="shrink-0 inline-flex items-center gap-1.5 text-xs text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-full px-2.5 py-0.5">
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
-                    {c.viewers}
-                  </span>
-                )}
-              </Link>
-            ))}
+          <h2 className="font-semibold mb-3">
+            On air <span className="text-slate-500 font-normal text-sm">— live guide</span>
+          </h2>
+          <div className="space-y-3">
+            {onAir.map((c) => {
+              const g = guides[c.id]
+              return (
+                <div key={c.id} className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-lg bg-slate-950 border border-slate-800 shrink-0 flex items-center justify-center overflow-hidden">
+                      <img
+                        src={c.logoId ? logoImageUrl(c.logoId) : '/mosaictv-icon.png'}
+                        alt=""
+                        className="max-w-full max-h-full object-contain"
+                      />
+                    </div>
+                    <span className="font-mono text-indigo-300 shrink-0">{c.number}</span>
+                    <Link to={`/channels/${c.id}#guide`} className="font-medium hover:text-indigo-300 transition-colors truncate">
+                      {c.name}
+                    </Link>
+                    <span className={'flex-1 min-w-0 truncate text-sm ' + (c.nowPlaying ? 'text-slate-400' : 'text-slate-600 italic')}>
+                      {c.nowPlaying ? `▶ ${c.nowPlaying}` : c.playoutCount > 0 ? 'nothing airing right now' : 'guide not built'}
+                    </span>
+                    {c.viewers > 0 && (
+                      <span className="shrink-0 inline-flex items-center gap-1.5 text-xs text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-full px-2.5 py-0.5">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
+                        {c.viewers}
+                      </span>
+                    )}
+                  </div>
+                  {g && g.items.length > 0 ? (
+                    <TimelineView playout={g} />
+                  ) : (
+                    <div className="text-xs text-slate-600 px-1 py-3">
+                      {c.playoutCount > 0 ? 'Loading guide…' : 'Guide not built yet — open the channel and Build.'}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
