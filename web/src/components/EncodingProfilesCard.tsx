@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type EncodingProfile, type ProfileFields, type ProfileInput } from '../lib/api'
+import { toast } from '../lib/toast'
 
 const RES = [
   { label: '480p', width: 854, height: 480 },
@@ -94,6 +95,7 @@ export default function EncodingProfilesCard() {
       setEditingId(null)
       if (defaults) setForm(blank(defaults))
       refresh()
+      toast.success('Profile saved')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed')
     }

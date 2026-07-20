@@ -1070,9 +1070,15 @@ export function generateFrostedFiller(out: string, channelLogo: string, mzLogo: 
   return runFfmpeg(frostedArgs(out, channelLogo, mzLogo, d, audioFile), onProgress, d)
 }
 
-function mosaictvLogoFile(): string {
+// Bundled MosaicTV brand mark used in the frosted-glass filler. Only present
+// when process.cwd()/public exists (production, or local dev after copying
+// the built frontend there) — undefined in plain local dev, in which case
+// callers skip frosted generation instead of handing ffmpeg a missing file.
+function mosaictvLogoFile(): string | undefined {
   const wide = path.join(process.cwd(), 'public', 'logo-wide.png')
-  return fs.existsSync(wide) ? wide : path.join(process.cwd(), 'public', 'mosaictv-icon.png')
+  if (fs.existsSync(wide)) return wide
+  const icon = path.join(process.cwd(), 'public', 'mosaictv-icon.png')
+  return fs.existsSync(icon) ? icon : undefined
 }
 
 // Bump these when the generators change so persisted clips regenerate.
@@ -1139,11 +1145,16 @@ async function ensureAnimatedFiller(dur = 30, audioFile?: string, onProgress?: P
 // Frosted-glass filler, cached by logo + duration + baked audio.
 async function ensureFrostedFiller(logoFile: string, dur = 30, audioFile?: string, onProgress?: ProgressCb): Promise<string | undefined> {
   const d = clampDur(dur)
+  const mzLogo = mosaictvLogoFile()
+  if (!mzLogo) {
+    log('warn', 'system', 'Frosted filler unavailable (bundled MosaicTV logo not found — expected in production only) — falling back to animated')
+    return undefined
+  }
   const key = createHash('md5').update(`${fileKey(logoFile)}:${d}:${fileKey(audioFile)}:v${FROSTED_VERSION}`).digest('hex')
   const out = path.join(dataDir(), `filler-frosted-${key}.mp4`)
   if (fs.existsSync(out)) return out
   log('info', 'system', `Generating frosted-glass filler for logo ${path.basename(logoFile)} (${d}s${audioFile ? ' + audio' : ''})…`)
-  const clip = await generateToCache(out, (tmp) => generateFrostedFiller(tmp, logoFile, mosaictvLogoFile(), d, audioFile, onProgress))
+  const clip = await generateToCache(out, (tmp) => generateFrostedFiller(tmp, logoFile, mzLogo, d, audioFile, onProgress))
   if (!clip) log('warn', 'system', 'Frosted filler generation failed — falling back to animated')
   return clip
 }
@@ -1257,19 +1268,24 @@ export async function warmFiller(): Promise<void> {
   if (animated) log('info', 'system', `Animated filler ready: ${animated}`)
   else log('warn', 'system', 'No filler clip available — gaps will play black')
 
+  const assign = { include: { filler: true }, orderBy: { order: 'asc' as const } }
   const channels = await prisma.channel.findMany({
-    include: { fillers: true, timeBlocks: { include: { fillers: true, collection: true } } },
+    include: {
+      fillerAssignments: assign,
+      timeBlocks: { include: { fillerAssignments: assign, collection: true } },
+    },
   })
   for (const ch of channels) {
     const chLogo = await logoFileById(ch.logoId, ch.logoUrl)
-    // No configured filler ⇒ the channel falls back to the frosted-glass ident,
+    const chFillers = ch.fillerAssignments.map((a) => a.filler)
+    // No assigned filler ⇒ the channel falls back to the frosted-glass ident,
     // so pre-build that from its logo too (else the first gap stalls on it).
-    if (ch.fillers.length === 0 && chLogo) await ensureFrostedFiller(chLogo).catch(() => {})
-    for (const f of ch.fillers) await resolveFillerClip(f, chLogo).catch(() => {})
+    if (chFillers.length === 0 && chLogo) await ensureFrostedFiller(chLogo).catch(() => {})
+    for (const f of chFillers) await resolveFillerClip(f, chLogo).catch(() => {})
     for (const b of ch.timeBlocks) {
-      if (b.fillers.length === 0) continue
+      if (b.fillerAssignments.length === 0) continue
       const bLogo = await logoFileById(b.logoId ?? b.collection.logoId ?? ch.logoId, b.logoUrl ?? ch.logoUrl)
-      for (const f of b.fillers) await resolveFillerClip(f, bLogo).catch(() => {})
+      for (const a of b.fillerAssignments) await resolveFillerClip(a.filler, bLogo).catch(() => {})
     }
   }
 }
@@ -1522,8 +1538,8 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
   const channel = await prisma.channel.findFirst({
     where: { number: channelNumber },
     include: {
-      timeBlocks: { include: { collection: true, fillers: { orderBy: { order: 'asc' } } } },
-      fillers: { orderBy: { order: 'asc' } },
+      timeBlocks: { include: { collection: true, fillerAssignments: { include: { filler: true }, orderBy: { order: 'asc' } } } },
+      fillerAssignments: { include: { filler: true }, orderBy: { order: 'asc' } },
       rotationItems: true,
       profile: true,
     },
@@ -1625,12 +1641,13 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
 
         if (item.kind === 'filler' || !mi) {
           const genStart = Date.now()
-          // Filler pool: the active block's own fillers → the channel's →
-          // the built-in animated fallback.
+          // Filler pool: the active block's assigned fillers → the channel's →
+          // the built-in frosted/animated fallback.
           const poolBlock = activeBlockAt(channel.timeBlocks, item.startTime)
-          const blockPool = poolBlock?.fillers ?? []
-          const pool = blockPool.length > 0 ? blockPool : channel.fillers
-          const src = blockPool.length > 0 ? ' [block]' : channel.fillers.length > 0 ? ' [channel]' : ''
+          const blockPool = poolBlock?.fillerAssignments.map((a) => a.filler) ?? []
+          const channelPool = channel.fillerAssignments.map((a) => a.filler)
+          const pool = blockPool.length > 0 ? blockPool : channelPool
+          const src = blockPool.length > 0 ? ' [block]' : channelPool.length > 0 ? ' [channel]' : ''
           let clip: string | undefined
           let music: string | undefined
           if (pool.length > 0) {

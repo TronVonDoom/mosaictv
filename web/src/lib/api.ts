@@ -485,17 +485,24 @@ export const api = {
     }),
   deleteCollectionItem: (collectionId: number, itemId: number) =>
     request<void>(`/api/collections/${collectionId}/items/${itemId}`, { method: 'DELETE' }),
-  fillers: (owner: FillerOwner) => {
-    const qs = owner.channelId != null ? `channelId=${owner.channelId}` : `timeBlockId=${owner.timeBlockId}`
-    return request<Filler[]>(`/api/fillers?${qs}`)
-  },
-  addFiller: (owner: FillerOwner, data: FillerInput) =>
-    request<Filler>('/api/fillers', { method: 'POST', body: JSON.stringify({ ...owner, ...data }) }),
+  // The global filler library (created & generated under Media).
+  fillers: () => request<Filler[]>('/api/fillers'),
+  addFiller: (data: FillerInput) =>
+    request<Filler>('/api/fillers', { method: 'POST', body: JSON.stringify(data) }),
   updateFiller: (id: number, data: FillerInput) =>
     request<Filler>(`/api/fillers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteFiller: (id: number) => request<void>(`/api/fillers/${id}`, { method: 'DELETE' }),
   generateFillerClip: (id: number) => request<{ started: boolean }>(`/api/fillers/${id}/generate`, { method: 'POST' }),
   fillerGenStatus: (id: number) => request<FillerGenStatus>(`/api/fillers/${id}/generate/status`),
+  // Assigning library fillers to a channel (default gap filler) or a block.
+  fillerAssignments: (owner: FillerOwner) => {
+    const qs = owner.channelId != null ? `channelId=${owner.channelId}` : `timeBlockId=${owner.timeBlockId}`
+    return request<number[]>(`/api/fillers/assignments?${qs}`)
+  },
+  assignFiller: (owner: FillerOwner, fillerId: number) =>
+    request<{ ok: boolean }>('/api/fillers/assignments', { method: 'POST', body: JSON.stringify({ ...owner, fillerId }) }),
+  unassignFiller: (owner: FillerOwner, fillerId: number) =>
+    request<void>('/api/fillers/assignments', { method: 'DELETE', body: JSON.stringify({ ...owner, fillerId }) }),
 
   // --- channels ---
   channels: () => request<Channel[]>('/api/channels'),

@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import Logos from './Logos'
 import AssetManager from '../components/AssetManager'
+import FillerManager from '../components/FillerManager'
 import Icon, { type IconName } from '../components/Icon'
 
-type Tab = 'images' | 'audio' | 'filler'
+type Tab = 'images' | 'audio' | 'clips' | 'fillers'
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'images', label: 'Logos / Images', icon: 'image' },
   { id: 'audio', label: 'Audio', icon: 'audio' },
-  { id: 'filler', label: 'Filler clips', icon: 'clip' },
+  { id: 'clips', label: 'Filler clips', icon: 'clip' },
+  { id: 'fillers', label: 'Fillers', icon: 'channels' },
 ]
 
 export default function Media() {
@@ -48,13 +50,22 @@ export default function Media() {
           hint="Pick a track in a channel or block filler (channel editor → Fillers) to play it during intermissions."
         />
       )}
-      {tab === 'filler' && (
+      {tab === 'clips' && (
         <AssetManager
           kind="filler"
           accept="video/*"
-          emptyText="No filler clips uploaded yet. Upload a video to play during gaps between programs."
-          hint="Use a clip via a channel or block filler with the “Custom clip” visual. Generated fillers also land here."
+          emptyText="No filler clips uploaded yet. Upload a video to use as a “Custom clip” filler."
+          hint="Referenced by a filler with the “Custom clip” visual (Fillers tab). Generated fillers also land here."
         />
+      )}
+      {tab === 'fillers' && (
+        <div className="max-w-2xl">
+          <p className="text-slate-400 text-sm mb-3">
+            Build station-ID fillers here, then assign them to channels or blocks from a channel's
+            <span className="text-slate-300"> Fillers</span> tab. Deleting one removes it everywhere it's used.
+          </p>
+          <FillerManager />
+        </div>
       )}
     </div>
   )

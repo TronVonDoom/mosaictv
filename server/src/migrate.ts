@@ -63,3 +63,37 @@ export async function migrateCollectionOwnership(): Promise<void> {
   await prisma.setting.create({ data: { key: FLAG, value: new Date().toISOString() } })
   log('info', 'system', `Collection ownership migration complete — ${collections.length} collection(s), ${duplicated} duplicated for shared use`)
 }
+
+const FILLER_FLAG = 'migrated_fillers_to_library'
+
+/**
+ * One-time migration to the "global filler library" model. Fillers used to be
+ * owned by a single channel or time block (Filler.channelId/timeBlockId); they
+ * are now a shared library assigned via FillerAssignment. Each still-owned
+ * filler gets an assignment mirroring its old owner, then its legacy owner
+ * columns are cleared. Idempotent — guarded by a Setting flag.
+ */
+export async function migrateFillersToLibrary(): Promise<void> {
+  if (await prisma.setting.findUnique({ where: { key: FILLER_FLAG } })) return
+
+  const owned = await prisma.filler.findMany({
+    where: { OR: [{ channelId: { not: null } }, { timeBlockId: { not: null } }] },
+  })
+  for (const f of owned) {
+    // Upsert on the compound unique guards against a partial prior run
+    // (SQLite has no createMany skipDuplicates).
+    const where =
+      f.channelId != null
+        ? { fillerId_channelId: { fillerId: f.id, channelId: f.channelId } }
+        : { fillerId_timeBlockId: { fillerId: f.id, timeBlockId: f.timeBlockId! } }
+    await prisma.fillerAssignment.upsert({
+      where,
+      create: { fillerId: f.id, channelId: f.channelId, timeBlockId: f.timeBlockId, order: f.order },
+      update: {},
+    })
+    await prisma.filler.update({ where: { id: f.id }, data: { channelId: null, timeBlockId: null } })
+  }
+
+  await prisma.setting.create({ data: { key: FILLER_FLAG, value: new Date().toISOString() } })
+  if (owned.length > 0) log('info', 'system', `Filler library migration complete — ${owned.length} filler(s) assigned`)
+}

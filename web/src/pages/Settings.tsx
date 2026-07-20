@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, backupUrl, type WatermarkConfig } from '../lib/api'
 import WatermarkFields from '../components/WatermarkFields'
 import EncodingProfilesCard from '../components/EncodingProfilesCard'
+import { toast } from '../lib/toast'
 
 type SettingsTab = 'metadata' | 'watermark' | 'encoding' | 'maintenance'
 const TABS: { id: SettingsTab; label: string }[] = [
@@ -41,6 +42,7 @@ export default function Settings() {
       const r = await api.saveWatermark(wm)
       setWm(r.watermark)
       setWmMsg('Watermark saved. ✅')
+      toast.success('Watermark saved')
     } catch (err) {
       setWmMsg(err instanceof Error ? err.message : 'Failed to save watermark')
     }
@@ -69,6 +71,7 @@ export default function Settings() {
       setConfigured(true)
       setKey('')
       setMsg({ type: 'ok', text: 'TMDB key saved and verified. ✅' })
+      toast.success('TMDB key saved')
     } catch (err) {
       setMsg({ type: 'err', text: err instanceof Error ? err.message : 'Failed to save key' })
     } finally {

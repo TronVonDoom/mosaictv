@@ -7,7 +7,7 @@ import { warmFiller, resolveFillerClipById } from '../stream.js'
 
 export const fillersRouter = Router()
 
-// Clamp an incoming Filler payload (owner is set separately on create).
+// Clamp an incoming Filler definition payload.
 function fillerData(body: Record<string, unknown>) {
   const style = ['animated', 'frosted', 'custom', 'logowall', 'pulse', 'retro', 'vintage'].includes(String(body?.style)) ? String(body.style) : 'frosted'
   return {
@@ -20,29 +20,74 @@ function fillerData(body: Record<string, unknown>) {
   }
 }
 
-// GET /api/fillers?channelId=  or  ?timeBlockId=
-fillersRouter.get('/', async (req, res) => {
-  const channelId = req.query.channelId != null ? Number(req.query.channelId) : undefined
-  const timeBlockId = req.query.timeBlockId != null ? Number(req.query.timeBlockId) : undefined
-  const where = channelId != null ? { channelId } : timeBlockId != null ? { timeBlockId } : { id: -1 }
-  res.json(await prisma.filler.findMany({ where, orderBy: { order: 'asc' } }))
+// ── Assignments ───────────────────────────────────────────────────────────
+// A filler is a global library item; these routes assign it to a channel (its
+// default gap filler) or a time block. Declared before the "/:id" routes so
+// "/assignments" isn't captured as an id.
+
+function ownerFilter(req: { query: Record<string, unknown>; body?: Record<string, unknown> }) {
+  const src = { ...req.query, ...(req.body ?? {}) }
+  const channelId = src.channelId != null && src.channelId !== '' ? Number(src.channelId) : null
+  const timeBlockId = src.timeBlockId != null && src.timeBlockId !== '' ? Number(src.timeBlockId) : null
+  return { channelId, timeBlockId }
+}
+
+// GET /api/fillers/assignments?channelId= | ?timeBlockId= -> assigned filler ids
+fillersRouter.get('/assignments', async (req, res) => {
+  const { channelId, timeBlockId } = ownerFilter(req)
+  if (channelId == null && timeBlockId == null) return res.json([])
+  const rows = await prisma.fillerAssignment.findMany({
+    where: channelId != null ? { channelId } : { timeBlockId },
+    orderBy: { order: 'asc' },
+  })
+  res.json(rows.map((r) => r.fillerId))
 })
 
-// POST /api/fillers  { channelId? | timeBlockId?, ...filler fields }
-fillersRouter.post('/', async (req, res) => {
-  const channelId = req.body?.channelId != null ? Number(req.body.channelId) : null
-  const timeBlockId = req.body?.timeBlockId != null ? Number(req.body.timeBlockId) : null
-  if (channelId == null && timeBlockId == null) {
-    return res.status(400).json({ error: 'channelId or timeBlockId is required' })
+// POST /api/fillers/assignments { fillerId, channelId? | timeBlockId? }
+fillersRouter.post('/assignments', async (req, res) => {
+  const fillerId = Number(req.body?.fillerId)
+  const { channelId, timeBlockId } = ownerFilter(req)
+  if (!fillerId || (channelId == null && timeBlockId == null)) {
+    return res.status(400).json({ error: 'fillerId and channelId or timeBlockId are required' })
   }
-  const max = await prisma.filler.aggregate({
+  const max = await prisma.fillerAssignment.aggregate({
     where: channelId != null ? { channelId } : { timeBlockId },
     _max: { order: true },
   })
-  const f = await prisma.filler.create({
-    data: { channelId, timeBlockId, ...fillerData(req.body ?? {}), order: (max._max.order ?? -1) + 1 },
+  const where =
+    channelId != null
+      ? { fillerId_channelId: { fillerId, channelId } }
+      : { fillerId_timeBlockId: { fillerId, timeBlockId: timeBlockId! } }
+  await prisma.fillerAssignment.upsert({
+    where,
+    create: { fillerId, channelId, timeBlockId, order: (max._max.order ?? -1) + 1 },
+    update: {},
   })
-  warmFiller().catch(() => {}) // pre-generate in the background
+  warmFiller().catch(() => {})
+  res.status(201).json({ ok: true })
+})
+
+// DELETE /api/fillers/assignments { fillerId, channelId? | timeBlockId? }
+fillersRouter.delete('/assignments', async (req, res) => {
+  const fillerId = Number(req.body?.fillerId)
+  const { channelId, timeBlockId } = ownerFilter(req)
+  if (!fillerId) return res.status(400).json({ error: 'fillerId is required' })
+  await prisma.fillerAssignment.deleteMany({
+    where: { fillerId, ...(channelId != null ? { channelId } : { timeBlockId }) },
+  })
+  res.status(204).end()
+})
+
+// ── Library CRUD ──────────────────────────────────────────────────────────
+
+// GET /api/fillers -> the whole global filler library.
+fillersRouter.get('/', async (_req, res) => {
+  res.json(await prisma.filler.findMany({ orderBy: { createdAt: 'asc' } }))
+})
+
+// POST /api/fillers -> create a global filler definition.
+fillersRouter.post('/', async (req, res) => {
+  const f = await prisma.filler.create({ data: fillerData(req.body ?? {}) })
   res.status(201).json(f)
 })
 
@@ -53,8 +98,21 @@ fillersRouter.patch('/:id', async (req, res) => {
   res.json(f)
 })
 
+// Delete a filler from the library entirely. Cascade removes its assignments
+// (channels/blocks fall back to the default frosted-glass ident in those gaps)
+// and we also delete its derived generated clip asset. A user-uploaded custom
+// source asset is left alone — it lives independently in Media.
 fillersRouter.delete('/:id', async (req, res) => {
-  await prisma.filler.delete({ where: { id: Number(req.params.id) } }).catch(() => {})
+  const id = Number(req.params.id)
+  const filler = await prisma.filler.findUnique({ where: { id } })
+  if (filler?.generatedAssetId != null) {
+    const a = await prisma.asset.findUnique({ where: { id: filler.generatedAssetId } })
+    if (a) {
+      fs.rm(path.join(assetsDir(), a.filename), () => {})
+      await prisma.asset.delete({ where: { id: a.id } }).catch(() => {})
+    }
+  }
+  await prisma.filler.delete({ where: { id } }).catch(() => {})
   res.status(204).end()
 })
 

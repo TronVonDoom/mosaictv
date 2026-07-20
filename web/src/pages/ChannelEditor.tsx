@@ -14,10 +14,11 @@ import {
 } from '../lib/api'
 import CollectionManager from '../components/CollectionManager'
 import LogoPicker from '../components/LogoPicker'
-import FillerManager from '../components/FillerManager'
+import FillerAssignmentPicker from '../components/FillerAssignmentPicker'
 import ComingUpFields from '../components/ComingUpFields'
 import TimelineView from '../components/TimelineView'
 import WeeklyBlockGrid from '../components/WeeklyBlockGrid'
+import { toast } from '../lib/toast'
 
 // Channel-level coming-up state is always a full config; "off" is enabled=false,
 // which we persist as null (see saveSettings).
@@ -131,14 +132,16 @@ export default function ChannelEditor() {
         profileId: chForm.profileId,
         comingUp: cu.enabled ? cu : null,
       }),
+      'Channel saved',
     )
   }
 
-  async function guard<T>(fn: () => Promise<T>) {
+  async function guard<T>(fn: () => Promise<T>, successMsg?: string) {
     setError(null)
     try {
       await fn()
       load()
+      if (successMsg) toast.success(successMsg)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     }
@@ -203,8 +206,9 @@ export default function ChannelEditor() {
       startMode: blk.startMode,
       comingUp: blk.comingUp,
     }
-    await guard(() =>
-      editingBlock ? api.updateBlock(channelId, editingBlock, payload) : api.addBlock(channelId, payload),
+    await guard(
+      () => (editingBlock ? api.updateBlock(channelId, editingBlock, payload) : api.addBlock(channelId, payload)),
+      editingBlock ? 'Block updated' : 'Block added',
     )
     resetBlockForm()
   }
@@ -486,10 +490,10 @@ export default function ChannelEditor() {
           <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
             <h2 className="font-semibold mb-1">Channel default</h2>
             <p className="text-slate-500 text-xs mb-3">
-              Plays during gaps unless the block has its own filler below. Frosted uses this channel's logo + the
-              MosaicTV logo; pick an audio track to bake it in and match the clip length.
+              Assign fillers from the library to play during gaps, unless a block below has its own. Build and
+              generate fillers under <Link to="/media" className="text-indigo-300">Media → Fillers</Link>.
             </p>
-            <FillerManager owner={{ channelId }} hint="channel default" />
+            <FillerAssignmentPicker owner={{ channelId }} hint="channel default" />
           </section>
 
           {ch.timeBlocks.map((b) => (
@@ -504,7 +508,7 @@ export default function ChannelEditor() {
                 Overrides the channel default while this block is on. Frosted uses the block's logo (else the
                 channel's).
               </p>
-              <FillerManager owner={{ timeBlockId: b.id }} hint={`during ${b.collection.name}`} />
+              <FillerAssignmentPicker owner={{ timeBlockId: b.id }} hint={`during ${b.collection.name}`} />
             </section>
           ))}
 

@@ -3,6 +3,7 @@ import Icon from './Icon'
 import { api, type Collection, type Library, type MediaSearchResult } from '../lib/api'
 import MediaSearchInput from './MediaSearchInput'
 import LogoPicker from './LogoPicker'
+import { toast } from '../lib/toast'
 
 const input = 'rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm focus:border-indigo-500 outline-none'
 
@@ -79,6 +80,7 @@ export default function CollectionManager({
         filterGenre: editForm.filterGenre || null,
       })
       setEditId(null)
+      toast.success('Collection saved')
     })
   }
 

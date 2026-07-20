@@ -157,12 +157,35 @@ model Filler {
   generatedAssetId Int? // the last generated output clip, saved as a Media asset (for preview/reuse)
   durationMode String      @default("fixed") // "fixed" | "audio" (match the audio length)
   durationSec  Int         @default(30)
+  // Legacy per-owner columns: fillers are now a GLOBAL library assigned via
+  // FillerAssignment. Kept (nullable) so `prisma db push` doesn't drop data;
+  // the boot migration copies any set owner into an assignment and nulls these.
   order        Int         @default(0)
   createdAt    DateTime    @default(now())
+  assignments  FillerAssignment[]
 
   @@index([channelId])
   @@index([timeBlockId])
   @@index([collectionId])
+}
+
+// Assigns a global Filler to a channel (its default gap filler) or to a time
+// block. Many-to-many: a filler can be used by many owners; an owner can have
+// many fillers. Deleting either the filler or the owner cascades the row away.
+model FillerAssignment {
+  id          Int        @id @default(autoincrement())
+  filler      Filler     @relation(fields: [fillerId], references: [id], onDelete: Cascade)
+  fillerId    Int
+  channel     Channel?   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  channelId   Int?
+  timeBlock   TimeBlock? @relation(fields: [timeBlockId], references: [id], onDelete: Cascade)
+  timeBlockId Int?
+  order       Int        @default(0)
+
+  @@unique([fillerId, channelId])
+  @@unique([fillerId, timeBlockId])
+  @@index([channelId])
+  @@index([timeBlockId])
 }
 
 // A hand-picked member of a collection: a whole show, or a single movie.
@@ -208,7 +231,8 @@ model Channel {
   rotationItems RotationItem[]
   timeBlocks    TimeBlock[]
   playout       PlayoutItem[]
-  fillers       Filler[]
+  fillers       Filler[] // legacy per-channel ownership (see FillerAssignment)
+  fillerAssignments FillerAssignment[]
 }
 
 // One step in a channel's 24/7 rotation.
@@ -247,7 +271,8 @@ model TimeBlock {
   // Per-block override of the channel's "coming up next" caption (JSON
   // ComingUpConfig); null = inherit the channel's setting.
   comingUp      String?
-  fillers       Filler[]
+  fillers       Filler[] // legacy per-block ownership (see FillerAssignment)
+  fillerAssignments FillerAssignment[]
 
   @@index([channelId])
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { api, assetFileUrl, type Asset, type Filler, type FillerInput, type FillerOwner } from '../lib/api'
+import { api, assetFileUrl, type Asset, type Filler, type FillerInput } from '../lib/api'
+import { toast } from '../lib/toast'
 
 const inp = 'rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-1.5 text-sm focus:border-indigo-500 outline-none'
 const emptyDraft: FillerInput = { name: '', style: 'frosted', assetId: null, audioAssetId: null, durationMode: 'fixed', durationSec: 30 }
@@ -14,9 +15,10 @@ const STYLES: { id: FillerInput['style']; label: string; desc: string }[] = [
 ]
 const styleLabel = (s: string) => STYLES.find((x) => x.id === s)?.label ?? s
 
-// Manage the filler pool for a channel or a time block (branded interstitials
-// played during gaps). Generated styles bake the chosen audio in.
-export default function FillerManager({ owner, hint }: { owner: FillerOwner; hint?: string }) {
+// Manage the global filler library (branded interstitials played during gaps).
+// Fillers are created/generated here and assigned to channels or blocks from a
+// channel's Fillers tab. Generated styles bake the chosen audio in.
+export default function FillerManager() {
   const [fillers, setFillers] = useState<Filler[]>([])
   const [fillerAssets, setFillerAssets] = useState<Asset[]>([])
   const [audioAssets, setAudioAssets] = useState<Asset[]>([])
@@ -28,14 +30,13 @@ export default function FillerManager({ owner, hint }: { owner: FillerOwner; hin
   const [genPercent, setGenPercent] = useState(0)
   const [genError, setGenError] = useState<string | null>(null)
 
-  const ownerKey = owner.channelId ?? owner.timeBlockId
-  const refresh = () => api.fillers(owner).then(setFillers).catch(() => {})
+  const refresh = () => api.fillers().then(setFillers).catch(() => {})
   useEffect(() => {
     refresh()
     api.assets('filler').then(setFillerAssets).catch(() => {})
     api.assets('audio').then(setAudioAssets).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownerKey])
+  }, [])
 
   function set<K extends keyof FillerInput>(k: K, v: FillerInput[K]) {
     setDraft((d) => ({ ...d, [k]: v }))
@@ -53,11 +54,12 @@ export default function FillerManager({ owner, hint }: { owner: FillerOwner; hin
   async function save() {
     const payload = { ...draft, assetId: draft.style === 'custom' ? draft.assetId : null }
     if (editId) await api.updateFiller(editId, payload).catch(() => {})
-    else await api.addFiller(owner, payload).catch(() => {})
+    else await api.addFiller(payload).catch(() => {})
     setOpen(false)
     setEditId(null)
     setDraft(emptyDraft)
     refresh()
+    toast.success('Filler saved')
   }
   async function del(id: number) {
     await api.deleteFiller(id).catch(() => {})
@@ -98,7 +100,7 @@ export default function FillerManager({ owner, hint }: { owner: FillerOwner; hin
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium">Fillers {hint && <span className="text-xs text-slate-500 font-normal">({hint})</span>}</span>
+        <span className="text-sm font-medium">Filler library</span>
         {!open && <button onClick={startNew} className="text-xs rounded border border-slate-700 hover:border-indigo-500 hover:text-indigo-300 px-2 py-0.5">+ Add filler</button>}
       </div>
       {genError && <div className="text-xs text-rose-400 mb-2">{genError}</div>}
@@ -201,7 +203,7 @@ export default function FillerManager({ owner, hint }: { owner: FillerOwner; hin
         </div>
       )}
 
-      {fillers.length === 0 && !open && <p className="text-xs text-slate-600">No fillers — uses the global default during gaps.</p>}
+      {fillers.length === 0 && !open && <p className="text-xs text-slate-600">No fillers yet. Create one here, then assign it to channels or blocks from a channel's Fillers tab.</p>}
     </div>
   )
 }

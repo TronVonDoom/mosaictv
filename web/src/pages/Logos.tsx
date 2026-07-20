@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, logoImageUrl, type Logo, type WatermarkConfig } from '../lib/api'
 import WatermarkFields from '../components/WatermarkFields'
+import { toast } from '../lib/toast'
 
 export default function Logos({ embedded = false }: { embedded?: boolean }) {
   const [logos, setLogos] = useState<Logo[]>([])
@@ -144,6 +145,7 @@ function WatermarkEditor({
     try {
       const updated = await api.updateLogo(logo.id, { watermark: wm })
       onSaved(updated)
+      toast.success('Watermark saved')
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Save failed')
       setSaving(false)
