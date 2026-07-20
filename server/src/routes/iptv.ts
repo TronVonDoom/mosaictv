@@ -115,6 +115,8 @@ iptvRouter.get('/xmltv.xml', async (req, res) => {
           season: true,
           episode: true,
           type: true,
+          artist: true,
+          album: true,
           overview: true,
           libraryId: true,
           posterPath: true,
@@ -182,10 +184,21 @@ iptvRouter.get('/xmltv.xml', async (req, res) => {
     if (chno == null) continue
     const m = it.mediaItem
     const isEp = !!m && m.type === 'episode' && !!m.showTitle
-    const title = !m ? (it.title || 'Station ID') : isEp ? (m.showTitle as string) : m.title
+    const isMusic = !!m && m.type === 'music'
+    // Music: "Artist – Title" as the title, album as the sub-title. Episodes:
+    // show name as the title, episode name as the sub-title.
+    const title = !m
+      ? it.title || 'Station ID'
+      : isMusic && m.artist
+        ? `${m.artist} – ${m.title}`
+        : isEp
+          ? (m.showTitle as string)
+          : m.title
     xml += `  <programme start="${xmltvTime(it.startTime)}" stop="${xmltvTime(it.stopTime)}" channel="${chno}">\n`
     xml += `    <title>${escapeXml(title)}</title>\n`
     if (isEp && m && m.title) xml += `    <sub-title>${escapeXml(m.title)}</sub-title>\n`
+    else if (isMusic && m && m.album) xml += `    <sub-title>${escapeXml(m.album)}</sub-title>\n`
+    if (isMusic) xml += `    <category>Music</category>\n`
     if (m && m.overview) xml += `    <desc>${escapeXml(m.overview)}</desc>\n`
     const icon = programmeIcon(m)
     if (icon) xml += `    <icon src="${escapeXml(icon)}" />\n`

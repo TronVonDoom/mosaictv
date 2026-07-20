@@ -312,12 +312,16 @@ model MediaItem {
   library     Library  @relation(fields: [libraryId], references: [id], onDelete: Cascade)
   libraryId   Int
   path        String   @unique
-  type        String // "movie" | "episode" | "other"
+  type        String // "movie" | "episode" | "other" | "music"
   title       String
   showTitle   String?
   season      Int?
   episode     Int?
   year        Int?
+  // Music videos ("music" type): performer and album from the Artist/Album/Title
+  // folder layout (or an "Artist - Title" filename).
+  artist      String?
+  album       String?
   durationSec Float?
   width       Int?
   height      Int?

@@ -4,10 +4,11 @@ import { api, type Library, type LibraryKind } from '../lib/api'
 
 import Icon, { type IconName } from '../components/Icon'
 
-const KIND_ICON: Record<LibraryKind, IconName> = { tv: 'show', movie: 'movie', other: 'clip' }
+const KIND_ICON: Record<LibraryKind, IconName> = { tv: 'show', movie: 'movie', music: 'audio', other: 'clip' }
 const KIND_LABEL: Record<LibraryKind, string> = {
   tv: 'TV Shows',
   movie: 'Movies',
+  music: 'Music Videos',
   other: 'Other',
 }
 

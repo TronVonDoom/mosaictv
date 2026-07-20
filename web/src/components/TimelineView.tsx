@@ -8,6 +8,7 @@ const LOGO_W = 76 // width of the sticky channel-logo column, when shown
 function progLabel(it: Playout['items'][number]): string {
   const m = it.mediaItem
   if (!m) return it.title || 'Station ID'
+  if (m.type === 'music' && m.artist) return `${m.artist} – ${m.title}`
   if (m.type === 'episode' && m.showTitle) {
     const se = m.season != null && m.episode != null ? ` S${String(m.season).padStart(2, '0')}E${String(m.episode).padStart(2, '0')}` : ''
     return `${m.showTitle}${se}`

@@ -6,7 +6,7 @@ import { isScanning } from '../scanner/scanner.js'
 
 export const librariesRouter = Router()
 
-const KINDS = ['tv', 'movie', 'other']
+const KINDS = ['tv', 'movie', 'music', 'other']
 
 librariesRouter.get('/', async (_req, res) => {
   const libs = await prisma.library.findMany({
@@ -41,7 +41,7 @@ librariesRouter.post('/', async (req, res) => {
   if (!name || !KINDS.includes(kind) || paths.length === 0) {
     return res
       .status(400)
-      .json({ error: 'name, kind (tv|movie|other), and at least one folder are required' })
+      .json({ error: 'name, kind (tv|movie|music|other), and at least one folder are required' })
   }
   for (const p of paths) {
     if (!fs.existsSync(p)) {

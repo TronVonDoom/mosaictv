@@ -122,9 +122,9 @@ export default function LibraryView() {
               <PosterCard
                 key={m.id}
                 title={m.title}
-                subtitle={m.year ? String(m.year) : undefined}
+                subtitle={m.type === 'music' ? m.artist ?? m.album ?? undefined : m.year ? String(m.year) : undefined}
                 badge={m.width && m.height ? `${m.height}p` : undefined}
-                icon={library?.kind === 'movie' ? 'movie' : 'clip'}
+                icon={library?.kind === 'movie' ? 'movie' : library?.kind === 'music' ? 'audio' : 'clip'}
                 imageUrl={
                   m.posterPath
                     ? artworkUrl(m.id, 'poster')

@@ -1,14 +1,22 @@
 import path from 'node:path'
 
-export type LibraryKind = 'tv' | 'movie' | 'other'
+export type LibraryKind = 'tv' | 'movie' | 'music' | 'other'
 
 export type ParsedMedia = {
-  type: 'movie' | 'episode' | 'other'
+  type: 'movie' | 'episode' | 'music' | 'other'
   title: string
   showTitle: string | null
   season: number | null
   episode: number | null
   year: number | null
+  artist: string | null
+  album: string | null
+}
+
+// Light cleanup for artist/album folder names (no year/quality stripping —
+// those are meaningful far less often here than in movie/TV names).
+function cleanName(raw: string): string {
+  return raw.replace(/[._]/g, ' ').replace(/\s{2,}/g, ' ').trim()
 }
 
 const YEAR_RE = /\((\d{4})\)/
@@ -73,10 +81,33 @@ export function parseMedia(
         season: Number.isNaN(season) ? null : season,
         episode: Number.isNaN(episode) ? null : episode,
         year: topFolder ? extractYear(topFolder) : null,
+        artist: null,
+        album: null,
       }
     }
     // No SxxEyy match — fall through to a generic entry.
-    return { type: 'other', title: cleanTitle(baseName), showTitle: null, season: null, episode: null, year: null }
+    return { type: 'other', title: cleanTitle(baseName), showTitle: null, season: null, episode: null, year: null, artist: null, album: null }
+  }
+
+  if (kind === 'music') {
+    // Music-video layout: Artist/Album/Title.ext or Artist/Title.ext; a flat
+    // file falls back to "Artist - Title.ext".
+    let artist: string | null = null
+    let album: string | null = null
+    let title = cleanTitle(baseName)
+    if (segments.length >= 3) {
+      artist = cleanName(segments[0])
+      album = cleanName(segments[segments.length - 2])
+    } else if (segments.length === 2) {
+      artist = cleanName(segments[0])
+    } else {
+      const dash = baseName.split(/\s+-\s+/)
+      if (dash.length >= 2) {
+        artist = cleanName(dash[0])
+        title = cleanTitle(dash.slice(1).join(' - '))
+      }
+    }
+    return { type: 'music', title, showTitle: null, season: null, episode: null, year: extractYear(baseName), artist, album }
   }
 
   if (kind === 'movie') {
@@ -93,6 +124,8 @@ export function parseMedia(
       season: null,
       episode: null,
       year,
+      artist: null,
+      album: null,
     }
   }
 
@@ -104,5 +137,7 @@ export function parseMedia(
     season: null,
     episode: null,
     year: extractYear(baseName),
+    artist: null,
+    album: null,
   }
 }

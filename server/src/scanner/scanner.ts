@@ -123,6 +123,8 @@ async function processFile(
     season: parsed.season,
     episode: parsed.episode,
     year: parsed.year,
+    artist: parsed.artist,
+    album: parsed.album,
     durationSec: unchanged ? existing!.durationSec : probe?.durationSec ?? null,
     width: unchanged ? existing!.width : probe?.width ?? null,
     height: unchanged ? existing!.height : probe?.height ?? null,

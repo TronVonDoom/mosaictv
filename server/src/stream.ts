@@ -794,6 +794,48 @@ function comingUpFilter(cfg: ComingUpConfig, font: string, textFile: string, win
   )
 }
 
+// A music video's on-screen info: title line + "Artist — Album" line. Two
+// separate strings (rendered as two stacked drawtexts) so we never rely on an
+// in-file newline, whose glyph rendering varies by ffmpeg/font build.
+function renderSongText(mi: { title: string; artist: string | null; album: string | null }): { title: string; sub: string } {
+  return { title: mi.title, sub: [mi.artist, mi.album].filter(Boolean).join(' — ') }
+}
+
+// Lower-third "now playing" chyron for a music video: bottom-left, title over
+// "Artist — Album", fading in/out across [a,b] (segment-relative seconds).
+// Two stacked drawtexts (sub on the bottom line, title above). Returns null
+// when the window is too small (e.g. a mid-song tune-in past the intro).
+function songChyronFilter(
+  font: string,
+  titleFile: string,
+  subFile: string | null,
+  a: number,
+  b: number,
+  p: StreamProfile,
+): string | null {
+  if (b - a < 0.5) return null
+  const fontsize = Math.max(12, Math.round(p.height * 0.045))
+  const margin = Math.round(p.height * 0.07)
+  const lineH = Math.round(fontsize * 1.7) // vertical step between the two lines
+  const F = 0.5
+  const enable = `between(t,${a.toFixed(2)},${b.toFixed(2)})`
+  const alpha = `clip(min((t-${a.toFixed(2)})/${F},(${b.toFixed(2)}-t)/${F}),0,1)`
+  const box = Math.round(fontsize * 0.4)
+  const draw = (file: string, y: string, size: number) =>
+    `drawtext=fontfile=${font}:textfile=${file}:expansion=none` +
+    `:fontsize=${size}:fontcolor=white:borderw=2:bordercolor=black@0.85` +
+    `:box=1:boxcolor=black@0.55:boxborderw=${box}` +
+    `:x=${margin}:y=${y}:enable='${enable}':alpha='${alpha}'`
+  const parts: string[] = []
+  if (subFile) {
+    parts.push(draw(subFile, `h-text_h-${margin}`, Math.round(fontsize * 0.82)))
+    parts.push(draw(titleFile, `h-text_h-${margin + lineH}`, fontsize))
+  } else {
+    parts.push(draw(titleFile, `h-text_h-${margin}`, fontsize))
+  }
+  return parts.join(',')
+}
+
 function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: StreamProfile, textFilter?: string): string[] {
   // Filler is usually built out of the logo already, so the bug goes on top of
   // it only if explicitly asked for.
@@ -1835,6 +1877,7 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
         // with quotes/colons/% can't break the filtergraph.
         let textFilter: string | undefined
         let captionFile: string | undefined
+        const songFiles: string[] = []
         if (!thisIsFiller && next?.kind === 'program' && next.mediaItem) {
           const cuBlock = activeBlockAt(channel.timeBlocks, item.startTime)
           const cuJson = cuBlock?.comingUp ?? channel.comingUp
@@ -1857,6 +1900,35 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
                 log('warn', 'stream', `Channel ${channelNumber}: could not stage coming-up caption`, String(e))
                 captionFile = undefined
               }
+            }
+          }
+        }
+        // Song chyron: while a music video plays, show a lower-third with its
+        // title/artist for the item's first ~12s (relative to item start, so a
+        // mid-song tune-in past the intro shows little or none of it). Chained
+        // after any coming-up caption.
+        if (!thisIsFiller && mi?.type === 'music') {
+          const support = await detectTextOverlay()
+          const a = Math.max(0, 1 - offset)
+          const b = 13 - offset
+          if (support && mi.title && b - a > 0.5) {
+            const { title, sub } = renderSongText(mi)
+            const stage = (tag: string, text: string) => {
+              const f = path.join(dataDir(), `caption-song-${tag}-${channelNumber}-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`)
+              fs.writeFileSync(f, text)
+              songFiles.push(f)
+              return f
+            }
+            try {
+              const titleFile = stage('t', title)
+              const subFile = sub ? stage('s', sub) : null
+              const chyron = songChyronFilter(support.font, titleFile, subFile, a, b, profile)
+              if (chyron) {
+                textFilter = textFilter ? `${textFilter},${chyron}` : chyron
+                log('debug', 'stream', `Ch ${channelNumber} song chyron: "${title}${sub ? ' — ' + sub : ''}"`)
+              }
+            } catch (e) {
+              log('warn', 'stream', `Channel ${channelNumber}: could not stage song chyron`, String(e))
             }
           }
         }
@@ -1886,8 +1958,9 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
         current = spawn('ffmpeg', args)
         const result = await pipeSegment(current, res)
         current = null
-        // ffmpeg has read the caption file at init; safe to drop it now.
+        // ffmpeg has read the caption files at init; safe to drop them now.
         if (captionFile) fs.rmSync(captionFile, { force: true })
+        for (const f of songFiles) fs.rmSync(f, { force: true })
         // Log the outcome of every segment (bytes, wall time, first-byte delay)
         // — a slow first byte or zero bytes is the stall a viewer sees as a
         // freeze/black screen.

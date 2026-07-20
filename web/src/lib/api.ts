@@ -14,7 +14,7 @@ export type Stats = {
   totalDurationSec: number
 }
 
-export type LibraryKind = 'tv' | 'movie' | 'other'
+export type LibraryKind = 'tv' | 'movie' | 'music' | 'other'
 
 export type LibraryFolder = {
   id: number
@@ -34,12 +34,14 @@ export type MediaItem = {
   id: number
   libraryId: number
   path: string
-  type: 'movie' | 'episode' | 'other'
+  type: 'movie' | 'episode' | 'music' | 'other'
   title: string
   showTitle: string | null
   season: number | null
   episode: number | null
   year: number | null
+  artist: string | null
+  album: string | null
   durationSec: number | null
   width: number | null
   height: number | null
@@ -351,6 +353,7 @@ export type PlayoutEntry = {
     season: number | null
     episode: number | null
     type: string
+    artist?: string | null
     durationSec: number | null
     posterPath: string | null
     tmdbPosterPath: string | null

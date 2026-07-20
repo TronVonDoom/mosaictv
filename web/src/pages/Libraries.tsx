@@ -13,6 +13,7 @@ import DirectoryPicker from '../components/DirectoryPicker'
 const KIND_LABELS: Record<LibraryKind, string> = {
   tv: 'TV Shows',
   movie: 'Movies',
+  music: 'Music Videos',
   other: 'Other / Bumpers',
 }
 
@@ -278,6 +279,7 @@ export default function Libraries() {
             >
               <option value="tv">TV Shows</option>
               <option value="movie">Movies</option>
+              <option value="music">Music Videos</option>
               <option value="other">Other</option>
             </select>
           </label>
