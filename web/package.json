@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "mosaictv": "file:..",
     "mpegts.js": "^1.8.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

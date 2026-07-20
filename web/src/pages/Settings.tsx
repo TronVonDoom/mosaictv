@@ -3,7 +3,16 @@ import { api, backupUrl, type WatermarkConfig } from '../lib/api'
 import WatermarkFields from '../components/WatermarkFields'
 import EncodingProfilesCard from '../components/EncodingProfilesCard'
 
+type SettingsTab = 'metadata' | 'watermark' | 'encoding' | 'maintenance'
+const TABS: { id: SettingsTab; label: string }[] = [
+  { id: 'metadata', label: 'Metadata' },
+  { id: 'watermark', label: 'Watermark' },
+  { id: 'encoding', label: 'Encoding' },
+  { id: 'maintenance', label: 'Maintenance' },
+]
+
 export default function Settings() {
+  const [tab, setTab] = useState<SettingsTab>('metadata')
   const [configured, setConfigured] = useState<boolean | null>(null)
   const [key, setKey] = useState('')
   const [saving, setSaving] = useState(false)
@@ -68,13 +77,32 @@ export default function Settings() {
   }
 
   return (
-    <div className="max-w-xl">
+    <div className="max-w-3xl">
       <h1 className="text-2xl font-bold mb-1">Settings</h1>
-      <p className="text-slate-400 text-sm mb-6">
+      <p className="text-slate-400 text-sm mb-5">
         Global defaults and external services. Fillers and logos live on each channel; assets live on the
         Media page.
       </p>
 
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-slate-800 mb-6 overflow-x-auto">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={
+              'px-4 py-2 text-sm rounded-t-lg border-b-2 -mb-px whitespace-nowrap transition-colors ' +
+              (tab === t.id
+                ? 'border-indigo-400 text-indigo-300'
+                : 'border-transparent text-slate-400 hover:text-slate-200')
+            }
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'metadata' && (
       <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
         <div className="flex items-center gap-3 mb-2">
           <h2 className="font-semibold">TMDB (The Movie Database)</h2>
@@ -135,9 +163,10 @@ export default function Settings() {
           </button>
         </form>
       </div>
+      )}
 
-      {wm && (
-        <form onSubmit={saveWm} className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 mt-6">
+      {tab === 'watermark' && wm && (
+        <form onSubmit={saveWm} className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
           <h2 className="font-semibold mb-1">Default watermark (on-screen logo)</h2>
           <p className="text-slate-400 text-sm mb-4">
             The fallback watermark for logos without their own settings (and legacy URL logos). Set
@@ -152,9 +181,10 @@ export default function Settings() {
         </form>
       )}
 
-      <EncodingProfilesCard />
+      {tab === 'encoding' && <EncodingProfilesCard />}
 
-      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 mt-6">
+      {tab === 'maintenance' && (
+      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
         <h2 className="font-semibold mb-1">Maintenance</h2>
         <p className="text-slate-400 text-sm mb-4">
           Back up your data (database + logos + filler) before experimenting, or reset to a clean slate
@@ -181,6 +211,7 @@ export default function Settings() {
           </button>
         </div>
       </div>
+      )}
     </div>
   )
 }

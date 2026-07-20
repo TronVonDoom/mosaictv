@@ -1,13 +1,14 @@
 import { NavLink, Outlet } from 'react-router-dom'
+import Icon, { type IconName } from './Icon'
 
-const navItems = [
-  { to: '/', label: 'Dashboard', icon: '📊', end: true },
-  { to: '/browse', label: 'Browse', icon: '🎬' },
-  { to: '/channels', label: 'Channels', icon: '📡' },
-  { to: '/libraries', label: 'Libraries', icon: '📁' },
-  { to: '/media', label: 'Media', icon: '🖼️' },
-  { to: '/logs', label: 'Logs', icon: '📜' },
-  { to: '/settings', label: 'Settings', icon: '⚙️' },
+const navItems: { to: string; label: string; icon: IconName; end?: boolean }[] = [
+  { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
+  { to: '/browse', label: 'Browse', icon: 'browse' },
+  { to: '/channels', label: 'Channels', icon: 'channels' },
+  { to: '/libraries', label: 'Libraries', icon: 'libraries' },
+  { to: '/media', label: 'Media', icon: 'media' },
+  { to: '/logs', label: 'Logs', icon: 'logs' },
+  { to: '/settings', label: 'Settings', icon: 'settings' },
 ]
 
 export default function Layout() {
@@ -32,7 +33,7 @@ export default function Layout() {
                   : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200')
               }
             >
-              <span>{item.icon}</span>
+              <Icon name={item.icon} />
               {item.label}
             </NavLink>
           ))}
@@ -47,7 +48,7 @@ export default function Layout() {
             rel="noreferrer"
             className="flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition-colors"
           >
-            <span>🎞️</span> M3U playlist
+            <Icon name="m3u" size={16} /> M3U playlist
           </a>
           <a
             href={`${origin}/iptv/xmltv.xml`}
@@ -55,7 +56,7 @@ export default function Layout() {
             rel="noreferrer"
             className="flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition-colors"
           >
-            <span>🗓️</span> XMLTV guide
+            <Icon name="xmltv" size={16} /> XMLTV guide
           </a>
         </div>
       </aside>

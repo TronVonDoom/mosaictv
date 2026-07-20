@@ -1016,8 +1016,9 @@ function fillerArgsPulse(out: string, logoFile: string, dur: number, audioFile?:
 }
 
 // Frosted-glass scene: rows of the channel + MosaicTV logos scrolling opposite
-// ways behind a blurred glass panel, with the channel logo sharp on the left and
-// the MosaicTV logo on the right in front. Composed per channel (needs its logo).
+// ways behind a blurred glass panel. In front, the screen is split into two
+// equal halves — the channel logo centered in the left half, the MosaicTV logo
+// centered in the right — divided by a faint glass seam. Composed per channel.
 function frostedArgs(out: string, channelLogo: string, mzLogo: string, D: number, audioFile?: string): string[] {
   const rowH = 90
   const cellW = 260
@@ -1040,13 +1041,16 @@ function frostedArgs(out: string, channelLogo: string, mzLogo: string, D: number
     `[r1][ch1]overlay=${leftX}:y=${y(2)}[r2]`,
     `[r2][mz1]overlay=${rightX}:y=${y(3)}[r3]`,
     `[r3][ch2]overlay=${leftX}:y=${y(4)}[rows]`,
-    // Frost: blur the scrolling layer and tint it like glass.
-    `[rows]boxblur=14:2,drawbox=x=0:y=0:w=iw:h=ih:color=white@0.07:t=fill[frost]`,
-    // Sharp foreground logos in front of the glass.
-    `[chFg]scale=-1:180:force_original_aspect_ratio=decrease,format=rgba[chfg]`,
-    `[mzFg]scale=-1:120:force_original_aspect_ratio=decrease,format=rgba[mzfg]`,
-    `[frost][chfg]overlay=x=90:y=(H-h)/2[f1]`,
-    `[f1][mzfg]overlay=x=W-w-90:y=(H-h)/2,format=yuv420p[v]`,
+    // Frost: blur the scrolling layer, tint it like glass, and draw a faint
+    // vertical seam down the middle so the two halves read as side-by-side panes.
+    `[rows]boxblur=14:2,drawbox=x=0:y=0:w=iw:h=ih:color=white@0.07:t=fill,drawbox=x=(iw-2)/2:y=0:w=2:h=ih:color=white@0.10:t=fill[frost]`,
+    // Sharp foreground logos in front of the glass. Each is capped to ~40% of
+    // the frame width so a wide logo stays inside its own half.
+    `[chFg]scale='min(iw,${Math.floor(W * 0.4)})':180:force_original_aspect_ratio=decrease,format=rgba[chfg]`,
+    `[mzFg]scale='min(iw,${Math.floor(W * 0.4)})':120:force_original_aspect_ratio=decrease,format=rgba[mzfg]`,
+    // Channel logo centered in the left half; MosaicTV logo centered in the right.
+    `[frost][chfg]overlay=x=(W/2-w)/2:y=(H-h)/2[f1]`,
+    `[f1][mzfg]overlay=x=W/2+(W/2-w)/2:y=(H-h)/2,format=yuv420p[v]`,
   ].join(';')
   return [
     '-y',
@@ -1073,7 +1077,7 @@ function mosaictvLogoFile(): string {
 
 // Bump these when the generators change so persisted clips regenerate.
 const FILLER_VERSION = 4
-const FROSTED_VERSION = 3
+const FROSTED_VERSION = 4
 
 // ffprobe a media file's duration in seconds (0 on failure).
 function probeDuration(file: string): Promise<number> {
