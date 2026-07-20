@@ -137,6 +137,7 @@ export default function EncodingProfilesCard() {
                 {HW[p.hwaccel]} · {p.audioChannels === 6 ? '5.1' : 'stereo'} {p.audioBitrate}k
                 {p.deinterlace && ' · deint'}
                 {p.normalizeLoudness && ' · loudnorm'}
+                {p.burnSubtitles && ' · subs'}
               </span>
               <button onClick={() => startEdit(p)} className="text-xs text-slate-400 hover:text-indigo-300">Edit</button>
               <button onClick={() => del(p.id)} className="text-slate-600 hover:text-rose-400" aria-label="Delete">×</button>
@@ -256,12 +257,18 @@ export default function EncodingProfilesCard() {
                   <input type="number" min={0} max={64} className={inp} value={form.threads} onChange={(e) => set('threads', Number(e.target.value))} />
                 </Field>
               </div>
-              <div className="mt-3">
+              <div className="mt-3 space-y-2">
                 <Check
                   checked={form.normalizeLoudness}
                   onChange={(v) => set('normalizeLoudness', v)}
                   label="Normalize loudness"
                   hint="Evens out the volume jump between old and modern shows. Costs some CPU, and is measured on the fly so it can't be perfect."
+                />
+                <Check
+                  checked={form.burnSubtitles}
+                  onChange={(v) => set('burnSubtitles', v)}
+                  label="Burn in subtitles"
+                  hint="Renders the first embedded subtitle track into the picture for programs that have one. Off by default; costs a little CPU."
                 />
               </div>
             </Section>

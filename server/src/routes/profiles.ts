@@ -22,6 +22,7 @@ function sanitize(body: Record<string, unknown>) {
     threads: Number(body.threads),
     audioChannels: Number(body.audioChannels),
     normalizeLoudness: !!body.normalizeLoudness,
+    burnSubtitles: body.burnSubtitles == null ? null : !!body.burnSubtitles,
   })
 }
 

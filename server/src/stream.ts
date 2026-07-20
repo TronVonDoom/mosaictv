@@ -68,6 +68,7 @@ export type StreamProfile = {
   threads: number // 0 = ffmpeg default
   audioChannels: number
   normalizeLoudness: boolean
+  burnSubtitles: boolean
 }
 export const DEFAULT_PROFILE: StreamProfile = {
   width: 1280,
@@ -84,6 +85,7 @@ export const DEFAULT_PROFILE: StreamProfile = {
   threads: 0,
   audioChannels: 2,
   normalizeLoudness: false,
+  burnSubtitles: false,
 }
 
 type ProfileRow = {
@@ -101,6 +103,7 @@ type ProfileRow = {
   threads?: number | null
   audioChannels?: number | null
   normalizeLoudness?: boolean | null
+  burnSubtitles?: boolean | null
 } | null
 
 /** Clamp a DB profile row (or null) into a valid StreamProfile. */
@@ -132,6 +135,7 @@ export function resolveProfile(p: ProfileRow): StreamProfile {
     // Stereo or 5.1; anything else risks clients that can't decode it.
     audioChannels: p.audioChannels === 6 ? 6 : 2,
     normalizeLoudness: !!p.normalizeLoudness,
+    burnSubtitles: !!p.burnSubtitles,
   }
 }
 
@@ -516,6 +520,9 @@ type Segment = {
   // the GPU handles this file's codec; ffmpeg still soft-falls-back to CPU
   // decode if a particular file trips it up.
   hwDecode?: boolean
+  // Burn the source's first subtitle stream into the picture (programs only,
+  // set when the profile asks for it and the file actually has subtitles).
+  hasSubtitles?: boolean
 }
 
 // Sample aspect ratio per file. The scanner records coded dimensions, but
@@ -550,6 +557,35 @@ function probeSar(filePath: string): Promise<number> {
       done(n > 0 && d > 0 ? n / d : 1)
     })
   })
+}
+
+// Whether a source has at least one subtitle stream (so subtitle burn-in has
+// something to render). Probed once per file, cached.
+const subsCache = new Map<string, Promise<boolean>>()
+function hasSubtitleStream(filePath: string): Promise<boolean> {
+  const hit = subsCache.get(filePath)
+  if (hit) return hit
+  const probe = new Promise<boolean>((resolve) => {
+    let out = ''
+    const p = spawn('ffprobe', [
+      '-v', 'error',
+      '-select_streams', 's',
+      '-show_entries', 'stream=index',
+      '-of', 'default=nw=1:nk=1',
+      filePath,
+    ])
+    p.stdout.on('data', (d) => (out += d))
+    p.on('error', () => resolve(false))
+    p.on('close', () => resolve(out.trim().length > 0))
+  })
+  subsCache.set(filePath, probe)
+  return probe
+}
+
+// Escape a file path for use inside an ffmpeg filter argument (the subtitles
+// filter's filename): backslashes, colons, and single quotes are special.
+function escapeFilterPath(p: string): string {
+  return p.replace(/\\/g, '\\\\').replace(/:/g, '\\:').replace(/'/g, "\\'")
 }
 
 // The rectangle the picture occupies inside the WxH output canvas after
@@ -816,7 +852,11 @@ function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: StreamPro
       : p.scalingMode === 'crop'
         ? `scale=${p.width}:${p.height}:force_original_aspect_ratio=increase,crop=${p.width}:${p.height}`
         : `scale=${p.width}:${p.height}:force_original_aspect_ratio=decrease,pad=${p.width}:${p.height}:(ow-iw)/2:(oh-ih)/2`
-  const base = `[0:v]${deint}scale=iw*sar:ih,${fit},setsar=1,fps=${p.fps},format=yuv420p,setpts=PTS-STARTPTS`
+  // Burn the source's subtitles onto the scaled frame (programs only). The
+  // subtitles filter re-opens the file for its own subtitle stream; it renders
+  // scaled to the frame it's applied to, so it goes after the fit-to-output.
+  const subs = seg.hasSubtitles && !seg.isFiller ? `subtitles=filename='${escapeFilterPath(seg.filePath)}',` : ''
+  const base = `[0:v]${deint}scale=iw*sar:ih,${fit},setsar=1,${subs}fps=${p.fps},format=yuv420p,setpts=PTS-STARTPTS`
   let vf: string
   if (useWatermark) {
     // Only "pad" leaves bars to stay clear of; stretch and crop fill the canvas.
@@ -1773,7 +1813,8 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
           // Decode on the GPU when the probe says this codec is supported
           // there (per-chip: e.g. a GTX 970 does h264 but not hevc).
           const hwDecode = enc === 'h264_nvenc' && mi.videoCodec ? await canNvdecCodec(mi.videoCodec.toLowerCase()) : false
-          seg = { filePath: mi.path, offsetSec: offset, loop: false, durationSec: segDur, hasAudio: !!mi.audioCodec, logo, wmEpochSec, mediaWidth: dispW, mediaHeight: mi.height ?? H, isFiller: false, fadeInSec, fadeOutSec, hwDecode }
+          const hasSubtitles = profile.burnSubtitles ? await hasSubtitleStream(mi.path) : false
+          seg = { filePath: mi.path, offsetSec: offset, loop: false, durationSec: segDur, hasAudio: !!mi.audioCodec, logo, wmEpochSec, mediaWidth: dispW, mediaHeight: mi.height ?? H, isFiller: false, fadeInSec, fadeOutSec, hwDecode, hasSubtitles }
           label = mi.showTitle
             ? `${mi.showTitle}${mi.season != null && mi.episode != null ? ` S${String(mi.season).padStart(2, '0')}E${String(mi.episode).padStart(2, '0')}` : ''}${mi.title ? ` — ${mi.title}` : ''}`
             : mi.title

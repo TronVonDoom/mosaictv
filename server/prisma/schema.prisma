@@ -48,6 +48,9 @@ model EncodingProfile {
   threads           Int     @default(0) // 0 = let ffmpeg decide
   audioChannels     Int     @default(2)
   normalizeLoudness Boolean @default(false)
+  // Burn the first embedded subtitle stream into the picture (for programs that
+  // have one). Off by default — it forces a filter and costs a little CPU.
+  burnSubtitles     Boolean @default(false)
   createdAt    DateTime  @default(now())
   channels     Channel[]
 }

@@ -333,6 +333,7 @@ export type EncodingProfile = {
   threads: number
   audioChannels: number
   normalizeLoudness: boolean
+  burnSubtitles: boolean
 }
 export type ProfileFields = Omit<EncodingProfile, 'id' | 'name'>
 export type ProfileInput = { name: string } & ProfileFields
