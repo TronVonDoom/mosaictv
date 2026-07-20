@@ -32,7 +32,7 @@ function IptvBar() {
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-2.5 mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
       <span className="text-slate-400 inline-flex items-center gap-1.5">
-        <Icon name="channels" size={15} gradient /> IPTV endpoints for Plex / Jellyfin / Threadfin:
+        <Icon name="channels" size={15} colored /> IPTV endpoints for Plex / Jellyfin / Threadfin:
       </span>
       {rows.map((r) =>
         failed === r.url ? (

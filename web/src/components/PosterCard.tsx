@@ -51,7 +51,7 @@ export default function PosterCard({
           </span>
         )}
         <span className="absolute top-2 left-2 bg-black/40 backdrop-blur rounded px-1 py-1 leading-none">
-          <Icon name={icon} size={14} gradient />
+          <Icon name={icon} size={14} colored />
         </span>
         {badge && (
           <span className="absolute top-2 right-2 text-[10px] font-medium bg-black/50 backdrop-blur px-1.5 py-0.5 rounded text-slate-100">

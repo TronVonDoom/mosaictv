@@ -64,7 +64,7 @@ export default function MediaSearchInput({
               onClick={() => pick(r)}
               className="w-full text-left px-3 py-2 text-sm hover:bg-slate-800 flex items-center gap-2"
             >
-              <Icon name={r.kind === 'show' ? 'show' : 'movie'} size={15} gradient />
+              <Icon name={r.kind === 'show' ? 'show' : 'movie'} size={15} colored />
               <span className="flex-1 min-w-0 truncate">
                 {r.kind === 'show' ? r.showTitle : r.title}
               </span>

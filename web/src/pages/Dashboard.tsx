@@ -29,7 +29,7 @@ function GettingStarted({ stats, channels }: { stats: Stats; channels: Channel[]
     <div className="mt-6 rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-5">
       <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
         <h2 className="font-semibold text-lg flex items-center gap-2">
-          <Icon name="channels" size={19} gradient />
+          <Icon name="channels" size={19} colored />
           <span className="text-gradient-brand">Let's get started!</span>
         </h2>
         <span className="text-xs text-slate-400">{doneCount} / {steps.length} done</span>

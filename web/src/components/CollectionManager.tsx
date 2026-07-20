@@ -177,7 +177,7 @@ export default function CollectionManager({
                   {c.items.length === 0 && !filterSummary && <span className="text-slate-600 text-sm">No shows or movies yet — add some below.</span>}
                   {c.items.map((it) => (
                     <span key={it.id} className="inline-flex items-center gap-2 rounded-lg bg-slate-900/70 border border-slate-800 pl-2.5 pr-1.5 py-1 text-sm">
-                      <Icon name={it.kind === 'show' ? 'show' : 'movie'} size={15} gradient />
+                      <Icon name={it.kind === 'show' ? 'show' : 'movie'} size={15} colored />
                       <span className="truncate max-w-48">{it.label ?? it.showTitle}</span>
                       <button onClick={() => guard(() => api.deleteCollectionItem(c.id, it.id))} className="text-slate-600 hover:text-rose-400" aria-label="Remove">×</button>
                     </span>

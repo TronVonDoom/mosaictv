@@ -74,7 +74,7 @@ export default function MediaDetailModal({
                 <Icon
                   name={item.type === 'movie' ? 'movie' : item.type === 'episode' ? 'show' : 'clip'}
                   size={40}
-                  gradient
+                  colored
                 />
               )}
             </div>

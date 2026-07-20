@@ -1,9 +1,8 @@
-import { useId } from 'react'
-
 // Custom line-icon set for MosaicTV. Stroke-based; by default drawn with
-// currentColor so each icon inherits its text color. Pass `gradient` to stroke
-// it with the brand mosaic gradient instead. No external icon dependency —
-// CSP-safe and consistent with the theme.
+// currentColor so each icon inherits its text color. Pass `colored` to stroke
+// it with the icon's own identity color (a single solid hue per icon, drawn
+// from the brand mosaic palette) — uniform weight, distinct colors. No external
+// icon dependency — CSP-safe and consistent with the theme.
 
 export type IconName =
   | 'dashboard'
@@ -24,8 +23,28 @@ export type IconName =
   | 'clock'
   | 'upnext'
 
-// Brand gradient stops (mirror --gradient-brand in index.css).
-const STOPS = ['#a855f7', '#6366f1', '#3b82f6', '#22d3ee', '#34d399', '#fbbf24', '#fb7185']
+// Each icon's identity color — one solid hue per icon, spanning the brand
+// mosaic palette so the set reads as a cohesive spectrum. The sidebar nav is
+// ordered so these flow violet→rose down the rail.
+const COLOR: Record<IconName, string> = {
+  dashboard: '#a855f7', // violet
+  browse: '#818cf8', // indigo
+  channels: '#3b82f6', // blue
+  libraries: '#22d3ee', // cyan
+  media: '#34d399', // green
+  logs: '#fbbf24', // gold
+  settings: '#fb7185', // rose
+  show: '#3b82f6', // blue
+  movie: '#a855f7', // violet
+  clip: '#22d3ee', // cyan
+  folder: '#fbbf24', // gold
+  audio: '#f472b6', // pink
+  image: '#34d399', // green
+  clock: '#818cf8', // indigo
+  upnext: '#fb7185', // rose
+  m3u: '#34d399', // green
+  xmltv: '#22d3ee', // cyan
+}
 
 const PATHS: Record<IconName, React.ReactNode> = {
   // 2×2 mosaic tiles — a nod to the brand mark.
@@ -148,36 +167,26 @@ export default function Icon({
   name,
   size = 18,
   className,
-  gradient = false,
+  colored = false,
 }: {
   name: IconName
   size?: number
   className?: string
-  gradient?: boolean
+  colored?: boolean
 }) {
-  const gid = 'mosaic-' + useId().replace(/:/g, '')
   return (
     <svg
       width={size}
       height={size}
       viewBox="0 0 24 24"
       fill="none"
-      stroke={gradient ? `url(#${gid})` : 'currentColor'}
+      stroke={colored ? COLOR[name] : 'currentColor'}
       strokeWidth={1.7}
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}
       aria-hidden="true"
     >
-      {gradient && (
-        <defs>
-          <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
-            {STOPS.map((c, i) => (
-              <stop key={i} offset={i / (STOPS.length - 1)} stopColor={c} />
-            ))}
-          </linearGradient>
-        </defs>
-      )}
       {PATHS[name]}
     </svg>
   )

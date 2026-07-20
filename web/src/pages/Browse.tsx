@@ -44,7 +44,7 @@ export default function Browse() {
               to={`/browse/${l.id}`}
               className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 flex items-center gap-4 hover:border-indigo-500 hover:bg-slate-900 transition-colors"
             >
-              <div className="text-slate-200"><Icon name={KIND_ICON[l.kind]} size={36} gradient /></div>
+              <div className="text-slate-200"><Icon name={KIND_ICON[l.kind]} size={36} colored /></div>
               <div className="min-w-0">
                 <div className="font-medium truncate">{l.name}</div>
                 <div className="text-xs text-slate-500">

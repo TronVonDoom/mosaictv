@@ -33,7 +33,7 @@ export default function Layout() {
                   : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200')
               }
             >
-              <Icon name={item.icon} gradient />
+              <Icon name={item.icon} colored />
               {item.label}
             </NavLink>
           ))}
