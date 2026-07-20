@@ -26,3 +26,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.tsbuildinfo
+
+# SQLite WAL/SHM sidecar files (local dev)
+*.db-wal
+*.db-shm
