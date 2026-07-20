@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
+import Icon from '../components/Icon'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, logoImageUrl, type Channel } from '../lib/api'
 import { copyText } from '../lib/clipboard'
@@ -30,7 +31,9 @@ function IptvBar() {
   ]
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-2.5 mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-      <span className="text-slate-400">📺 IPTV endpoints for Plex / Jellyfin / Threadfin:</span>
+      <span className="text-slate-400 inline-flex items-center gap-1.5">
+        <Icon name="channels" size={15} gradient /> IPTV endpoints for Plex / Jellyfin / Threadfin:
+      </span>
       {rows.map((r) =>
         failed === r.url ? (
           <input
@@ -168,7 +171,7 @@ export default function Channels() {
                 {c.logoId ? (
                   <img src={logoImageUrl(c.logoId)} alt="" className="max-w-full max-h-full object-contain" />
                 ) : (
-                  <span className="text-slate-700 text-lg">📺</span>
+                  <Icon name="show" size={20} className="text-slate-700" />
                 )}
               </div>
               <Link to={`/channels/${c.id}`} className="flex-1 min-w-0 group">

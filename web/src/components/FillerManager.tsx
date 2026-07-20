@@ -113,7 +113,7 @@ export default function FillerManager({ owner, hint }: { owner: FillerOwner; hin
                 </span>
                 <span className="text-[11px] text-slate-500 shrink-0">
                   {styleLabel(f.style)} · {f.durationMode === 'audio' ? 'match audio' : `${f.durationSec}s`}
-                  {f.audioAssetId != null && ` · 🎵 ${audioName(f.audioAssetId) ?? 'audio'}`}
+                  {f.audioAssetId != null && ` · ♪ ${audioName(f.audioAssetId) ?? 'audio'}`}
                 </span>
                 {generatingId === f.id ? (
                   <span className="text-xs text-indigo-300 shrink-0 tabular-nums">Generating {genPercent}%</span>

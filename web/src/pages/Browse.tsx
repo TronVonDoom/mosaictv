@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type Library, type LibraryKind } from '../lib/api'
 
-const KIND_ICON: Record<LibraryKind, string> = { tv: '📺', movie: '🎬', other: '🎞️' }
+import Icon, { type IconName } from '../components/Icon'
+
+const KIND_ICON: Record<LibraryKind, IconName> = { tv: 'show', movie: 'movie', other: 'clip' }
 const KIND_LABEL: Record<LibraryKind, string> = {
   tv: 'TV Shows',
   movie: 'Movies',
@@ -42,7 +44,7 @@ export default function Browse() {
               to={`/browse/${l.id}`}
               className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 flex items-center gap-4 hover:border-indigo-500 hover:bg-slate-900 transition-colors"
             >
-              <div className="text-4xl">{KIND_ICON[l.kind]}</div>
+              <div className="text-slate-200"><Icon name={KIND_ICON[l.kind]} size={36} gradient /></div>
               <div className="min-w-0">
                 <div className="font-medium truncate">{l.name}</div>
                 <div className="text-xs text-slate-500">

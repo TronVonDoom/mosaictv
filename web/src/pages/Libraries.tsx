@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import Icon from '../components/Icon'
 import { Link } from 'react-router-dom'
 import {
   api,
@@ -396,7 +397,7 @@ export default function Libraries() {
               <div className="mt-3 pt-3 border-t border-slate-800/60 space-y-1.5">
                 {lib.folders.map((f) => (
                   <div key={f.id} className="flex items-center gap-2 text-xs">
-                    <span className="text-slate-600">📁</span>
+                    <Icon name="folder" size={13} className="text-slate-600 shrink-0" />
                     <span className="font-mono text-slate-400 truncate flex-1">{f.path}</span>
                     {lib.folders.length > 1 && (
                       <button

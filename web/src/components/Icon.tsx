@@ -1,6 +1,9 @@
-// Custom line-icon set for MosaicTV. Stroke-based and drawn with currentColor,
-// so each icon inherits its text color (e.g. the violet active-nav state). No
-// external icon dependency — CSP-safe and consistent with the theme.
+import { useId } from 'react'
+
+// Custom line-icon set for MosaicTV. Stroke-based; by default drawn with
+// currentColor so each icon inherits its text color. Pass `gradient` to stroke
+// it with the brand mosaic gradient instead. No external icon dependency —
+// CSP-safe and consistent with the theme.
 
 export type IconName =
   | 'dashboard'
@@ -12,6 +15,17 @@ export type IconName =
   | 'settings'
   | 'm3u'
   | 'xmltv'
+  | 'show'
+  | 'movie'
+  | 'clip'
+  | 'folder'
+  | 'audio'
+  | 'image'
+  | 'clock'
+  | 'upnext'
+
+// Brand gradient stops (mirror --gradient-brand in index.css).
+const STOPS = ['#a855f7', '#6366f1', '#3b82f6', '#22d3ee', '#34d399', '#fbbf24', '#fb7185']
 
 const PATHS: Record<IconName, React.ReactNode> = {
   // 2×2 mosaic tiles — a nod to the brand mark.
@@ -78,30 +92,92 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M3 9h18M8 4V2.5M16 4V2.5M8 13h3M13 13h3M8 17h3M13 17h3" />
     </>
   ),
+  // TV set — a show.
+  show: (
+    <>
+      <rect x="3" y="7" width="18" height="13" rx="2" />
+      <path d="M12 7l-4-4M12 7l4-4M9 20h6" />
+    </>
+  ),
+  // Clapperboard — a movie.
+  movie: (
+    <>
+      <rect x="3" y="6" width="18" height="14" rx="1.5" />
+      <path d="M3 10h18M7 6l-1.5 4M12 6l-1.5 4M17 6l-1.5 4" />
+    </>
+  ),
+  // Film frame with sprockets — a clip / other.
+  clip: (
+    <>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path d="M4 8h2M4 12h2M4 16h2M18 8h2M18 12h2M18 16h2" />
+    </>
+  ),
+  folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
+  // Music note.
+  audio: (
+    <>
+      <path d="M9 18V5l11-2v13" />
+      <circle cx="6.5" cy="18" r="2.5" />
+      <circle cx="17.5" cy="16" r="2.5" />
+    </>
+  ),
+  image: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="8.5" cy="9.5" r="1.6" />
+      <path d="M4 17l4.5-4.5L13 17M14 15l2.5-2.5L20 16" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 8v4l3 2" />
+    </>
+  ),
+  // Skip-to-next — "coming up next".
+  upnext: (
+    <>
+      <path d="M5 5l9 7-9 7z" />
+      <path d="M18 5v14" />
+    </>
+  ),
 }
 
 export default function Icon({
   name,
   size = 18,
   className,
+  gradient = false,
 }: {
   name: IconName
   size?: number
   className?: string
+  gradient?: boolean
 }) {
+  const gid = 'mosaic-' + useId().replace(/:/g, '')
   return (
     <svg
       width={size}
       height={size}
       viewBox="0 0 24 24"
       fill="none"
-      stroke="currentColor"
+      stroke={gradient ? `url(#${gid})` : 'currentColor'}
       strokeWidth={1.7}
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}
       aria-hidden="true"
     >
+      {gradient && (
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
+            {STOPS.map((c, i) => (
+              <stop key={i} offset={i / (STOPS.length - 1)} stopColor={c} />
+            ))}
+          </linearGradient>
+        </defs>
+      )}
       {PATHS[name]}
     </svg>
   )

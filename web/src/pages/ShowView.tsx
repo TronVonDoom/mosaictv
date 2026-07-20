@@ -135,7 +135,7 @@ export default function ShowView() {
                 key={s.season ?? 'none'}
                 title={seasonLabel(s.season)}
                 subtitle={`${s.episodes.length} ep · ${formatDuration(totalDur)}`}
-                icon="📺"
+                icon="show"
                 imageUrl={
                   posterEp
                     ? artworkUrl(posterEp.id, 'season')

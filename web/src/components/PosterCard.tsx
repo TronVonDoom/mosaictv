@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { posterGradient } from '../lib/api'
+import Icon, { type IconName } from './Icon'
 
 /** "The Big Bang Theory" -> "BB", "Firefly" -> "FI". */
 function initials(title: string): string {
@@ -23,7 +24,7 @@ export default function PosterCard({
   title: string
   subtitle?: string
   badge?: string
-  icon: string
+  icon: IconName
   imageUrl?: string
   onClick: () => void
 }) {
@@ -49,8 +50,8 @@ export default function PosterCard({
             {initials(title)}
           </span>
         )}
-        <span className="absolute top-2 left-2 text-xs bg-black/40 backdrop-blur rounded px-1.5 py-0.5 leading-none">
-          {icon}
+        <span className="absolute top-2 left-2 bg-black/40 backdrop-blur rounded px-1 py-1 leading-none">
+          <Icon name={icon} size={14} gradient />
         </span>
         {badge && (
           <span className="absolute top-2 right-2 text-[10px] font-medium bg-black/50 backdrop-blur px-1.5 py-0.5 rounded text-slate-100">

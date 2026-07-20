@@ -401,10 +401,10 @@ export default function ChannelEditor() {
                     <div className="truncate">{b.collection.name}</div>
                     <div className="text-xs text-slate-500">
                       {formatDays(b.days)} · {minutesToTime(b.startMinute)}–{minutesToTime(b.endMinute)} · {b.playbackOrder}
-                      {b.startMode === 'hard' && ' · ⏱ hard start'}
-                      {(b.logoId || b.logoUrl) && ' · 🖼 logo'}
+                      {b.startMode === 'hard' && ' · hard start'}
+                      {(b.logoId || b.logoUrl) && ' · logo'}
                       {b.fillerMode && b.fillerMode !== 'none' && ` · filler: ${b.fillerMode}`}
-                      {b.comingUp && ' · 📰 up-next'}
+                      {b.comingUp && ' · up-next'}
                     </div>
                   </div>
                   <button onClick={() => editBlock(b)} className="text-xs text-slate-500 hover:text-indigo-300" aria-label="Edit">Edit</button>

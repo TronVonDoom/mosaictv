@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import Icon from '../components/Icon'
 import { api, formatDuration, type Channel, type Health, type Stats } from '../lib/api'
 
 type Step = { title: string; hint: string; to: string; done: boolean }
@@ -27,7 +28,10 @@ function GettingStarted({ stats, channels }: { stats: Stats; channels: Channel[]
   return (
     <div className="mt-6 rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-5">
       <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
-        <h2 className="font-semibold text-lg text-gradient-brand">📺 Let's get started!</h2>
+        <h2 className="font-semibold text-lg flex items-center gap-2">
+          <Icon name="channels" size={19} gradient />
+          <span className="text-gradient-brand">Let's get started!</span>
+        </h2>
         <span className="text-xs text-slate-400">{doneCount} / {steps.length} done</span>
       </div>
       <p className="text-slate-400 text-sm mb-4">

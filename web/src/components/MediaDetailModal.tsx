@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import Icon from './Icon'
 import {
   api,
   artworkUrl,
@@ -70,9 +71,11 @@ export default function MediaDetailModal({
               ) : item.tmdbPosterPath ? (
                 <img src={tmdbImage(item.tmdbPosterPath)} alt={item.title} className="absolute inset-0 w-full h-full object-cover" />
               ) : (
-                <span className="opacity-80">
-                  {item.type === 'movie' ? '🎬' : item.type === 'episode' ? '📺' : '🎞️'}
-                </span>
+                <Icon
+                  name={item.type === 'movie' ? 'movie' : item.type === 'episode' ? 'show' : 'clip'}
+                  size={40}
+                  gradient
+                />
               )}
             </div>
             <div className="flex-1 min-w-0">

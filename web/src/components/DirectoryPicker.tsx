@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import Icon from './Icon'
 import { api, type FsListing } from '../lib/api'
 
 export default function DirectoryPicker({
@@ -84,7 +85,7 @@ export default function DirectoryPicker({
                   onClick={() => load(d.path)}
                   className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-800/60 text-left text-sm"
                 >
-                  <span>📁</span>
+                  <Icon name="folder" size={16} className="text-slate-400 shrink-0" />
                   <span className="truncate">{d.name}</span>
                 </button>
               ))}

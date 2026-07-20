@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import Icon from './Icon'
 import { api, type MediaSearchResult } from '../lib/api'
 
 export default function MediaSearchInput({
@@ -63,7 +64,7 @@ export default function MediaSearchInput({
               onClick={() => pick(r)}
               className="w-full text-left px-3 py-2 text-sm hover:bg-slate-800 flex items-center gap-2"
             >
-              <span>{r.kind === 'show' ? '📺' : '🎬'}</span>
+              <Icon name={r.kind === 'show' ? 'show' : 'movie'} size={15} gradient />
               <span className="flex-1 min-w-0 truncate">
                 {r.kind === 'show' ? r.showTitle : r.title}
               </span>

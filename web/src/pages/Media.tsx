@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import Logos from './Logos'
 import AssetManager from '../components/AssetManager'
+import Icon, { type IconName } from '../components/Icon'
 
 type Tab = 'images' | 'audio' | 'filler'
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'images', label: 'Logos / Images', icon: '🖼️' },
-  { id: 'audio', label: 'Audio', icon: '🎵' },
-  { id: 'filler', label: 'Filler clips', icon: '📺' },
+const TABS: { id: Tab; label: string; icon: IconName }[] = [
+  { id: 'images', label: 'Logos / Images', icon: 'image' },
+  { id: 'audio', label: 'Audio', icon: 'audio' },
+  { id: 'filler', label: 'Filler clips', icon: 'clip' },
 ]
 
 export default function Media() {
@@ -32,7 +33,7 @@ export default function Media() {
                 : 'border-transparent text-slate-400 hover:text-slate-200')
             }
           >
-            <span className="mr-1.5">{t.icon}</span>
+            <Icon name={t.icon} size={15} className="inline-block mr-1.5 align-[-2px]" />
             {t.label}
           </button>
         ))}

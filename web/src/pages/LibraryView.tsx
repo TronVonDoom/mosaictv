@@ -98,7 +98,7 @@ export default function LibraryView() {
                 title={s.showTitle}
                 subtitle={`${s.seasonCount} season${s.seasonCount === 1 ? '' : 's'} · ${s.episodeCount} ep`}
                 badge={s.year ? String(s.year) : undefined}
-                icon="📺"
+                icon="show"
                 imageUrl={
                   s.posterItemId
                     ? artworkUrl(s.posterItemId, 'show')
@@ -124,7 +124,7 @@ export default function LibraryView() {
                 title={m.title}
                 subtitle={m.year ? String(m.year) : undefined}
                 badge={m.width && m.height ? `${m.height}p` : undefined}
-                icon={library?.kind === 'movie' ? '🎬' : '🎞️'}
+                icon={library?.kind === 'movie' ? 'movie' : 'clip'}
                 imageUrl={
                   m.posterPath
                     ? artworkUrl(m.id, 'poster')
