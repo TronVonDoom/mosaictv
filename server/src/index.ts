@@ -6,6 +6,7 @@ import { prisma, initDb } from './db.js'
 import { log } from './logs.js'
 import { warmFiller } from './stream.js'
 import { migrateCollectionOwnership } from './migrate.js'
+import { seedDefaultAudio } from './seedDefaults.js'
 import { librariesRouter } from './routes/libraries.js'
 import { mediaRouter } from './routes/media.js'
 import { scanRouter } from './routes/scan.js'
@@ -135,6 +136,7 @@ async function boot(): Promise<void> {
   await initDb()
   await backfillLibraryFolders()
   await migrateCollectionOwnership().catch((e) => log('error', 'system', 'Collection ownership migration failed', String(e?.stack || e)))
+  await seedDefaultAudio().catch((e) => log('error', 'system', 'Default audio seed failed', String(e?.stack || e)))
   await checkFfmpeg()
   app.listen(PORT, () => {
     console.log(`MosaicTV v${VERSION} listening on http://0.0.0.0:${PORT}`)
