@@ -826,7 +826,7 @@ function activeLogo(
 // breaks the stream.
 const logoCache = new Map<string, string | undefined>()
 async function localLogo(raw: string | null): Promise<string | undefined> {
-  const fallback = path.join(process.cwd(), 'public', 'mesatztv-icon.png')
+  const fallback = path.join(process.cwd(), 'public', 'mosaictv-icon.png')
   const fb = fs.existsSync(fallback) ? fallback : undefined
   if (!raw) return fb
   if (logoCache.has(raw)) return logoCache.get(raw)
@@ -1015,9 +1015,9 @@ function fillerArgsPulse(out: string, logoFile: string, dur: number, audioFile?:
   ]
 }
 
-// Frosted-glass scene: rows of the channel + MeSatzTV logos scrolling opposite
+// Frosted-glass scene: rows of the channel + MosaicTV logos scrolling opposite
 // ways behind a blurred glass panel, with the channel logo sharp on the left and
-// the MeSatzTV logo on the right in front. Composed per channel (needs its logo).
+// the MosaicTV logo on the right in front. Composed per channel (needs its logo).
 function frostedArgs(out: string, channelLogo: string, mzLogo: string, D: number, audioFile?: string): string[] {
   const rowH = 90
   const cellW = 260
@@ -1066,9 +1066,9 @@ export function generateFrostedFiller(out: string, channelLogo: string, mzLogo: 
   return runFfmpeg(frostedArgs(out, channelLogo, mzLogo, d, audioFile), onProgress, d)
 }
 
-function mesatztvLogoFile(): string {
+function mosaictvLogoFile(): string {
   const wide = path.join(process.cwd(), 'public', 'logo-wide.png')
-  return fs.existsSync(wide) ? wide : path.join(process.cwd(), 'public', 'mesatztv-icon.png')
+  return fs.existsSync(wide) ? wide : path.join(process.cwd(), 'public', 'mosaictv-icon.png')
 }
 
 // Bump these when the generators change so persisted clips regenerate.
@@ -1139,7 +1139,7 @@ async function ensureFrostedFiller(logoFile: string, dur = 30, audioFile?: strin
   const out = path.join(dataDir(), `filler-frosted-${key}.mp4`)
   if (fs.existsSync(out)) return out
   log('info', 'system', `Generating frosted-glass filler for logo ${path.basename(logoFile)} (${d}s${audioFile ? ' + audio' : ''})…`)
-  const clip = await generateToCache(out, (tmp) => generateFrostedFiller(tmp, logoFile, mesatztvLogoFile(), d, audioFile, onProgress))
+  const clip = await generateToCache(out, (tmp) => generateFrostedFiller(tmp, logoFile, mosaictvLogoFile(), d, audioFile, onProgress))
   if (!clip) log('warn', 'system', 'Frosted filler generation failed — falling back to animated')
   return clip
 }

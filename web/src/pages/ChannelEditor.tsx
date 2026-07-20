@@ -487,7 +487,7 @@ export default function ChannelEditor() {
             <h2 className="font-semibold mb-1">Channel default</h2>
             <p className="text-slate-500 text-xs mb-3">
               Plays during gaps unless the block has its own filler below. Frosted uses this channel's logo + the
-              MeSatzTV logo; pick an audio track to bake it in and match the clip length.
+              MosaicTV logo; pick an audio track to bake it in and match the clip length.
             </p>
             <FillerManager owner={{ channelId }} hint="channel default" />
           </section>

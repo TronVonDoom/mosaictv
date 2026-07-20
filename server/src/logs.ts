@@ -31,7 +31,7 @@ function logsDir(): string {
   return d
 }
 function logFile(): string {
-  return path.join(logsDir(), 'mesatztv.log')
+  return path.join(logsDir(), 'mosaictv.log')
 }
 
 function rotateIfNeeded(file: string): void {

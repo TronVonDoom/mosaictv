@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Pull the latest MeSatzTV from GitHub and rebuild the container.
+# Pull the latest MosaicTV from GitHub and rebuild the container.
 # Run this on Unraid whenever you've pushed changes:  ./scripts/update.sh
 set -e
 
@@ -14,4 +14,4 @@ docker compose up -d --build
 echo "==> Cleaning up old images..."
 docker image prune -f
 
-echo "==> Done. MeSatzTV is up to date."
+echo "==> Done. MosaicTV is up to date."

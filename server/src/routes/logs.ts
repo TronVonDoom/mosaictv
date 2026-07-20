@@ -20,7 +20,7 @@ logsRouter.get('/', (req, res) => {
 // GET /api/logs/download — plain-text dump for handing off.
 logsRouter.get('/download', (_req, res) => {
   res.setHeader('Content-Type', 'text/plain; charset=utf-8')
-  res.setHeader('Content-Disposition', `attachment; filename="mesatztv-logs-${Date.now()}.txt"`)
+  res.setHeader('Content-Disposition', `attachment; filename="mosaictv-logs-${Date.now()}.txt"`)
   res.send(dumpText())
 })
 

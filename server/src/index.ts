@@ -137,9 +137,9 @@ async function boot(): Promise<void> {
   await migrateCollectionOwnership().catch((e) => log('error', 'system', 'Collection ownership migration failed', String(e?.stack || e)))
   await checkFfmpeg()
   app.listen(PORT, () => {
-    console.log(`MeSatzTV v${VERSION} listening on http://0.0.0.0:${PORT}`)
+    console.log(`MosaicTV v${VERSION} listening on http://0.0.0.0:${PORT}`)
     console.log(`ffmpeg available: ${ffmpegAvailable}`)
-    log('info', 'system', `MeSatzTV v${VERSION} started — ffmpeg ${ffmpegAvailable ? 'available' : 'NOT available'}`)
+    log('info', 'system', `MosaicTV v${VERSION} started — ffmpeg ${ffmpegAvailable ? 'available' : 'NOT available'}`)
   })
   // Pre-build the default filler in the background so the first intermission
   // never blocks on generation.

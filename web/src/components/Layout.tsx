@@ -16,7 +16,7 @@ export default function Layout() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex">
       <aside className="w-56 shrink-0 border-r border-slate-800 bg-slate-900/40 flex flex-col">
         <div className="px-4 py-5 border-b border-slate-800">
-          <img src="/logo-wide.png" alt="MeSatzTV" className="w-full max-w-[190px]" />
+          <img src="/logo-wide.png" alt="MosaicTV" className="w-full max-w-[190px]" />
         </div>
         <nav className="flex-1 p-3 space-y-1">
           {navItems.map((item) => (

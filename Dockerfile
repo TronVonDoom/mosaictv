@@ -27,7 +27,7 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends ffmpeg openssl ca-certificates fonts-dejavu-core \
   && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
-ENV DATABASE_URL=file:/app/data/mesatztv.db
+ENV DATABASE_URL=file:/app/data/mosaictv.db
 WORKDIR /app
 
 # Production dependencies (includes prisma CLI + client) + generated client

@@ -1,5 +1,5 @@
 // navigator.clipboard only exists in a secure context (https, or localhost).
-// MeSatzTV is normally reached over plain http on a LAN IP, where it is
+// MosaicTV is normally reached over plain http on a LAN IP, where it is
 // undefined — so always keep the execCommand path as a fallback.
 export async function copyText(text: string): Promise<boolean> {
   if (window.isSecureContext && navigator.clipboard) {

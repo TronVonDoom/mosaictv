@@ -1,4 +1,4 @@
-# 📺 MeSatzTV
+# 📺 MosaicTV
 
 Turn your media library into scheduled **24/7 live TV channels** — complete with
 bumpers, filler, watermark overlays, and standard **M3U + XMLTV** output that
@@ -58,7 +58,7 @@ builds from source.
 ### Option A — Unraid template + GHCR image (recommended)
 
 Every push to `main` triggers a GitHub Actions build that publishes the image to
-**`ghcr.io/tronvondoom/mesatztv:latest`**. Unraid just pulls it — no building on
+**`ghcr.io/tronvondoom/mosaictv:latest`**. Unraid just pulls it — no building on
 the server, and updates are one click.
 
 The image is **private**, so authenticate once, then add the template:
@@ -71,12 +71,12 @@ The image is **private**, so authenticate once, then add the template:
    # paste the token as the password
    ```
 
-2. **Install the template.** Copy [`unraid/my-MeSatzTV.xml`](unraid/my-MeSatzTV.xml)
-   to `/boot/config/plugins/dockerMan/templates-user/my-MeSatzTV.xml` (e.g.
-   `curl -L -o /boot/config/plugins/dockerMan/templates-user/my-MeSatzTV.xml \
-   https://raw.githubusercontent.com/TronVonDoom/mesatztv/main/unraid/my-MeSatzTV.xml`).
+2. **Install the template.** Copy [`unraid/my-MosaicTV.xml`](unraid/my-MosaicTV.xml)
+   to `/boot/config/plugins/dockerMan/templates-user/my-MosaicTV.xml` (e.g.
+   `curl -L -o /boot/config/plugins/dockerMan/templates-user/my-MosaicTV.xml \
+   https://raw.githubusercontent.com/TronVonDoom/mosaictv/main/unraid/my-MosaicTV.xml`).
 
-3. On the Unraid **Docker** tab → **Add Container** → pick **MeSatzTV** from the
+3. On the Unraid **Docker** tab → **Add Container** → pick **MosaicTV** from the
    template dropdown. Adjust the media path if needed, then **Apply**.
 
 **GPU:** the template sets `--runtime=nvidia` + `NVIDIA_VISIBLE_DEVICES=all`, so
@@ -84,7 +84,7 @@ it uses your NVIDIA GPU for hardware transcoding (needs the **Nvidia-Driver**
 plugin). Set `NVIDIA_VISIBLE_DEVICES` to a specific GPU UUID (`nvidia-smi -L`)
 to pin one card.
 
-**Updating:** Docker tab → MeSatzTV → **Force Update** (or check for updates).
+**Updating:** Docker tab → MosaicTV → **Force Update** (or check for updates).
 It pulls the newest image built by CI.
 
 ### Option B — Docker Compose (build from source)
@@ -102,8 +102,8 @@ NVIDIA GPU.
    ```bash
    mkdir -p /mnt/user/appdata
    cd /mnt/user/appdata
-   git clone https://github.com/TronVonDoom/mesatztv.git
-   cd mesatztv
+   git clone https://github.com/TronVonDoom/mosaictv.git
+   cd mosaictv
    ```
 
 3. Point the media volume at your library. Edit `docker-compose.yml` and change
@@ -121,7 +121,7 @@ NVIDIA GPU.
    docker compose up -d --build
    ```
 
-5. Open **http://<your-unraid-ip>:8688**. You should see “MeSatzTV is alive”
+5. Open **http://<your-unraid-ip>:8688**. You should see “MosaicTV is alive”
    with `ffmpeg: available`. 🎉
 
 ### Updating (the loop you wanted)
@@ -129,7 +129,7 @@ NVIDIA GPU.
 Whenever we push changes to GitHub, update your Unraid instance with one command:
 
 ```bash
-cd /mnt/user/appdata/mesatztv
+cd /mnt/user/appdata/mosaictv
 ./scripts/update.sh
 ```
 
@@ -137,7 +137,7 @@ That pulls the latest code, rebuilds the image, restarts the container, and
 prunes old images. (Equivalent to `git pull && docker compose up -d --build`.)
 
 > **Tip:** You can wire `scripts/update.sh` into the Unraid **User Scripts**
-> plugin to add a one-click "Update MeSatzTV" button, or schedule it.
+> plugin to add a one-click "Update MosaicTV" button, or schedule it.
 
 ---
 

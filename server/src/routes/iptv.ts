@@ -42,7 +42,7 @@ function xmltvTime(d: Date): string {
 iptvRouter.get('/channels.m3u', async (req, res) => {
   const channels = await prisma.channel.findMany({ orderBy: { number: 'asc' } })
   const base = baseUrl(req)
-  const fallback = `${base}/mesatztv-icon.png`
+  const fallback = `${base}/mosaictv-icon.png`
   let out = '#EXTM3U\n'
   for (const c of channels) {
     if (c.number == null) continue // draft — not published
@@ -50,7 +50,7 @@ iptvRouter.get('/channels.m3u', async (req, res) => {
     out +=
       `#EXTINF:-1 tvg-id="${c.number}" tvg-chno="${c.number}" ` +
       `tvg-name="${escapeXml(c.name)}" tvg-logo="${escapeXml(logo)}" ` +
-      `group-title="${escapeXml(c.group || 'MeSatzTV')}",${c.name}\n`
+      `group-title="${escapeXml(c.group || 'MosaicTV')}",${c.name}\n`
     out += `${base}/iptv/channel/${c.number}.ts\n`
   }
   res.setHeader('Content-Type', 'application/x-mpegurl')
@@ -129,12 +129,12 @@ iptvRouter.get('/xmltv.xml', async (req, res) => {
     return m.posterPath || m.tmdbPosterPath ? `${base}/api/artwork/${m.id}?type=poster` : null
   }
 
-  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<tv generator-info-name="MeSatzTV">\n'
+  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<tv generator-info-name="MosaicTV">\n'
   for (const c of channels) {
     if (c.number == null) continue // draft — not published
     xml += `  <channel id="${c.number}">\n`
     xml += `    <display-name>${escapeXml(c.name)}</display-name>\n`
-    xml += `    <icon src="${escapeXml(c.logoId ? `${base}/api/logos/${c.logoId}/image` : c.logoUrl || `${base}/mesatztv-icon.png`)}" />\n`
+    xml += `    <icon src="${escapeXml(c.logoId ? `${base}/api/logos/${c.logoId}/image` : c.logoUrl || `${base}/mosaictv-icon.png`)}" />\n`
     xml += '  </channel>\n'
   }
   for (const it of items) {

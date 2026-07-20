@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE: ghcr.io/tronvondoom/mesatztv
+  IMAGE: ghcr.io/tronvondoom/mosaictv
 
 jobs:
   build-and-push:

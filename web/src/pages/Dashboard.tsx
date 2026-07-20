@@ -55,7 +55,7 @@ export default function Dashboard() {
           }
         />
         <span className="font-medium">
-          {reachable ? 'MeSatzTV is alive' : reachable === false ? 'Backend unreachable' : 'Connecting…'}
+          {reachable ? 'MosaicTV is alive' : reachable === false ? 'Backend unreachable' : 'Connecting…'}
         </span>
         {health && (
           <span className="text-slate-500 text-sm ml-auto">

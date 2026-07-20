@@ -1,8 +1,8 @@
 services:
-  mesatztv:
+  mosaictv:
     build: .
-    image: mesatztv:latest
-    container_name: mesatztv
+    image: mosaictv:latest
+    container_name: mosaictv
     restart: unless-stopped
     # NVIDIA GPU passthrough for hardware transcoding (needs the Unraid
     # Nvidia-Driver plugin / nvidia-container-runtime). Remove this line if the
@@ -13,18 +13,18 @@ services:
     # The icon is served by the container itself, so it works whether the repo
     # is public or private. If your Unraid IP isn't 192.168.1.100, update it
     # (or, if you make the repo public, point it at the GitHub raw URL:
-    #  https://raw.githubusercontent.com/TronVonDoom/mesatztv/main/web/public/mesatztv-icon.png)
+    #  https://raw.githubusercontent.com/TronVonDoom/mosaictv/main/web/public/mosaictv-icon.png)
     labels:
       net.unraid.docker.managed: "composeman"
       net.unraid.docker.webui: "http://[IP]:[PORT:8688]/"
-      net.unraid.docker.icon: "http://192.168.1.100:8688/mesatztv-icon.png"
+      net.unraid.docker.icon: "http://192.168.1.100:8688/mosaictv-icon.png"
       net.unraid.docker.shell: "bash"
     ports:
       - "8688:8688"
     environment:
       - TZ=America/Chicago
       - PORT=8688
-      - DATABASE_URL=file:/app/data/mesatztv.db
+      - DATABASE_URL=file:/app/data/mosaictv.db
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all
     volumes:

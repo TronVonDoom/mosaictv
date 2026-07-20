@@ -14,7 +14,7 @@ adminRouter.get('/backup', async (_req, res) => {
   const dir = dataDir()
   // Flush the WAL into the main DB file so the tarred snapshot is consistent.
   await prisma.$executeRawUnsafe('PRAGMA wal_checkpoint(TRUNCATE);').catch(() => {})
-  const name = `mesatztv-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.tar.gz`
+  const name = `mosaictv-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.tar.gz`
   res.setHeader('Content-Type', 'application/gzip')
   res.setHeader('Content-Disposition', `attachment; filename="${name}"`)
   // Tar the contents of the data dir (portable across container recreations).
