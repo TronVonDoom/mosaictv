@@ -33,15 +33,32 @@ export const SCALING_MODES: ScalingMode[] = ['pad', 'stretch', 'crop']
 export const PRESETS: Record<string, string[]> = {
   libx264: ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower'],
   h264_nvenc: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'],
+  h264_qsv: ['veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow'],
+  h264_amf: ['speed', 'balanced', 'quality'],
+  // h264_vaapi / h264_videotoolbox have no comparable preset knob.
 }
 const ALL_PRESETS = new Set(Object.values(PRESETS).flat())
+
+// Hardware-accel choice -> the ffmpeg H.264 encoder it uses. "cpu" = libx264,
+// "auto" = probe and pick the best available (see resolveEncoder).
+export const HW_ACCELS = ['auto', 'nvidia', 'qsv', 'vaapi', 'amf', 'videotoolbox', 'cpu'] as const
+export type HwAccel = (typeof HW_ACCELS)[number]
+const HW_ENCODERS: Record<string, string> = {
+  nvidia: 'h264_nvenc',
+  qsv: 'h264_qsv',
+  vaapi: 'h264_vaapi',
+  amf: 'h264_amf',
+  videotoolbox: 'h264_videotoolbox',
+}
+// VAAPI needs a render node; overridable for unusual setups.
+const VAAPI_DEVICE = process.env.VAAPI_DEVICE || '/dev/dri/renderD128'
 
 export type StreamProfile = {
   width: number
   height: number
   fps: number
   quality: 'low' | 'medium' | 'high'
-  hwaccel: 'auto' | 'nvidia' | 'cpu'
+  hwaccel: HwAccel
   audioBitrate: number // kbps
   preset: string // "auto" or an encoder-specific preset
   videoBitrateK: number // 0 = derive from quality
@@ -90,7 +107,7 @@ type ProfileRow = {
 export function resolveProfile(p: ProfileRow): StreamProfile {
   if (!p) return DEFAULT_PROFILE
   const quality = ['low', 'medium', 'high'].includes(p.quality) ? (p.quality as StreamProfile['quality']) : 'medium'
-  const hwaccel = ['auto', 'nvidia', 'cpu'].includes(p.hwaccel) ? (p.hwaccel as StreamProfile['hwaccel']) : 'auto'
+  const hwaccel = (HW_ACCELS as readonly string[]).includes(p.hwaccel) ? (p.hwaccel as HwAccel) : 'auto'
   // Even dimensions (libx264/yuv420p require it); clamp to sane bounds.
   const even = (n: number, d: number) => {
     const v = Math.round(Number(n) || d)
@@ -251,36 +268,63 @@ export function sanitizeComingUp(input: unknown): ComingUpConfig {
   }
 }
 
-let encoderCache: string | null = null
+// Whether an encoder actually works on THIS host — not just whether ffmpeg
+// lists it. A tiny real encode with the same shape of args the stream uses
+// catches "h264_qsv is listed but there's no Intel GPU" or "vaapi render node
+// missing", so we can fall back to libx264 gracefully. Probed once per encoder.
+const encoderProbeCache = new Map<string, Promise<boolean>>()
 
-/** Detect once whether NVIDIA nvenc is available; fall back to libx264. */
-function detectEncoder(): Promise<string> {
-  if (encoderCache) return Promise.resolve(encoderCache)
-  return new Promise((resolve) => {
-    let out = ''
-    const p = spawn('ffmpeg', ['-hide_banner', '-encoders'])
-    p.stdout.on('data', (d) => (out += d))
-    p.on('error', () => {
-      log('warn', 'ffmpeg', 'Could not run ffmpeg to detect encoders; falling back to libx264')
-      resolve((encoderCache = 'libx264'))
-    })
-    p.on('close', () => {
-      const enc = out.includes('h264_nvenc') ? 'h264_nvenc' : 'libx264'
-      log('info', 'ffmpeg', `Video encoder selected: ${enc}`)
-      resolve((encoderCache = enc))
-    })
-  })
+function probeArgs(enc: string): string[] {
+  const src = ['-f', 'lavfi', '-i', 'color=c=black:s=320x180:r=15:d=0.2']
+  const out = ['-f', 'null', '-']
+  switch (enc) {
+    case 'h264_vaapi':
+      return ['-vaapi_device', VAAPI_DEVICE, ...src, '-vf', 'format=nv12,hwupload', '-c:v', 'h264_vaapi', '-b:v', '1M', ...out]
+    case 'h264_nvenc':
+    case 'h264_qsv':
+    case 'h264_amf':
+    case 'h264_videotoolbox':
+      return [...src, '-c:v', enc, '-b:v', '1M', ...out]
+    default:
+      return [...src, '-c:v', enc, ...out]
+  }
 }
 
-/** Pick the actual encoder given the profile's hardware-accel choice. */
-async function resolveEncoder(hwaccel: StreamProfile['hwaccel']): Promise<string> {
-  if (hwaccel === 'cpu') return 'libx264'
-  const avail = await detectEncoder()
-  if (hwaccel === 'nvidia') {
-    if (avail !== 'h264_nvenc') log('warn', 'ffmpeg', 'Profile requests NVIDIA but nvenc is unavailable — using CPU (libx264)')
-    return avail
+function probeEncoder(enc: string): Promise<boolean> {
+  if (enc === 'libx264') return Promise.resolve(true)
+  const hit = encoderProbeCache.get(enc)
+  if (hit) return hit
+  const probe = new Promise<boolean>((resolve) => {
+    const p = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', ...probeArgs(enc)])
+    p.on('error', () => resolve(false))
+    p.on('close', (code) => resolve(code === 0))
+  })
+  encoderProbeCache.set(enc, probe)
+  return probe
+}
+
+// "auto" priority: fastest widely-available hardware first, CPU last.
+const AUTO_ORDER = ['h264_nvenc', 'h264_qsv', 'h264_vaapi', 'h264_amf', 'h264_videotoolbox']
+const encoderLogged = new Set<string>()
+function logEncoder(enc: string): string {
+  if (!encoderLogged.has(enc)) {
+    encoderLogged.add(enc)
+    log('info', 'ffmpeg', `Video encoder selected: ${enc}`)
   }
-  return avail // auto
+  return enc
+}
+
+/** Pick the actual working encoder for the profile's hardware-accel choice. */
+async function resolveEncoder(hwaccel: HwAccel): Promise<string> {
+  if (hwaccel === 'cpu') return 'libx264'
+  if (hwaccel !== 'auto') {
+    const want = HW_ENCODERS[hwaccel]
+    if (want && (await probeEncoder(want))) return logEncoder(want)
+    log('warn', 'ffmpeg', `Profile requests ${hwaccel} but ${want ?? '?'} does not work on this host — using CPU (libx264)`)
+    return logEncoder('libx264')
+  }
+  for (const e of AUTO_ORDER) if (await probeEncoder(e)) return logEncoder(e)
+  return logEncoder('libx264')
 }
 
 // The outer concat process gets a connect-time buffer cushion from
@@ -429,6 +473,23 @@ function encoderArgs(enc: string, p: StreamProfile): string[] {
 
   if (enc === 'h264_nvenc') {
     return ['-c:v', 'h264_nvenc', '-preset', preset('p4'), '-rc', 'vbr', '-b:v', bv, '-maxrate', maxrate, '-bufsize', bufsize, '-g', g, ...noBFrames, '-pix_fmt', 'yuv420p']
+  }
+  if (enc === 'h264_qsv') {
+    // Intel QuickSync. Accepts system-memory frames (internal upload); nv12 in.
+    return ['-c:v', 'h264_qsv', '-preset', preset('faster'), '-b:v', bv, '-maxrate', maxrate, '-bufsize', bufsize, '-g', g, ...noBFrames, '-pix_fmt', 'nv12']
+  }
+  if (enc === 'h264_vaapi') {
+    // Intel/AMD on Linux. Frames arrive on a VAAPI surface (hwupload is appended
+    // in ffmpegArgs), so no -pix_fmt here.
+    return ['-c:v', 'h264_vaapi', '-b:v', bv, '-maxrate', maxrate, '-bufsize', bufsize, '-g', g, ...noBFrames]
+  }
+  if (enc === 'h264_amf') {
+    // AMD (Windows/Linux). -quality is AMF's speed/quality knob.
+    return ['-c:v', 'h264_amf', '-usage', 'transcoding', '-quality', preset('balanced'), '-rc', 'vbr_latency', '-b:v', bv, '-maxrate', maxrate, '-bufsize', bufsize, '-g', g, ...noBFrames, '-pix_fmt', 'yuv420p']
+  }
+  if (enc === 'h264_videotoolbox') {
+    // Apple (macOS). No -bf knob; relies on its default GOP structure.
+    return ['-c:v', 'h264_videotoolbox', '-b:v', bv, '-maxrate', maxrate, '-bufsize', bufsize, '-g', g, '-pix_fmt', 'yuv420p']
   }
   // libx264 uses CRF unless an explicit bitrate asks for rate control.
   const rate = p.videoBitrateK > 0 ? ['-b:v', bv, '-maxrate', maxrate] : ['-crf', q.crf, '-maxrate', maxrate]
@@ -709,6 +770,9 @@ function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: StreamPro
   // GPU decode: frames come back to system memory (no -hwaccel_output_format),
   // so the CPU filter graph below works unchanged — only the decode moves.
   if (seg.hwDecode) a.push('-hwaccel', 'cuda')
+  // VAAPI encodes from a hardware surface; init the render node up front so the
+  // hwupload filter (appended below) has a device to use.
+  if (enc === 'h264_vaapi') a.push('-vaapi_device', VAAPI_DEVICE)
   if (seg.offsetSec > 0.1) a.push('-ss', seg.offsetSec.toFixed(3))
   if (seg.loop) a.push('-stream_loop', '-1')
   // Deliberately NOT -re: the outer concat process meters the session at real
@@ -766,6 +830,8 @@ function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: StreamPro
   }
   // The coming-up caption goes last, on top of everything else.
   if (textFilter) vf += `;[vpre]${textFilter}[v]`
+  // VAAPI: upload the finished software frame to a GPU surface for the encoder.
+  if (enc === 'h264_vaapi') vf = vf.replace(/\[v\]$/, '[vsw]') + ';[vsw]format=nv12,hwupload[v]'
   const aIn = audioIdx >= 0 ? `${audioIdx}:a:0` : '0:a:0'
   const layout = p.audioChannels === 6 ? '5.1' : 'stereo'
   // Evens out the jump between a 1970s sitcom and a modern show. dynaudnorm,

@@ -321,7 +321,7 @@ export type EncodingProfile = {
   height: number
   fps: number
   quality: 'low' | 'medium' | 'high'
-  hwaccel: 'auto' | 'nvidia' | 'cpu'
+  hwaccel: 'auto' | 'nvidia' | 'qsv' | 'vaapi' | 'amf' | 'videotoolbox' | 'cpu'
   audioBitrate: number
   preset: string
   videoBitrateK: number

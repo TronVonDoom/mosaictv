@@ -4,18 +4,33 @@ MosaicTV transcodes every channel to a consistent format so streams are
 seamless. That encoding can run on the **CPU** (works everywhere, default) or
 an **NVIDIA GPU** (much lower CPU load).
 
-| | Encoder | Decoder |
-| - | ------- | ------- |
-| **CPU** (default) | libx264 | CPU |
-| **NVIDIA** | h264_nvenc | NVDEC for supported codecs, CPU otherwise |
+| Hardware accel | Encoder | Platform |
+| -------------- | ------- | -------- |
+| **CPU** (default) | libx264 | anywhere |
+| **NVIDIA** | h264_nvenc | Nvidia GPUs |
+| **Intel QuickSync** | h264_qsv | Intel iGPU/Arc |
+| **VAAPI** | h264_vaapi | Intel/AMD on Linux |
+| **AMD AMF** | h264_amf | AMD GPUs (Windows/Linux) |
+| **Apple** | h264_videotoolbox | macOS |
 
-Support is detected at runtime: if NVENC isn't available, MosaicTV logs a
-warning and uses the CPU — a missing GPU never breaks the stream. GPU
-*decoding* (NVDEC) is probed per codec, so files the card can't decode simply
-decode on the CPU.
+Choose one per encoding profile under **Settings → Encoding**, or leave it on
+**Auto**.
 
-> **Intel QuickSync / AMD (VAAPI)** are not supported yet — CPU encoding works
-> fine on those boxes. If you want QSV/VAAPI support, open an issue!
+**It's self-validating.** Support is confirmed at runtime by actually encoding a
+tiny sample with the chosen encoder on *your* host — not just by asking whether
+ffmpeg lists it (many builds list `h264_qsv`/`h264_amf` even with no matching
+GPU). If the encoder doesn't genuinely work, MosaicTV logs a warning and falls
+back to the CPU (libx264), so a wrong choice or a missing GPU never breaks the
+stream. **Auto** probes in order (NVENC → QSV → VAAPI → AMF → VideoToolbox) and
+picks the first that works, else CPU.
+
+GPU **decoding** currently accelerates on **NVIDIA (NVDEC)** only, probed per
+codec; other vendors decode on the CPU and encode on the GPU (encoding is the
+bigger win). 
+
+> **VAAPI render node:** defaults to `/dev/dri/renderD128`. If yours differs,
+> set the `VAAPI_DEVICE` environment variable. Pass the device into the
+> container (`--device /dev/dri:/dev/dri`).
 
 ## Do I need a GPU?
 

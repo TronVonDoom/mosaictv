@@ -8,11 +8,21 @@ const RES = [
   { label: '1080p', width: 1920, height: 1080 },
 ]
 const resLabel = (w: number, h: number) => RES.find((r) => r.width === w && r.height === h)?.label ?? `${w}×${h}`
-const HW = { auto: 'Auto', nvidia: 'NVIDIA', cpu: 'CPU' } as const
+const HW: Record<string, string> = {
+  auto: 'Auto',
+  nvidia: 'NVIDIA',
+  qsv: 'QSV',
+  vaapi: 'VAAPI',
+  amf: 'AMF',
+  videotoolbox: 'VideoToolbox',
+  cpu: 'CPU',
+}
 const inp = 'rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm focus:border-indigo-500 outline-none w-full'
 
 const X264_PRESETS = ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower']
 const NVENC_PRESETS = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7']
+const QSV_PRESETS = ['veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow']
+const AMF_PRESETS = ['speed', 'balanced', 'quality']
 
 const SCALING: { value: EncodingProfile['scalingMode']; label: string; hint: string }[] = [
   { value: 'pad', label: 'Scale and pad', hint: 'Keep the shape, add black bars. Nothing is lost.' },
@@ -164,10 +174,14 @@ export default function EncodingProfilesCard() {
 
             <Section title="Video">
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <Field label="Hardware acceleration">
+                <Field label="Hardware acceleration" hint="Auto picks the best that works on your host; others fall back to CPU if unavailable.">
                   <select className={inp} value={form.hwaccel} onChange={(e) => set('hwaccel', e.target.value as ProfileFields['hwaccel'])}>
-                    <option value="auto">Auto</option>
+                    <option value="auto">Auto (detect)</option>
                     <option value="nvidia">NVIDIA (nvenc)</option>
+                    <option value="qsv">Intel QuickSync (qsv)</option>
+                    <option value="vaapi">VAAPI (Intel/AMD, Linux)</option>
+                    <option value="amf">AMD (amf)</option>
+                    <option value="videotoolbox">Apple (videotoolbox)</option>
                     <option value="cpu">CPU (libx264)</option>
                   </select>
                 </Field>
@@ -181,12 +195,22 @@ export default function EncodingProfilesCard() {
                 <Field label="Preset" hint="Speed vs. compression.">
                   <select className={inp} value={form.preset} onChange={(e) => set('preset', e.target.value)}>
                     <option value="auto">Auto</option>
-                    {form.hwaccel !== 'cpu' && (
+                    {(form.hwaccel === 'auto' || form.hwaccel === 'nvidia') && (
                       <optgroup label="NVIDIA (p1 fastest → p7 best)">
                         {NVENC_PRESETS.map((x) => <option key={x} value={x}>{x}</option>)}
                       </optgroup>
                     )}
-                    {form.hwaccel !== 'nvidia' && (
+                    {(form.hwaccel === 'auto' || form.hwaccel === 'qsv') && (
+                      <optgroup label="QSV (veryfast → veryslow)">
+                        {QSV_PRESETS.map((x) => <option key={`qsv-${x}`} value={x}>{x}</option>)}
+                      </optgroup>
+                    )}
+                    {(form.hwaccel === 'auto' || form.hwaccel === 'amf') && (
+                      <optgroup label="AMF">
+                        {AMF_PRESETS.map((x) => <option key={x} value={x}>{x}</option>)}
+                      </optgroup>
+                    )}
+                    {(form.hwaccel === 'auto' || form.hwaccel === 'cpu') && (
                       <optgroup label="CPU (x264)">
                         {X264_PRESETS.map((x) => <option key={x} value={x}>{x}</option>)}
                       </optgroup>
