@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import { prisma, initDb } from './db.js'
 import { log } from './logs.js'
 import { warmFiller } from './stream.js'
+import { resetHls } from './hls.js'
 import { migrateCollectionOwnership, migrateFillersToLibrary } from './migrate.js'
 import { seedDefaultAudio } from './seedDefaults.js'
 import { librariesRouter } from './routes/libraries.js'
@@ -138,6 +139,7 @@ async function boot(): Promise<void> {
   await migrateCollectionOwnership().catch((e) => log('error', 'system', 'Collection ownership migration failed', String(e?.stack || e)))
   await migrateFillersToLibrary().catch((e) => log('error', 'system', 'Filler library migration failed', String(e?.stack || e)))
   await seedDefaultAudio().catch((e) => log('error', 'system', 'Default audio seed failed', String(e?.stack || e)))
+  resetHls() // clear any stale shared-HLS output from a previous run
   await checkFfmpeg()
   app.listen(PORT, () => {
     console.log(`MosaicTV v${VERSION} listening on http://0.0.0.0:${PORT}`)

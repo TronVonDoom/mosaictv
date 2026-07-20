@@ -20,6 +20,14 @@ export function assetsDir(): string {
   return d
 }
 
+// Live HLS output (one shared segment set per channel, served to all viewers).
+// Ephemeral — cleaned when a channel's encoder stops.
+export function hlsDir(): string {
+  const d = path.join(dataDir(), 'hls')
+  fs.mkdirSync(d, { recursive: true })
+  return d
+}
+
 // Downloaded TMDB artwork, so guide clients fetch posters from us on the LAN
 // rather than needing their own route to the internet.
 export function tmdbCacheDir(): string {

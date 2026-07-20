@@ -334,7 +334,7 @@ async function resolveEncoder(hwaccel: HwAccel): Promise<string> {
 // stream. Probe once at first use; if unsupported, omit them and fall back to
 // plain -readrate (supported since 5.1), i.e. the previous behaviour.
 let readrateBurstCache: boolean | undefined
-function detectReadrateBurst(): Promise<boolean> {
+export function detectReadrateBurst(): Promise<boolean> {
   if (readrateBurstCache !== undefined) return Promise.resolve(readrateBurstCache)
   return new Promise((resolve) => {
     let err = ''
@@ -1448,6 +1448,24 @@ async function streamBlack(res: Response, p: StreamProfile, enc: string, durSec:
 /** Base URL for the internal per-item endpoints the concat demuxer fetches. */
 function internalBase(): string {
   return `http://127.0.0.1:${Number(process.env.PORT ?? 8688)}`
+}
+
+// The internal concat playlist URL a channel's outer ffmpeg reads (shared by the
+// per-client MPEG-TS path and the shared-HLS path).
+export function internalConcatUrl(channelNumber: number): string {
+  return `${internalBase()}/internal/concat/${channelNumber}`
+}
+
+// Find the channel and make sure its playout is built far enough ahead to
+// stream. Returns false if the channel is missing or has nothing scheduled.
+// Used by the shared-HLS manager, which drives its own long-lived ffmpeg.
+export async function ensureChannelReady(channelNumber: number): Promise<boolean> {
+  const channel = await prisma.channel.findFirst({
+    where: { number: channelNumber },
+    include: { rotationItems: true },
+  })
+  if (!channel) return false
+  return ensurePlayout(channel, channelNumber)
 }
 
 /**

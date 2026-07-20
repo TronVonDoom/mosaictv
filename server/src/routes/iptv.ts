@@ -2,15 +2,51 @@ import { Router } from 'express'
 import type { Request } from 'express'
 import { prisma } from '../db.js'
 import { streamChannel } from '../stream.js'
+import { ensureHls, touchHls, hlsPlaylistFile, hlsSegmentFile } from '../hls.js'
 
 export const iptvRouter = Router()
 
-// Live stream: GET /iptv/channel/1.ts
+const clientIp = (req: Request) => (req.socket.remoteAddress ?? '') || undefined
+
+// Live stream (per-client MPEG-TS): GET /iptv/channel/1.ts
 iptvRouter.get(/^\/channel\/(\d+)\.ts$/, (req, res) => {
   streamChannel(Number((req.params as unknown as string[])[0]), res, req).catch(() => {
     // Always close the response — a hanging one leaves the player spinning.
     if (!res.headersSent) res.status(500).end()
     else if (!res.writableEnded) res.end()
+  })
+})
+
+// Shared HLS (one transcode per channel, many viewers): the playlist starts the
+// channel's encoder on demand; segments are served straight off disk.
+// GET /iptv/channel/1/index.m3u8  and  /iptv/channel/1/seg_N.ts
+iptvRouter.get(/^\/channel\/(\d+)\/index\.m3u8$/, async (req, res) => {
+  const n = Number((req.params as unknown as string[])[0])
+  try {
+    const status = await ensureHls(n, clientIp(req))
+    if (status === 'unavailable') return res.status(409).end() // missing / nothing scheduled
+    if (status === 'starting') {
+      res.setHeader('Retry-After', '2')
+      return res.status(503).end() // encoder warming up — the player will retry
+    }
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl')
+    res.setHeader('Cache-Control', 'no-cache, no-store')
+    res.sendFile(hlsPlaylistFile(n))
+  } catch {
+    if (!res.headersSent) res.status(500).end()
+  }
+})
+
+iptvRouter.get(/^\/channel\/(\d+)\/(seg_\d+\.ts)$/, (req, res) => {
+  const params = req.params as unknown as string[]
+  const n = Number(params[0])
+  const file = hlsSegmentFile(n, params[1])
+  if (!file) return res.status(404).end()
+  touchHls(n, clientIp(req))
+  res.setHeader('Content-Type', 'video/mp2t')
+  res.setHeader('Cache-Control', 'no-cache, no-store')
+  res.sendFile(file, (err) => {
+    if (err && !res.headersSent) res.status(404).end()
   })
 })
 
