@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
-import { api, backupUrl, type WatermarkConfig } from '../lib/api'
+import { api, backupUrl, type StreamMode, type WatermarkConfig } from '../lib/api'
 import WatermarkFields from '../components/WatermarkFields'
 import EncodingProfilesCard from '../components/EncodingProfilesCard'
 import { toast } from '../lib/toast'
 
-type SettingsTab = 'metadata' | 'watermark' | 'encoding' | 'maintenance'
+type SettingsTab = 'metadata' | 'streaming' | 'watermark' | 'encoding' | 'maintenance'
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'metadata', label: 'Metadata' },
+  { id: 'streaming', label: 'Streaming' },
   { id: 'watermark', label: 'Watermark' },
   { id: 'encoding', label: 'Encoding' },
   { id: 'maintenance', label: 'Maintenance' },
@@ -20,6 +21,7 @@ export default function Settings() {
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [wm, setWm] = useState<WatermarkConfig | null>(null)
   const [wmMsg, setWmMsg] = useState<string | null>(null)
+  const [streamMode, setStreamMode] = useState<StreamMode>('mpegts')
   const [wipeAssets, setWipeAssets] = useState(true)
   const [resetBusy, setResetBusy] = useState(false)
   const [resetMsg, setResetMsg] = useState<string | null>(null)
@@ -30,9 +32,20 @@ export default function Settings() {
       .then((s) => {
         setConfigured(s.tmdbConfigured)
         setWm(s.watermark)
+        setStreamMode(s.streamMode)
       })
       .catch(() => {})
   }, [])
+
+  async function saveMode(mode: StreamMode) {
+    setStreamMode(mode)
+    try {
+      await api.saveStreamMode(mode)
+      toast.success(`Streaming mode: ${mode === 'hls' ? 'Shared HLS' : 'MPEG-TS'}`)
+    } catch {
+      toast.error('Failed to save streaming mode')
+    }
+  }
 
   async function saveWm(e: React.FormEvent) {
     e.preventDefault()
@@ -166,6 +179,47 @@ export default function Settings() {
           </button>
         </form>
       </div>
+      )}
+
+      {tab === 'streaming' && (
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+          <h2 className="font-semibold mb-1">Streaming mode</h2>
+          <p className="text-slate-400 text-sm mb-4">
+            How the M3U hands out channel streams. Change takes effect the next time a player reloads the
+            playlist.
+          </p>
+          <div className="space-y-2">
+            {([
+              { id: 'hls', title: 'Shared HLS', desc: 'One transcode per channel, served to every viewer. Best for multiple viewers / weaker CPUs. Recommended.' },
+              { id: 'mpegts', title: 'MPEG-TS (per-client)', desc: 'A separate transcode for each viewer. Simplest; fine for a single viewer or a very fast box.' },
+            ] as const).map((o) => (
+              <label
+                key={o.id}
+                className={
+                  'flex gap-3 rounded-lg border p-3 cursor-pointer transition-colors ' +
+                  (streamMode === o.id ? 'border-indigo-500/60 bg-indigo-500/5' : 'border-slate-800 hover:border-slate-600')
+                }
+              >
+                <input
+                  type="radio"
+                  name="streamMode"
+                  className="mt-0.5"
+                  checked={streamMode === o.id}
+                  onChange={() => saveMode(o.id)}
+                />
+                <div>
+                  <div className="text-sm font-medium">{o.title}</div>
+                  <div className="text-xs text-slate-500">{o.desc}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-slate-500 mt-3">
+            Both endpoints stay live regardless of this setting — a channel is always reachable at{' '}
+            <code className="text-slate-400">/iptv/channel/N.ts</code> and{' '}
+            <code className="text-slate-400">/iptv/channel/N/index.m3u8</code>.
+          </p>
+        </div>
       )}
 
       {tab === 'watermark' && wm && (

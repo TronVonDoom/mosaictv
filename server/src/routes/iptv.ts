@@ -79,6 +79,10 @@ iptvRouter.get('/channels.m3u', async (req, res) => {
   const channels = await prisma.channel.findMany({ orderBy: { number: 'asc' } })
   const base = baseUrl(req)
   const fallback = `${base}/mosaictv-icon.png`
+  // Global output mode: 'hls' (shared, one transcode per channel) or 'mpegts'
+  // (per-client). The stream URL each channel advertises depends on it.
+  const modeRow = await prisma.setting.findUnique({ where: { key: 'streamMode' } })
+  const hls = modeRow?.value === 'hls'
   let out = '#EXTM3U\n'
   for (const c of channels) {
     if (c.number == null) continue // draft — not published
@@ -87,7 +91,7 @@ iptvRouter.get('/channels.m3u', async (req, res) => {
       `#EXTINF:-1 tvg-id="${c.number}" tvg-chno="${c.number}" ` +
       `tvg-name="${escapeXml(c.name)}" tvg-logo="${escapeXml(logo)}" ` +
       `group-title="${escapeXml(c.group || 'MosaicTV')}",${c.name}\n`
-    out += `${base}/iptv/channel/${c.number}.ts\n`
+    out += hls ? `${base}/iptv/channel/${c.number}/index.m3u8\n` : `${base}/iptv/channel/${c.number}.ts\n`
   }
   res.setHeader('Content-Type', 'application/x-mpegurl')
   res.send(out)

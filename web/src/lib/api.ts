@@ -150,9 +150,11 @@ export function parseComingUp(json: string | null | undefined): ComingUpConfig |
   }
 }
 
+export type StreamMode = 'mpegts' | 'hls'
 export type SettingsInfo = {
   tmdbConfigured: boolean
   watermark: WatermarkConfig
+  streamMode: StreamMode
 }
 
 export type MetadataStatus = {
@@ -442,6 +444,8 @@ export const api = {
   metadataStatus: () => request<MetadataStatus>('/api/metadata/status'),
   saveWatermark: (wm: WatermarkConfig) =>
     request<{ ok: boolean; watermark: WatermarkConfig }>('/api/settings/watermark', { method: 'POST', body: JSON.stringify(wm) }),
+  saveStreamMode: (mode: StreamMode) =>
+    request<{ ok: boolean; streamMode: StreamMode }>('/api/settings/stream-mode', { method: 'POST', body: JSON.stringify({ mode }) }),
 
   // --- collections ---
   collections: (channelId?: number) =>

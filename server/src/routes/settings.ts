@@ -14,9 +14,11 @@ async function setSetting(k: string, v: string | null) {
 // live here with per-logo overrides on the Media page.
 settingsRouter.get('/', async (_req, res) => {
   const key = await getTmdbKey()
+  const modeRow = await prisma.setting.findUnique({ where: { key: 'streamMode' } })
   res.json({
     tmdbConfigured: !!key,
     watermark: await loadWatermark(),
+    streamMode: modeRow?.value === 'hls' ? 'hls' : 'mpegts',
   })
 })
 
@@ -24,6 +26,15 @@ settingsRouter.post('/watermark', async (req, res) => {
   const wm = sanitizeWatermark(req.body)
   await setSetting('watermark', JSON.stringify(wm))
   res.json({ ok: true, watermark: wm })
+})
+
+// Global streaming output mode. 'hls' = shared (one transcode per channel,
+// many viewers); 'mpegts' = per-client. Only affects which URL the M3U hands
+// out; both endpoints stay live regardless.
+settingsRouter.post('/stream-mode', async (req, res) => {
+  const mode = req.body?.mode === 'hls' ? 'hls' : 'mpegts'
+  await setSetting('streamMode', mode)
+  res.json({ ok: true, streamMode: mode })
 })
 
 // Validate and save the TMDB API key in one step.
