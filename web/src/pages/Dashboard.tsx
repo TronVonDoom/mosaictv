@@ -188,19 +188,13 @@ export default function Dashboard() {
           <h2 className="font-semibold mb-3">
             On air <span className="text-slate-500 font-normal text-sm">— live guide</span>
           </h2>
-          <div className="space-y-3">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/60 divide-y divide-slate-800/60 overflow-hidden">
             {onAir.map((c) => {
               const g = guides[c.id]
+              const logo = c.logoId ? logoImageUrl(c.logoId) : '/mosaictv-icon.png'
               return (
-                <div key={c.id} className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-lg bg-slate-950 border border-slate-800 shrink-0 flex items-center justify-center overflow-hidden">
-                      <img
-                        src={c.logoId ? logoImageUrl(c.logoId) : '/mosaictv-icon.png'}
-                        alt=""
-                        className="max-w-full max-h-full object-contain"
-                      />
-                    </div>
+                <div key={c.id} className="p-3">
+                  <div className="flex items-center gap-3 mb-2 px-1">
                     <span className="font-mono text-indigo-300 shrink-0">{c.number}</span>
                     <Link to={`/channels/${c.id}#guide`} className="font-medium hover:text-indigo-300 transition-colors truncate">
                       {c.name}
@@ -216,7 +210,7 @@ export default function Dashboard() {
                     )}
                   </div>
                   {g && g.items.length > 0 ? (
-                    <TimelineView playout={g} />
+                    <TimelineView playout={g} logo={logo} />
                   ) : (
                     <div className="text-xs text-slate-600 px-1 py-3">
                       {c.playoutCount > 0 ? 'Loading guide…' : 'Guide not built yet — open the channel and Build.'}
