@@ -27,7 +27,7 @@ function GettingStarted({ stats, channels }: { stats: Stats; channels: Channel[]
   return (
     <div className="mt-6 rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-5">
       <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
-        <h2 className="font-semibold text-lg">📺 Let's get started!</h2>
+        <h2 className="font-semibold text-lg text-gradient-brand">📺 Let's get started!</h2>
         <span className="text-xs text-slate-400">{doneCount} / {steps.length} done</span>
       </div>
       <p className="text-slate-400 text-sm mb-4">
@@ -112,7 +112,7 @@ export default function Dashboard() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-1">Dashboard</h1>
-      <p className="text-slate-400 text-sm mb-6">
+      <p className="text-sm mb-6 font-medium text-gradient-brand inline-block">
         Your library. Your channels. Broadcasting live.
       </p>
 

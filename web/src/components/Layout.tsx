@@ -13,8 +13,9 @@ const navItems = [
 export default function Layout() {
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex">
+    <div className="min-h-screen text-slate-100 flex bg-slate-950 bg-[radial-gradient(1000px_600px_at_8%_-10%,rgba(139,92,246,0.10),transparent_60%),radial-gradient(900px_600px_at_100%_0%,rgba(34,211,238,0.06),transparent_55%)]">
       <aside className="w-56 shrink-0 border-r border-slate-800 bg-slate-900/40 flex flex-col">
+        <div className="h-1 bg-gradient-brand" />
         <div className="px-4 py-5 border-b border-slate-800">
           <img src="/logo-wide.png" alt="MosaicTV" className="w-full max-w-[190px]" />
         </div>
@@ -27,7 +28,7 @@ export default function Layout() {
               className={({ isActive }) =>
                 'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ' +
                 (isActive
-                  ? 'bg-indigo-500/15 text-indigo-300'
+                  ? 'bg-gradient-to-r from-violet-500/20 to-cyan-500/10 text-white ring-1 ring-violet-500/30'
                   : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200')
               }
             >

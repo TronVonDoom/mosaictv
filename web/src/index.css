@@ -1,5 +1,37 @@
 @import "tailwindcss";
 
+/* ── MosaicTV theme ───────────────────────────────────────────────────────
+   The brand accent is a violet drawn from the logo's cool side; the full
+   rainbow (violet→blue→cyan→green→gold→pink) is reserved for hero moments.
+   We retint Tailwind's `indigo` scale to the brand violet so every existing
+   accent (buttons, links, focus rings, active nav) adopts MosaicTV at once. */
+@theme {
+  --color-indigo-200: #ddd6fe;
+  --color-indigo-300: #c4b5fd;
+  --color-indigo-400: #a78bfa;
+  --color-indigo-500: #8b5cf6;
+  --color-indigo-600: #7c3aed;
+
+  --color-brand: #8b5cf6;
+  --gradient-brand: linear-gradient(
+    90deg, #a855f7, #6366f1, #3b82f6, #22d3ee, #34d399, #fbbf24, #fb7185
+  );
+}
+
+@layer utilities {
+  /* Rainbow wordmark / heading text. */
+  .text-gradient-brand {
+    background-image: var(--gradient-brand);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  /* Solid rainbow fill for bars, chips, indicators. */
+  .bg-gradient-brand {
+    background-image: var(--gradient-brand);
+  }
+}
+
 :root {
   color-scheme: dark;
 }

@@ -1258,6 +1258,9 @@ export async function warmFiller(): Promise<void> {
   })
   for (const ch of channels) {
     const chLogo = await logoFileById(ch.logoId, ch.logoUrl)
+    // No configured filler ⇒ the channel falls back to the frosted-glass ident,
+    // so pre-build that from its logo too (else the first gap stalls on it).
+    if (ch.fillers.length === 0 && chLogo) await ensureFrostedFiller(chLogo).catch(() => {})
     for (const f of ch.fillers) await resolveFillerClip(f, chLogo).catch(() => {})
     for (const b of ch.timeBlocks) {
       if (b.fillers.length === 0) continue
@@ -1632,7 +1635,13 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
             clip = r.clip
             music = r.music
           } else {
-            clip = await ensureAnimatedFiller()
+            // No filler configured: default to the frosted-glass station ident
+            // built from the channel/block logo. localLogo always resolves to at
+            // least the bundled icon; fall back to the animated gradient only if
+            // frosted generation fails or there's somehow no logo.
+            clip =
+              (logo ? await ensureFrostedFiller(logo).catch(() => undefined) : undefined) ??
+              (await ensureAnimatedFiller())
           }
           const genMs = Date.now() - genStart
           if (genMs > 500) log('warn', 'system', `Channel ${channelNumber}: filler resolve blocked ${genMs}ms (should be pre-warmed)`)

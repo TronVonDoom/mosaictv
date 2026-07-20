@@ -5,13 +5,11 @@ const inp = 'rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-1.5 text-
 const emptyDraft: FillerInput = { name: '', style: 'frosted', assetId: null, audioAssetId: null, durationMode: 'fixed', durationSec: 30 }
 
 // Generated visual presets (custom = an uploaded clip instead).
+// Only the polished frosted-glass ident ships for now; the other generated
+// looks (logo wall, pulse, animated, vintage, retro) stay defined for when
+// they're refined — re-add them to STYLES to bring them back.
 const STYLES: { id: FillerInput['style']; label: string; desc: string }[] = [
   { id: 'frosted', label: 'Frosted glass', desc: 'logos scrolling behind blurred glass, sharp logos in front' },
-  { id: 'logowall', label: 'Logo wall', desc: 'dim rows of the logo drifting past, logo centered' },
-  { id: 'pulse', label: 'Logo pulse', desc: 'logo centered on a slowly breathing dark gradient' },
-  { id: 'animated', label: 'Animated gradient', desc: 'drifting colors with grain and vignette' },
-  { id: 'vintage', label: 'Vintage film', desc: 'warm sepia drift with film grain' },
-  { id: 'retro', label: 'Retro test bars', desc: 'classic SMPTE bars with analog noise' },
   { id: 'custom', label: 'Custom clip', desc: 'an uploaded video from the Media page' },
 ]
 const styleLabel = (s: string) => STYLES.find((x) => x.id === s)?.label ?? s
