@@ -4,8 +4,9 @@ import { api, type Collection, type Library, type MediaSearchResult } from '../l
 import MediaSearchInput from './MediaSearchInput'
 import LogoPicker from './LogoPicker'
 import { toast } from '../lib/toast'
+import { errorMessage } from '../lib/errors'
+import { Banner, Card, Input, Select } from './ui'
 
-const input = 'rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm focus:border-indigo-500 outline-none'
 
 // Create/edit the collections that belong to one channel (the "branded units":
 // Nick Jr., Snick, …). Notifies the parent on any change so rotation/block
@@ -43,7 +44,7 @@ export default function CollectionManager({
       await fn()
       refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong')
+      setError(errorMessage(err, 'Something went wrong'))
     }
   }
 
@@ -93,20 +94,20 @@ export default function CollectionManager({
   }
 
   return (
-    <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 mb-6">
+    <Card className="p-5 mb-6">
       <h2 className="font-semibold mb-1">Collections</h2>
       <p className="text-slate-500 text-xs mb-4">
         This channel's programming units — e.g. “Nick Jr.”, “Snick”. Each has its own shows/movies and logo, and
         is used by the rotation and time blocks below.
       </p>
 
-      {error && <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-300 text-sm p-3 mb-4">{error}</div>}
+      {error && <Banner className="mb-4">{error}</Banner>}
 
       {/* Create */}
       <form onSubmit={add} className="flex flex-wrap gap-2 items-end border border-slate-800 rounded-lg p-3 mb-4 bg-slate-950/40">
         <label className="flex flex-col gap-1 text-sm flex-1 min-w-40">
           <span className="text-slate-400">New collection</span>
-          <input className={input} placeholder="Nick Jr." value={name} onChange={(e) => setName(e.target.value)} />
+          <Input placeholder="Nick Jr." value={name} onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-slate-400">Logo (optional)</span>
@@ -142,7 +143,7 @@ export default function CollectionManager({
                     <div className="grid md:grid-cols-2 gap-2">
                       <label className="flex flex-col gap-1 text-sm">
                         <span className="text-slate-400">Name</span>
-                        <input className={input} value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+                        <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
                       </label>
                       <label className="flex flex-col gap-1 text-sm">
                         <span className="text-slate-400">Logo</span>
@@ -152,18 +153,18 @@ export default function CollectionManager({
                     <details className="text-sm">
                       <summary className="text-xs text-slate-500 cursor-pointer">Advanced: smart filter (auto-include matching media)</summary>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
-                        <select className={input} value={editForm.libraryId} onChange={(e) => setEditForm({ ...editForm, libraryId: e.target.value })}>
+                        <Select value={editForm.libraryId} onChange={(e) => setEditForm({ ...editForm, libraryId: e.target.value })}>
                           <option value="">Any library</option>
                           {libs.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                        </select>
-                        <select className={input} value={editForm.filterType} onChange={(e) => setEditForm({ ...editForm, filterType: e.target.value })}>
+                        </Select>
+                        <Select value={editForm.filterType} onChange={(e) => setEditForm({ ...editForm, filterType: e.target.value })}>
                           <option value="">Any type</option>
                           <option value="episode">Episodes</option>
                           <option value="movie">Movies</option>
                           <option value="other">Other</option>
-                        </select>
-                        <input className={input} placeholder="Title contains" value={editForm.filterSearch} onChange={(e) => setEditForm({ ...editForm, filterSearch: e.target.value })} />
-                        <input className={input} placeholder="Genre contains" value={editForm.filterGenre} onChange={(e) => setEditForm({ ...editForm, filterGenre: e.target.value })} />
+                        </Select>
+                        <Input placeholder="Title contains" value={editForm.filterSearch} onChange={(e) => setEditForm({ ...editForm, filterSearch: e.target.value })} />
+                        <Input placeholder="Genre contains" value={editForm.filterGenre} onChange={(e) => setEditForm({ ...editForm, filterGenre: e.target.value })} />
                       </div>
                     </details>
                     <div className="flex gap-2 justify-end">
@@ -193,6 +194,6 @@ export default function CollectionManager({
           })}
         </div>
       )}
-    </section>
+    </Card>
   )
 }

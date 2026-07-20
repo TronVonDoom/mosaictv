@@ -1,6 +1,6 @@
 import type { WatermarkConfig } from '../lib/api'
+import { Field, Input, Section } from './ui'
 
-const inp = 'rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm focus:border-indigo-500 outline-none w-full'
 
 const MODES: { value: WatermarkConfig['mode']; label: string; hint: string }[] = [
   { value: 'permanent', label: 'Permanent', hint: 'The logo stays on screen for the whole program.' },
@@ -9,25 +9,6 @@ const MODES: { value: WatermarkConfig['mode']; label: string; hint: string }[] =
 ]
 
 const CORNERS: WatermarkConfig['position'][] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
-
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1 text-sm">
-      <span className="text-slate-400">{label}</span>
-      {children}
-      {hint && <span className="text-xs text-slate-600">{hint}</span>}
-    </label>
-  )
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
-      <div className="text-xs uppercase tracking-wide text-slate-500 mb-2.5">{title}</div>
-      {children}
-    </div>
-  )
-}
 
 // Shared editor for a WatermarkConfig — used for the global default (Settings)
 // and per-logo overrides (Logos).
@@ -86,10 +67,10 @@ export default function WatermarkFields({
               </div>
               <div className="grid grid-cols-2 gap-3 flex-1 min-w-48">
                 <Field label="H margin %">
-                  <input type="number" min={0} max={45} className={inp} value={wm.horizontalMarginPercent} onChange={(e) => set('horizontalMarginPercent', Number(e.target.value))} />
+                  <Input type="number" min={0} max={45} className="w-full" value={wm.horizontalMarginPercent} onChange={(e) => set('horizontalMarginPercent', Number(e.target.value))} />
                 </Field>
                 <Field label="V margin %">
-                  <input type="number" min={0} max={45} className={inp} value={wm.verticalMarginPercent} onChange={(e) => set('verticalMarginPercent', Number(e.target.value))} />
+                  <Input type="number" min={0} max={45} className="w-full" value={wm.verticalMarginPercent} onChange={(e) => set('verticalMarginPercent', Number(e.target.value))} />
                 </Field>
               </div>
             </div>
@@ -113,13 +94,13 @@ export default function WatermarkFields({
           <Section title="Appearance">
             <div className="grid grid-cols-3 gap-3">
               <Field label="Width %" hint="Share of the picture's width.">
-                <input type="number" min={1} max={50} className={inp} value={wm.widthPercent} onChange={(e) => set('widthPercent', Number(e.target.value))} />
+                <Input type="number" min={1} max={50} className="w-full" value={wm.widthPercent} onChange={(e) => set('widthPercent', Number(e.target.value))} />
               </Field>
               <Field label="Opacity %">
-                <input type="number" min={0} max={100} className={inp} value={wm.opacityPercent} onChange={(e) => set('opacityPercent', Number(e.target.value))} />
+                <Input type="number" min={0} max={100} className="w-full" value={wm.opacityPercent} onChange={(e) => set('opacityPercent', Number(e.target.value))} />
               </Field>
               <Field label="Fade (sec)" hint="0 = pop in and out.">
-                <input type="number" min={0} step={0.5} className={inp} value={wm.fadeSeconds} onChange={(e) => set('fadeSeconds', Number(e.target.value))} />
+                <Input type="number" min={0} step={0.5} className="w-full" value={wm.fadeSeconds} onChange={(e) => set('fadeSeconds', Number(e.target.value))} />
               </Field>
             </div>
             <label className="flex items-start gap-2 text-sm mt-3 select-none">
@@ -143,10 +124,10 @@ export default function WatermarkFields({
             <Section title="Timing">
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Every (min)">
-                  <input type="number" min={1} className={inp} value={wm.frequencyMinutes} onChange={(e) => set('frequencyMinutes', Number(e.target.value))} />
+                  <Input type="number" min={1} className="w-full" value={wm.frequencyMinutes} onChange={(e) => set('frequencyMinutes', Number(e.target.value))} />
                 </Field>
                 <Field label="Duration (sec)">
-                  <input type="number" min={1} className={inp} value={wm.durationSeconds} onChange={(e) => set('durationSeconds', Number(e.target.value))} />
+                  <Input type="number" min={1} className="w-full" value={wm.durationSeconds} onChange={(e) => set('durationSeconds', Number(e.target.value))} />
                 </Field>
               </div>
               <p className="text-xs text-slate-500 mt-2">

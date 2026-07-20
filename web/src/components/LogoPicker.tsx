@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, logoImageUrl, type Logo } from '../lib/api'
+import { errorMessage } from '../lib/errors'
+import { Select } from './ui'
 
 // A logo dropdown with an inline "+ Upload" so you never have to leave the page
 // to add a logo. Self-contained: fetches its own list and refreshes after upload.
@@ -39,19 +41,18 @@ export default function LogoPicker({
       await refresh()
       onChange(logo.id)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed')
+      setError(errorMessage(err, 'Upload failed'))
     } finally {
       setUploading(false)
       if (fileRef.current) fileRef.current.value = ''
     }
   }
 
-  const input = 'rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm focus:border-indigo-500 outline-none'
   return (
     <div>
       <div className="flex gap-2 items-center">
-        <select
-          className={input + ' flex-1 min-w-0'}
+        <Select
+          className="flex-1 min-w-0"
           value={value ?? ''}
           onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
         >
@@ -61,7 +62,7 @@ export default function LogoPicker({
               {l.name}
             </option>
           ))}
-        </select>
+        </Select>
         {value != null && (
           <img src={logoImageUrl(value)} alt="" className="w-9 h-9 rounded object-contain bg-slate-950 border border-slate-800 shrink-0" />
         )}

@@ -18,6 +18,8 @@ import ComingUpFields from '../components/ComingUpFields'
 import TimelineView from '../components/TimelineView'
 import WeeklyBlockGrid from '../components/WeeklyBlockGrid'
 import { toast } from '../lib/toast'
+import { errorMessage } from '../lib/errors'
+import { Banner, Card, Input, Select, Tabs } from '../components/ui'
 
 // Channel-level coming-up state is always a full config; "off" is enabled=false,
 // which we persist as null (see saveSettings).
@@ -50,7 +52,6 @@ function label(m: NonNullable<Playout['items'][number]['mediaItem']>): string {
   return m.title
 }
 
-const input = 'rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm focus:border-indigo-500 outline-none'
 
 type Tab = 'general' | 'collections' | 'schedule' | 'fillers' | 'guide'
 const TAB_IDS: Tab[] = ['general', 'collections', 'schedule', 'fillers', 'guide']
@@ -142,7 +143,7 @@ export default function ChannelEditor() {
       load()
       if (successMsg) toast.success(successMsg)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong')
+      setError(errorMessage(err, 'Something went wrong'))
     }
   }
 
@@ -220,7 +221,7 @@ export default function ChannelEditor() {
       await load()
       await loadPlayout()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Build failed')
+      setError(errorMessage(err, 'Build failed'))
     } finally {
       setBuilding(false)
     }
@@ -236,7 +237,7 @@ export default function ChannelEditor() {
       await load()
       await loadPlayout()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Reset failed')
+      setError(errorMessage(err, 'Reset failed'))
     } finally {
       setBuilding(false)
     }
@@ -267,31 +268,13 @@ export default function ChannelEditor() {
       </h1>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-slate-800 mb-6 overflow-x-auto">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={
-              'px-4 py-2 text-sm rounded-t-lg border-b-2 -mb-px whitespace-nowrap transition-colors ' +
-              (tab === t.id
-                ? 'border-indigo-400 text-indigo-300'
-                : 'border-transparent text-slate-400 hover:text-slate-200')
-            }
-          >
-            {t.label}
-            {t.badge != null && <span className="ml-1.5 text-[10px] rounded-full bg-slate-800 text-slate-400 px-1.5 py-0.5">{t.badge}</span>}
-          </button>
-        ))}
-      </div>
+      <Tabs tabs={tabs} active={tab} onChange={setTab} className="mb-6" />
 
-      {error && (
-        <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-300 text-sm p-3 mb-5">{error}</div>
-      )}
+      {error && <Banner className="mb-5">{error}</Banner>}
 
       {/* ------- General ------- */}
       {tab === 'general' && (
-        <form onSubmit={saveSettings} className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+        <Card><form onSubmit={saveSettings}>
           <h2 className="font-semibold mb-1">Channel settings</h2>
           <p className="text-slate-500 text-xs mb-4">
             Identity and output. Leave the number blank to keep the channel a draft (hidden from the guide and
@@ -300,24 +283,24 @@ export default function ChannelEditor() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-slate-400">Number</span>
-              <input className={input} type="number" placeholder="draft" value={chForm.number} onChange={(e) => setChForm({ ...chForm, number: e.target.value })} />
+              <Input type="number" placeholder="draft" value={chForm.number} onChange={(e) => setChForm({ ...chForm, number: e.target.value })} />
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-slate-400">Name</span>
-              <input className={input} value={chForm.name} onChange={(e) => setChForm({ ...chForm, name: e.target.value })} />
+              <Input value={chForm.name} onChange={(e) => setChForm({ ...chForm, name: e.target.value })} />
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-slate-400">Group</span>
-              <input className={input} placeholder="Entertainment" value={chForm.group} onChange={(e) => setChForm({ ...chForm, group: e.target.value })} />
+              <Input placeholder="Entertainment" value={chForm.group} onChange={(e) => setChForm({ ...chForm, group: e.target.value })} />
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-slate-400">Encoding profile</span>
-              <select className={input} value={chForm.profileId ?? ''} onChange={(e) => setChForm({ ...chForm, profileId: e.target.value ? Number(e.target.value) : null })}>
+              <Select value={chForm.profileId ?? ''} onChange={(e) => setChForm({ ...chForm, profileId: e.target.value ? Number(e.target.value) : null })}>
                 <option value="">Default (built-in)</option>
                 {profiles.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
-              </select>
+              </Select>
             </label>
           </div>
           <div className="flex flex-wrap gap-3 items-end">
@@ -341,7 +324,8 @@ export default function ChannelEditor() {
             </p>
             <ComingUpFields cfg={cu} onChange={setCu} />
           </div>
-        </form>
+          </form>
+        </Card>
       )}
 
       {/* ------- Collections ------- */}
@@ -351,7 +335,7 @@ export default function ChannelEditor() {
       {tab === 'schedule' && (
         <div className="space-y-6">
           {/* Rotation */}
-          <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+          <Card>
             <h2 className="font-semibold mb-1">Rotation <span className="text-slate-600 font-normal">(optional)</span></h2>
             <p className="text-slate-500 text-xs mb-4">The 24/7 default — loops forever. Leave empty for a blocks-only channel.</p>
             <div className="space-y-2 mb-4">
@@ -368,28 +352,28 @@ export default function ChannelEditor() {
               ))}
             </div>
             <form onSubmit={addRotation} className="flex flex-wrap gap-2 items-end border-t border-slate-800 pt-4">
-              <select className={input + ' flex-1 min-w-32'} value={rot.collectionId} onChange={(e) => setRot({ ...rot, collectionId: e.target.value })} required>
+              <Select className="flex-1 min-w-32" value={rot.collectionId} onChange={(e) => setRot({ ...rot, collectionId: e.target.value })} required>
                 <option value="">Collection…</option>
                 {cols.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              <select className={input} value={rot.mode} onChange={(e) => setRot({ ...rot, mode: e.target.value })}>
+              </Select>
+              <Select value={rot.mode} onChange={(e) => setRot({ ...rot, mode: e.target.value })}>
                 <option value="one">1 at a time</option>
                 <option value="multiple">multiple</option>
-              </select>
+              </Select>
               {rot.mode === 'multiple' && (
-                <input className={input + ' w-16'} type="number" min="1" value={rot.count} onChange={(e) => setRot({ ...rot, count: e.target.value })} />
+                <Input className="w-16" type="number" min="1" value={rot.count} onChange={(e) => setRot({ ...rot, count: e.target.value })} />
               )}
-              <select className={input} value={rot.playbackOrder} onChange={(e) => setRot({ ...rot, playbackOrder: e.target.value })}>
+              <Select value={rot.playbackOrder} onChange={(e) => setRot({ ...rot, playbackOrder: e.target.value })}>
                 <option value="chronological">in order</option>
                 <option value="rotate">rotate shows</option>
                 <option value="shuffle">shuffle</option>
-              </select>
+              </Select>
               <button type="submit" className="rounded-lg bg-indigo-500 hover:bg-indigo-400 px-3 py-2 text-sm font-medium">Add</button>
             </form>
-          </section>
+          </Card>
 
           {/* Time blocks */}
-          <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+          <Card>
             <h2 className="font-semibold mb-1">Time blocks <span className="text-slate-600 font-normal">(optional)</span></h2>
             <p className="text-slate-500 text-xs mb-4">Scheduled slots for specific days/times. Override the rotation while active. Set each block's filler on the Fillers tab.</p>
 
@@ -453,50 +437,50 @@ export default function ChannelEditor() {
               </div>
 
               <div className="flex flex-wrap gap-2 items-end">
-                <select className={input + ' flex-1 min-w-32'} value={blk.collectionId} onChange={(e) => setBlk({ ...blk, collectionId: e.target.value })} required>
+                <Select className="flex-1 min-w-32" value={blk.collectionId} onChange={(e) => setBlk({ ...blk, collectionId: e.target.value })} required>
                   <option value="">Collection…</option>
                   {cols.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-                <input className={input} type="time" value={blk.start} onChange={(e) => setBlk({ ...blk, start: e.target.value })} />
-                <input className={input} type="time" value={blk.end} onChange={(e) => setBlk({ ...blk, end: e.target.value })} />
-                <select className={input} value={blk.playbackOrder} onChange={(e) => setBlk({ ...blk, playbackOrder: e.target.value })}>
+                </Select>
+                <Input type="time" value={blk.start} onChange={(e) => setBlk({ ...blk, start: e.target.value })} />
+                <Input type="time" value={blk.end} onChange={(e) => setBlk({ ...blk, end: e.target.value })} />
+                <Select value={blk.playbackOrder} onChange={(e) => setBlk({ ...blk, playbackOrder: e.target.value })}>
                   <option value="chronological">in order</option>
                   <option value="rotate">rotate shows</option>
                   <option value="shuffle">shuffle</option>
-                </select>
-                <select className={input} value={blk.fillerMode} onChange={(e) => setBlk({ ...blk, fillerMode: e.target.value })} title="Fill the leftover time so the block ends on schedule">
+                </Select>
+                <Select value={blk.fillerMode} onChange={(e) => setBlk({ ...blk, fillerMode: e.target.value })} title="Fill the leftover time so the block ends on schedule">
                   <option value="none">no filler</option>
                   <option value="between">filler between</option>
                   <option value="end">filler at end</option>
-                </select>
-                <select className={input} value={blk.startMode} onChange={(e) => setBlk({ ...blk, startMode: e.target.value })} title="Soft: starts at the next program boundary. Hard: starts exactly on time (fills the gap before it).">
+                </Select>
+                <Select value={blk.startMode} onChange={(e) => setBlk({ ...blk, startMode: e.target.value })} title="Soft: starts at the next program boundary. Hard: starts exactly on time (fills the gap before it).">
                   <option value="soft">soft start</option>
                   <option value="hard">hard start</option>
-                </select>
+                </Select>
                 <button type="submit" className="rounded-lg bg-indigo-500 hover:bg-indigo-400 px-3 py-2 text-sm font-medium">{editingBlock ? 'Save' : 'Add'}</button>
                 {editingBlock && (
                   <button type="button" onClick={resetBlockForm} className="rounded-lg border border-slate-700 hover:border-slate-500 px-3 py-2 text-sm">Cancel</button>
                 )}
               </div>
             </form>
-          </section>
+          </Card>
         </div>
       )}
 
       {/* ------- Fillers ------- */}
       {tab === 'fillers' && (
         <div className="space-y-6">
-          <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+          <Card>
             <h2 className="font-semibold mb-1">Channel default</h2>
             <p className="text-slate-500 text-xs mb-3">
               Assign fillers from the library to play during gaps, unless a block below has its own. Build and
               generate fillers under <Link to="/media" className="text-indigo-300">Media → Fillers</Link>.
             </p>
             <FillerAssignmentPicker owner={{ channelId }} hint="channel default" />
-          </section>
+          </Card>
 
           {ch.timeBlocks.map((b) => (
-            <section key={b.id} className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+            <Card key={b.id}>
               <h2 className="font-semibold mb-1">
                 {b.collection.name}{' '}
                 <span className="text-xs text-slate-500 font-normal">
@@ -508,7 +492,7 @@ export default function ChannelEditor() {
                 channel's).
               </p>
               <FillerAssignmentPicker owner={{ timeBlockId: b.id }} hint={`during ${b.collection.name}`} />
-            </section>
+            </Card>
           ))}
 
           {ch.timeBlocks.length === 0 && (
@@ -519,7 +503,7 @@ export default function ChannelEditor() {
 
       {/* ------- Guide ------- */}
       {tab === 'guide' && (
-        <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+        <Card>
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
             <div className="flex items-center gap-3">
               <h2 className="font-semibold">Guide preview</h2>
@@ -574,7 +558,7 @@ export default function ChannelEditor() {
               })}
             </div>
           )}
-        </section>
+        </Card>
       )}
     </div>
   )

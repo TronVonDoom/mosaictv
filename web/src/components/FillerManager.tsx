@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { api, assetFileUrl, type Asset, type Filler, type FillerInput } from '../lib/api'
 import { toast } from '../lib/toast'
+import { errorMessage } from '../lib/errors'
+import { Input, Select } from './ui'
 
-const inp = 'rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-1.5 text-sm focus:border-indigo-500 outline-none'
 const emptyDraft: FillerInput = { name: '', style: 'frosted', assetId: null, audioAssetId: null, durationMode: 'fixed', durationSec: 30 }
 
 // Generated visual presets (custom = an uploaded clip instead).
@@ -88,7 +89,7 @@ export default function FillerManager() {
         if (tries === 599) setGenError('Generation is taking too long — check the Logs.')
       }
     } catch (e) {
-      setGenError(e instanceof Error ? e.message : 'Generation failed')
+      setGenError(errorMessage(e, 'Generation failed'))
     } finally {
       setGeneratingId(null)
     }
@@ -154,44 +155,44 @@ export default function FillerManager() {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
             <label className="flex flex-col gap-1 text-xs">
               <span className="text-slate-400">Name (optional)</span>
-              <input className={inp} value={draft.name ?? ''} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Bumper" />
+              <Input className="px-2.5 py-1.5" value={draft.name ?? ''} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Bumper" />
             </label>
             <label className="flex flex-col gap-1 text-xs">
               <span className="text-slate-400">Visual</span>
-              <select className={inp} value={draft.style} onChange={(e) => set('style', e.target.value as FillerInput['style'])}>
+              <Select className="px-2.5 py-1.5" value={draft.style} onChange={(e) => set('style', e.target.value as FillerInput['style'])}>
                 {STYLES.map((s) => (
                   <option key={s.id} value={s.id}>{s.label}</option>
                 ))}
-              </select>
+              </Select>
               <span className="text-[10px] text-slate-500 leading-tight">{STYLES.find((s) => s.id === draft.style)?.desc}</span>
             </label>
             {draft.style === 'custom' && (
               <label className="flex flex-col gap-1 text-xs">
                 <span className="text-slate-400">Clip</span>
-                <select className={inp} value={draft.assetId ?? ''} onChange={(e) => set('assetId', e.target.value ? Number(e.target.value) : null)}>
+                <Select className="px-2.5 py-1.5" value={draft.assetId ?? ''} onChange={(e) => set('assetId', e.target.value ? Number(e.target.value) : null)}>
                   <option value="">Pick a filler clip…</option>
                   {fillerAssets.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
+                </Select>
               </label>
             )}
             <label className="flex flex-col gap-1 text-xs">
               <span className="text-slate-400">Audio (optional)</span>
-              <select className={inp} value={draft.audioAssetId ?? ''} onChange={(e) => set('audioAssetId', e.target.value ? Number(e.target.value) : null)}>
+              <Select className="px-2.5 py-1.5" value={draft.audioAssetId ?? ''} onChange={(e) => set('audioAssetId', e.target.value ? Number(e.target.value) : null)}>
                 <option value="">None</option>
                 {audioAssets.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
+              </Select>
             </label>
             <label className="flex flex-col gap-1 text-xs">
               <span className="text-slate-400">Length</span>
-              <select className={inp} value={draft.durationMode} onChange={(e) => set('durationMode', e.target.value as FillerInput['durationMode'])}>
+              <Select className="px-2.5 py-1.5" value={draft.durationMode} onChange={(e) => set('durationMode', e.target.value as FillerInput['durationMode'])}>
                 <option value="fixed">Fixed</option>
                 <option value="audio" disabled={draft.audioAssetId == null}>Match audio</option>
-              </select>
+              </Select>
             </label>
             {draft.durationMode === 'fixed' && (
               <label className="flex flex-col gap-1 text-xs">
                 <span className="text-slate-400">Seconds</span>
-                <input type="number" min={5} max={600} className={inp} value={draft.durationSec} onChange={(e) => set('durationSec', Number(e.target.value))} />
+                <input type="number" min={5} max={600} className="px-2.5 py-1.5" value={draft.durationSec} onChange={(e) => set('durationSec', Number(e.target.value))} />
               </label>
             )}
           </div>

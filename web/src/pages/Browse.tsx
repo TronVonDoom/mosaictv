@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { api, type Library, type LibraryKind } from '../lib/api'
 
 import Icon, { type IconName } from '../components/Icon'
+import { cardClass } from '../components/ui'
 
 const KIND_ICON: Record<LibraryKind, IconName> = { tv: 'show', movie: 'movie', music: 'audio', other: 'clip' }
 const KIND_LABEL: Record<LibraryKind, string> = {
@@ -43,7 +44,7 @@ export default function Browse() {
             <Link
               key={l.id}
               to={`/browse/${l.id}`}
-              className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 flex items-center gap-4 hover:border-indigo-500 hover:bg-slate-900 transition-colors"
+              className={cardClass('p-5 flex items-center gap-4 hover:border-indigo-500 hover:bg-slate-900 transition-colors')}
             >
               <div className="text-slate-200"><Icon name={KIND_ICON[l.kind]} size={36} colored /></div>
               <div className="min-w-0">

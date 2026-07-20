@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import Icon from './Icon'
 import { api, type FsListing } from '../lib/api'
+import { errorMessage } from '../lib/errors'
+import { Button, Modal } from './ui'
 
 export default function DirectoryPicker({
   initialPath,
@@ -21,7 +23,7 @@ export default function DirectoryPicker({
     api
       .browse(path)
       .then((l) => setListing(l))
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to open folder'))
+      .catch((e) => setError(errorMessage(e, 'Failed to open folder')))
       .finally(() => setLoading(false))
   }
 
@@ -37,14 +39,7 @@ export default function DirectoryPicker({
   }, [onClose])
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full shadow-2xl flex flex-col max-h-[80vh]"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} panelClassName="max-w-lg w-full flex flex-col max-h-[80vh]">
         <div className="p-4 border-b border-slate-800">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">Choose a folder</h2>
@@ -97,15 +92,10 @@ export default function DirectoryPicker({
           <span className="text-xs text-slate-500">
             Navigate into the folder you want, then select it.
           </span>
-          <button
-            onClick={() => listing && onSelect(listing.path)}
-            disabled={!listing}
-            className="rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 px-4 py-2 text-sm font-medium shrink-0"
-          >
+          <Button onClick={() => listing && onSelect(listing.path)} disabled={!listing} className="shrink-0">
             Select this folder
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

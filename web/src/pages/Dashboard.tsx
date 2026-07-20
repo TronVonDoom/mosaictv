@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Icon from '../components/Icon'
 import TimelineView from '../components/TimelineView'
 import { api, logoImageUrl, type Channel, type Health, type Playout, type Stats } from '../lib/api'
 import { formatDuration } from '../lib/format'
+import { usePolling } from '../lib/hooks'
+import { Card } from '../components/ui'
 
 type Step = { title: string; hint: string; to: string; done: boolean }
 
@@ -81,13 +83,13 @@ function GettingStarted({ stats, channels }: { stats: Stats; channels: Channel[]
   )
 }
 
-function Card({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+    <Card>
       <div className="text-slate-400 text-xs uppercase tracking-wide">{label}</div>
       <div className="text-2xl font-semibold mt-1">{value}</div>
       {sub && <div className="text-slate-500 text-xs mt-1">{sub}</div>}
-    </div>
+    </Card>
   )
 }
 
@@ -98,21 +100,21 @@ export default function Dashboard() {
   const [reachable, setReachable] = useState<boolean | null>(null)
   const [guides, setGuides] = useState<Record<number, Playout>>({})
 
-  useEffect(() => {
-    const load = () => {
-      Promise.all([api.health(), api.stats(), api.channels()])
-        .then(([h, s, c]) => {
-          setHealth(h)
-          setStats(s)
-          setChannels(c)
-          setReachable(true)
-        })
-        .catch(() => setReachable(false))
-    }
-    load()
-    const id = setInterval(load, 5000)
-    return () => clearInterval(id)
+  const load = useCallback(() => {
+    Promise.all([api.health(), api.stats(), api.channels()])
+      .then(([h, s, c]) => {
+        setHealth(h)
+        setStats(s)
+        setChannels(c)
+        setReachable(true)
+      })
+      .catch(() => setReachable(false))
   }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+  usePolling(load, 5000)
 
   const onAir = channels.filter((c) => c.number != null)
   // Fetch each on-air channel's guide once the set of on-air channels changes
@@ -167,20 +169,20 @@ export default function Dashboard() {
 
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card label="Libraries" value={String(stats.libraries)} />
-          <Card
+          <StatTile label="Libraries" value={String(stats.libraries)} />
+          <StatTile
             label="Indexed media"
             value={String(stats.items)}
             sub={stats.missing > 0 ? `${stats.missing} missing` : undefined}
           />
-          <Card label="Episodes" value={String(stats.byType.episode ?? 0)} />
-          <Card label="Movies" value={String(stats.byType.movie ?? 0)} />
-          <Card
+          <StatTile label="Episodes" value={String(stats.byType.episode ?? 0)} />
+          <StatTile label="Movies" value={String(stats.byType.movie ?? 0)} />
+          <StatTile
             label="Total runtime"
             value={formatDuration(stats.totalDurationSec)}
             sub="across all indexed media"
           />
-          <Card label="Other clips" value={String(stats.byType.other ?? 0)} />
+          <StatTile label="Other clips" value={String(stats.byType.other ?? 0)} />
         </div>
       )}
 
@@ -189,7 +191,7 @@ export default function Dashboard() {
           <h2 className="font-semibold mb-3">
             On air <span className="text-slate-500 font-normal text-sm">— live guide</span>
           </h2>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 divide-y divide-slate-800/60 overflow-hidden">
+          <Card className="divide-y divide-slate-800/60 overflow-hidden">
             {onAir.map((c) => {
               const g = guides[c.id]
               const logo = c.logoId ? logoImageUrl(c.logoId) : '/mosaictv-icon.png'
@@ -220,7 +222,7 @@ export default function Dashboard() {
                 </div>
               )
             })}
-          </div>
+          </Card>
         </div>
       )}
 

@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, assetFileUrl, type Asset, type AssetKind } from '../lib/api'
+import { errorMessage } from '../lib/errors'
+import { toast } from '../lib/toast'
+import { Button, Card, Field, Input } from './ui'
 
 function fmtSize(bytes: number | null): string {
   if (!bytes) return ''
@@ -27,7 +30,6 @@ export default function AssetManager({
   const [assets, setAssets] = useState<Asset[]>([])
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const refresh = () => api.assets(kind).then(setAssets).catch(() => {})
@@ -41,18 +43,18 @@ export default function AssetManager({
     const f = fileRef.current?.files?.[0]
     const nm = name.trim() || f?.name.replace(/\.[^.]+$/, '') || ''
     if (!f || !nm) {
-      setMsg({ type: 'err', text: 'Pick a file (a name is optional).' })
+      toast.error('Pick a file (a name is optional).')
       return
     }
     setBusy(true)
-    setMsg(null)
     try {
       await api.uploadAsset(kind, nm, f)
       setName('')
       if (fileRef.current) fileRef.current.value = ''
+      toast.success(`Uploaded ${nm}`)
       refresh()
     } catch (err) {
-      setMsg({ type: 'err', text: err instanceof Error ? err.message : 'Upload failed' })
+      toast.error(errorMessage(err, 'Upload failed'))
     } finally {
       setBusy(false)
     }
@@ -66,49 +68,36 @@ export default function AssetManager({
   return (
     <div>
       {hint && <p className="text-xs text-slate-500 mb-3">{hint}</p>}
-      {msg && (
-        <div
-          className={
-            'rounded-lg text-sm p-3 mb-4 border ' +
-            (msg.type === 'ok'
-              ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-              : 'border-rose-500/40 bg-rose-500/10 text-rose-300')
-          }
-        >
-          {msg.text}
-        </div>
-      )}
 
-      <form onSubmit={upload} className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 mb-6 flex flex-wrap gap-3 items-end">
-        <label className="flex flex-col gap-1 text-sm flex-1 min-w-40">
-          <span className="text-slate-400">Name (optional)</span>
-          <input
-            className="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm focus:border-indigo-500 outline-none"
-            placeholder="defaults to the file name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-400">File</span>
-          <input
-            ref={fileRef}
-            type="file"
-            accept={accept}
-            className="text-sm text-slate-400 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-slate-200 file:text-sm"
-          />
-        </label>
-        <button type="submit" disabled={busy} className="rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 px-5 py-2 text-sm font-medium">
-          {busy ? 'Uploading…' : 'Upload'}
-        </button>
-      </form>
+      <Card className="p-5 mb-6">
+        <form onSubmit={upload} className="flex flex-wrap gap-3 items-end">
+          <Field label="Name (optional)" className="flex-1 min-w-40">
+            <Input
+              placeholder="defaults to the file name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </Field>
+          <Field label="File">
+            <input
+              ref={fileRef}
+              type="file"
+              accept={accept}
+              className="text-sm text-slate-400 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-slate-200 file:text-sm"
+            />
+          </Field>
+          <Button type="submit" size="lg" disabled={busy}>
+            {busy ? 'Uploading…' : 'Upload'}
+          </Button>
+        </form>
+      </Card>
 
       {assets.length === 0 ? (
         <div className="text-slate-500 text-sm">{emptyText}</div>
       ) : (
         <div className="space-y-2">
           {assets.map((a) => (
-            <div key={a.id} className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 flex flex-wrap items-center gap-3">
+            <Card key={a.id} className="p-3 flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium truncate" title={a.name}>{a.name}</div>
                 <div className="text-xs text-slate-500">{a.mime}{a.sizeBytes ? ` · ${fmtSize(a.sizeBytes)}` : ''}</div>
@@ -121,7 +110,7 @@ export default function AssetManager({
               <button onClick={() => del(a.id)} className="text-slate-600 hover:text-rose-400 text-lg px-1" aria-label="Delete">
                 ×
               </button>
-            </div>
+            </Card>
           ))}
         </div>
       )}

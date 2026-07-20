@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, logsDownloadUrl, type LogCategory, type LogEntry, type LogLevel } from '../lib/api'
 import { copyText } from '../lib/clipboard'
+import { usePolling } from '../lib/hooks'
 
 const LEVELS: { value: LogLevel | 'all'; label: string }[] = [
   { value: 'all', label: 'All levels' },
@@ -53,11 +54,7 @@ export default function Logs() {
     refresh()
   }, [refresh])
 
-  useEffect(() => {
-    if (!autoRefresh) return
-    const t = setInterval(refresh, 2000)
-    return () => clearInterval(t)
-  }, [autoRefresh, refresh])
+  usePolling(refresh, 2000, autoRefresh)
 
   // Keep the view pinned to the newest entry unless the user scrolls up.
   useEffect(() => {
@@ -138,7 +135,7 @@ export default function Logs() {
         <select
           value={level}
           onChange={(e) => setLevel(e.target.value as LogLevel | 'all')}
-          className="rounded-lg bg-slate-950 border border-slate-700 px-3 py-1.5 text-sm focus:border-indigo-500 outline-none"
+          className="py-1.5"
         >
           {LEVELS.map((l) => (
             <option key={l.value} value={l.value}>
@@ -149,7 +146,7 @@ export default function Logs() {
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value as LogCategory | 'all')}
-          className="rounded-lg bg-slate-950 border border-slate-700 px-3 py-1.5 text-sm focus:border-indigo-500 outline-none"
+          className="py-1.5"
         >
           {CATEGORIES.map((c) => (
             <option key={c.value} value={c.value}>

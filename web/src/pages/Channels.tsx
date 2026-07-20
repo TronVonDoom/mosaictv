@@ -3,13 +3,15 @@ import Icon from '../components/Icon'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, logoImageUrl, type Channel } from '../lib/api'
 import { copyText } from '../lib/clipboard'
+import { errorMessage } from '../lib/errors'
+import { usePolling } from '../lib/hooks'
+import { toast } from '../lib/toast'
 import LogoPicker from '../components/LogoPicker'
+import { Banner, Button, Card, Field, Input, buttonClass } from '../components/ui'
 
 // mpegts.js is ~280 kB and only needed once a preview is actually opened, so
 // keep it out of the main bundle.
 const ChannelPreview = lazy(() => import('../components/ChannelPreview'))
-
-const input = 'rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm focus:border-indigo-500 outline-none'
 
 // Compact one-line bar with copyable IPTV endpoint URLs.
 function IptvBar() {
@@ -50,7 +52,7 @@ function IptvBar() {
             key={r.label}
             onClick={() => copy(r.url)}
             title={r.url}
-            className="rounded-lg border border-slate-700 hover:border-indigo-500 hover:text-indigo-300 px-2.5 py-1 text-xs"
+            className={buttonClass('secondary', 'sm', 'px-2.5 py-1 text-xs')}
           >
             {copied === r.url ? 'Copied!' : `Copy ${r.label}`}
           </button>
@@ -71,9 +73,8 @@ export default function Channels() {
   const refresh = () => api.channels().then(setChannels).catch(() => {})
   useEffect(() => {
     refresh()
-    const id = setInterval(refresh, 10000) // keep now-playing / viewers fresh
-    return () => clearInterval(id)
   }, [])
+  usePolling(refresh, 10000) // keep now-playing / viewers fresh
 
   async function add(e: React.FormEvent) {
     e.preventDefault()
@@ -88,18 +89,18 @@ export default function Channels() {
       })
       navigate(`/channels/${created.id}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create channel')
+      setError(errorMessage(err, 'Failed to create channel'))
     }
   }
 
   async function del(c: Channel) {
     if (!confirm(`Delete "${c.name}" and everything in it (collections, schedule, fillers)?`)) return
-    setError(null)
     try {
       await api.deleteChannel(c.id)
+      toast.success(`Deleted "${c.name}"`)
       refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete channel')
+      toast.error(errorMessage(err, 'Failed to delete channel'))
     }
   }
 
@@ -107,51 +108,36 @@ export default function Channels() {
     <div>
       <div className="flex items-start justify-between gap-4 mb-1">
         <h1 className="text-2xl font-bold">Channels</h1>
-        <button
-          onClick={() => setCreating((v) => !v)}
-          className={
-            creating
-              ? 'rounded-lg border border-slate-700 hover:border-slate-500 px-4 py-2 text-sm'
-              : 'rounded-lg bg-indigo-500 hover:bg-indigo-400 px-4 py-2 text-sm font-medium'
-          }
-        >
+        <Button variant={creating ? 'secondary' : 'primary'} onClick={() => setCreating((v) => !v)}>
           {creating ? 'Cancel' : '+ New channel'}
-        </button>
+        </Button>
       </div>
       <p className="text-slate-400 text-sm mb-6">
         Each channel is a container: its collections, schedule, and fillers live inside it.
       </p>
 
-      {error && (
-        <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-300 text-sm p-3 mb-5">
-          {error}
-        </div>
-      )}
+      {error && <Banner className="mb-5">{error}</Banner>}
 
       {creating && (
         <form onSubmit={add} className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-5 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-[110px_1fr_1fr] gap-3 mb-3">
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-slate-400">Number (optional)</span>
-              <input className={input} type="number" placeholder="draft" value={form.number} onChange={(e) => setForm({ ...form, number: e.target.value })} />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-slate-400">Name</span>
-              <input className={input} placeholder="Nickelodeon" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-slate-400">Group (optional)</span>
-              <input className={input} placeholder="Kids" value={form.group} onChange={(e) => setForm({ ...form, group: e.target.value })} />
-            </label>
+            <Field label="Number (optional)">
+              <Input type="number" placeholder="draft" value={form.number} onChange={(e) => setForm({ ...form, number: e.target.value })} />
+            </Field>
+            <Field label="Name">
+              <Input placeholder="Nickelodeon" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+            </Field>
+            <Field label="Group (optional)">
+              <Input placeholder="Kids" value={form.group} onChange={(e) => setForm({ ...form, group: e.target.value })} />
+            </Field>
           </div>
           <div className="flex flex-wrap gap-3 items-end">
-            <label className="flex flex-col gap-1 text-sm flex-1 min-w-56">
-              <span className="text-slate-400">Logo (optional)</span>
+            <Field label="Logo (optional)" className="flex-1 min-w-56">
               <LogoPicker value={form.logoId} onChange={(id) => setForm({ ...form, logoId: id })} />
-            </label>
-            <button type="submit" className="rounded-lg bg-indigo-500 hover:bg-indigo-400 px-5 py-2 font-medium text-sm">
+            </Field>
+            <Button type="submit" size="lg">
               Create &amp; configure →
-            </button>
+            </Button>
           </div>
         </form>
       )}
@@ -163,7 +149,7 @@ export default function Channels() {
       ) : (
         <div className="space-y-2">
           {channels.map((c) => (
-            <div key={c.id} className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 flex items-center gap-4">
+            <Card key={c.id} className="p-3 flex items-center gap-4">
               <div className="text-lg font-mono w-12 text-center shrink-0" title={c.number == null ? 'Draft — no number assigned' : undefined}>
                 {c.number == null ? <span className="text-xs text-slate-600 uppercase">draft</span> : <span className="text-indigo-300">{c.number}</span>}
               </div>
@@ -200,17 +186,17 @@ export default function Channels() {
                 onClick={() => setPreviewing(c)}
                 disabled={c.number == null}
                 title={c.number == null ? 'Draft channels have no number to stream from' : `Preview channel ${c.number}`}
-                className="rounded-lg border border-slate-700 enabled:hover:border-indigo-500 enabled:hover:text-indigo-300 disabled:opacity-30 disabled:cursor-not-allowed px-3 py-1.5 text-sm shrink-0"
+                className={buttonClass('secondary', 'sm', 'shrink-0 disabled:opacity-30 disabled:cursor-not-allowed')}
               >
                 ▶ Preview
               </button>
-              <Link to={`/channels/${c.id}`} className="rounded-lg border border-slate-700 hover:border-indigo-500 hover:text-indigo-300 px-3 py-1.5 text-sm shrink-0">
+              <Link to={`/channels/${c.id}`} className={buttonClass('secondary', 'sm', 'shrink-0')}>
                 Edit
               </Link>
-              <button onClick={() => del(c)} className="rounded-lg border border-slate-800 text-slate-500 hover:border-rose-500/50 hover:text-rose-400 px-3 py-1.5 text-sm shrink-0">
+              <Button variant="subtle" size="sm" onClick={() => del(c)} className="shrink-0">
                 Delete
-              </button>
-            </div>
+              </Button>
+            </Card>
           ))}
         </div>
       )}

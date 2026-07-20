@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import mpegts from 'mpegts.js'
+import { Modal } from './ui'
 
 type Props = {
   number: number
@@ -78,14 +79,7 @@ export default function ChannelPreview({ number, name, nowPlaying, onClose }: Pr
   }, [url])
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-3xl rounded-xl border border-slate-700 bg-slate-900 overflow-hidden shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} panelClassName="w-full max-w-3xl overflow-hidden">
         <div className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-800">
           <span className="text-xs font-mono text-indigo-300 shrink-0">{number}</span>
           <div className="min-w-0 flex-1">
@@ -116,7 +110,6 @@ export default function ChannelPreview({ number, name, nowPlaying, onClose }: Pr
             ? 'Started muted — the browser blocked autoplay with sound. Unmute on the player.'
             : 'Live preview. This tunes in as a real viewer until you close it.'}
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

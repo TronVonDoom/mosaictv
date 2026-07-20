@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { api, logoImageUrl, type Logo, type WatermarkConfig } from '../lib/api'
 import WatermarkFields from '../components/WatermarkFields'
 import { toast } from '../lib/toast'
+import { errorMessage } from '../lib/errors'
+import { Banner, Button, Card, Field, Input, Modal, buttonClass } from '../components/ui'
 
 export default function Logos({ embedded = false }: { embedded?: boolean }) {
   const [logos, setLogos] = useState<Logo[]>([])
@@ -37,7 +39,7 @@ export default function Logos({ embedded = false }: { embedded?: boolean }) {
       if (fileRef.current) fileRef.current.value = ''
       refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed')
+      setError(errorMessage(err, 'Upload failed'))
     } finally {
       setBusy(false)
     }
@@ -61,32 +63,28 @@ export default function Logos({ embedded = false }: { embedded?: boolean }) {
         </>
       )}
 
-      {error && (
-        <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-300 text-sm p-3 mb-5">
-          {error}
-        </div>
-      )}
+      {error && <Banner className="mb-5">{error}</Banner>}
 
-      <form onSubmit={upload} className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 mb-6 flex flex-wrap gap-3 items-end">
-        <label className="flex flex-col gap-1 text-sm flex-1 min-w-40">
-          <span className="text-slate-400">Name</span>
-          <input className="rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm focus:border-indigo-500 outline-none" placeholder="Nick @ Night" value={name} onChange={(e) => setName(e.target.value)} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-400">Image (PNG/JPG/WEBP)</span>
-          <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="text-sm text-slate-400 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-slate-200 file:text-sm" />
-        </label>
-        <button type="submit" disabled={busy} className="rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 px-5 py-2 text-sm font-medium">
-          {busy ? 'Uploading…' : 'Upload'}
-        </button>
-      </form>
+      <Card className="p-5 mb-6">
+        <form onSubmit={upload} className="flex flex-wrap gap-3 items-end">
+          <Field label="Name" className="flex-1 min-w-40">
+            <Input placeholder="Nick @ Night" value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field label="Image (PNG/JPG/WEBP)">
+            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="text-sm text-slate-400 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-slate-200 file:text-sm" />
+          </Field>
+          <Button type="submit" size="lg" disabled={busy}>
+            {busy ? 'Uploading…' : 'Upload'}
+          </Button>
+        </form>
+      </Card>
 
       {logos.length === 0 ? (
         <div className="text-slate-500 text-sm">No logos yet.</div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {logos.map((l) => (
-            <div key={l.id} className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+            <Card key={l.id} className="overflow-hidden">
               <div className="aspect-video flex items-center justify-center p-4 bg-[repeating-conic-gradient(#1e293b_0_25%,#0f172a_0_50%)] bg-[length:20px_20px]">
                 <img src={logoImageUrl(l.id)} alt={l.name} className="max-h-full max-w-full object-contain" />
               </div>
@@ -102,12 +100,12 @@ export default function Logos({ embedded = false }: { embedded?: boolean }) {
                 </span>
                 <button
                   onClick={() => setEditing(l)}
-                  className="text-xs rounded-md border border-slate-700 hover:border-indigo-500 hover:text-indigo-300 px-2 py-0.5"
+                  className={buttonClass('secondary', 'sm', 'text-xs px-2 py-0.5')}
                 >
                   Watermark
                 </button>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
@@ -147,18 +145,14 @@ function WatermarkEditor({
       onSaved(updated)
       toast.success('Watermark saved')
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Save failed')
+      setErr(errorMessage(e, 'Save failed'))
       setSaving(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900 p-5 max-h-[90vh] overflow-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-3 mb-4">
+    <Modal onClose={onClose} panelClassName="w-full max-w-2xl p-5 max-h-[90vh] overflow-auto">
+      <div className="flex items-center gap-3 mb-4">
           <div className="w-16 h-10 rounded flex items-center justify-center bg-[repeating-conic-gradient(#1e293b_0_25%,#0f172a_0_50%)] bg-[length:14px_14px] shrink-0">
             <img src={logoImageUrl(logo.id)} alt={logo.name} className="max-h-full max-w-full object-contain" />
           </div>
@@ -168,19 +162,18 @@ function WatermarkEditor({
           </div>
         </div>
 
-        {err && <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-300 text-sm p-2 mb-3">{err}</div>}
+      {err && <Banner className="mb-3">{err}</Banner>}
 
-        <WatermarkFields wm={wm} onChange={setWm} />
+      <WatermarkFields wm={wm} onChange={setWm} />
 
-        <div className="flex justify-end gap-2 mt-5">
-          <button onClick={onClose} className="rounded-lg border border-slate-700 hover:border-slate-500 px-4 py-2 text-sm">
-            Cancel
-          </button>
-          <button onClick={save} disabled={saving} className="rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 px-5 py-2 text-sm font-medium">
-            {saving ? 'Saving…' : 'Save watermark'}
-          </button>
-        </div>
+      <div className="flex justify-end gap-2 mt-5">
+        <Button variant="secondary" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button onClick={save} size="lg" disabled={saving}>
+          {saving ? 'Saving…' : 'Save watermark'}
+        </Button>
       </div>
-    </div>
+    </Modal>
   )
 }

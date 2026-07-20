@@ -7,6 +7,7 @@ import {
   type MediaItemDetail,
 } from '../lib/api'
 import { formatDuration, formatSize, posterGradient } from '../lib/format'
+import { Modal } from './ui'
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -46,14 +47,7 @@ export default function MediaDetailModal({
       : null
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-6 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} panelClassName="max-w-2xl w-full p-6">
         {!item ? (
           <div className="text-slate-400 text-sm py-10 text-center">Loading…</div>
         ) : (
@@ -136,7 +130,6 @@ export default function MediaDetailModal({
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   )
 }
