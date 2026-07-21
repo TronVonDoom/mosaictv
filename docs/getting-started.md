@@ -10,7 +10,7 @@ last; the whole thing takes about ten minutes plus scan time.
 
 ## 1. Add a library
 
-**Libraries** → **Add library**.
+**Library → Sources** → **Add library**.
 
 - **Name** — whatever you like ("TV Shows", "Movies", "Cartoons").
 - **Path** — a folder *inside the container*, i.e. under `/media`. If your
@@ -50,11 +50,11 @@ are flagged missing.
 
 **Settings** → paste a free [TMDB API key](https://www.themoviedb.org/settings/api)
 → **Save**. Then hit **Metadata** on each library. You get posters, overviews,
-genres, and ratings — used in Browse and in your players' guide data.
+genres, and ratings — used in Library → Browse and in your players' guide data.
 Local artwork (`poster.jpg`, `folder.jpg`, Plex/Kodi/Jellyfin naming) is used
 first when present.
 
-Check your results under **Browse** — drill into shows, seasons, episodes.
+Check your results under **Library → Browse** — drill into shows, seasons, episodes.
 
 ## 4. Create a channel
 
