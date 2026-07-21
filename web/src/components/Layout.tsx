@@ -2,8 +2,13 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import Icon, { type IconName } from './Icon'
 import ToastContainer from './ToastContainer'
+import CommandPalette from './CommandPalette'
 import { api } from '../lib/api'
 import { usePolling } from '../lib/hooks'
+
+/** Mac gets ⌘K, everyone else Ctrl-K — label it to match the actual keyboard. */
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+const PALETTE_HINT = IS_MAC ? '⌘K' : 'Ctrl K'
 
 // Six destinations in three groups, rather than seven flat peers. The grouping
 // answers the question the old flat list couldn't: "Browse" and "Libraries"
@@ -54,6 +59,20 @@ export default function Layout() {
   // How many channels are actually on air, so the rail can say so at a glance
   // instead of making the user open the Dashboard to find out.
   const [live, setLive] = useState<{ channels: number; viewers: number } | null>(null)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+
+  // ⌘K / Ctrl-K from anywhere. Bound on the window rather than a focus trap so
+  // it works while a form field has focus — which is most of the time.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const loadLive = () =>
     api
@@ -118,6 +137,30 @@ export default function Layout() {
             alt="MosaicTV"
             className={collapsed ? 'w-9 h-9' : 'w-full max-w-[210px]'}
           />
+        </div>
+
+        {/* A visible entry point for the palette — a shortcut nobody discovers
+            is a shortcut nobody uses. */}
+        <div className="px-3 pt-3">
+          <button
+            onClick={() => setPaletteOpen(true)}
+            title={`Search (${PALETTE_HINT})`}
+            aria-label="Search"
+            className={
+              'w-full flex items-center gap-2 rounded-lg border border-edge bg-canvas/60 text-ink-faint hover:border-edge-strong hover:text-ink-muted transition-colors ' +
+              (collapsed ? 'justify-center py-2 px-0' : 'px-3 py-2')
+            }
+          >
+            <Icon name="browse" size={16} />
+            {!collapsed && (
+              <>
+                <span className="text-sm">Search…</span>
+                <kbd className="ml-auto text-[10px] border border-edge-strong rounded px-1.5 py-0.5">
+                  {PALETTE_HINT}
+                </kbd>
+              </>
+            )}
+          </button>
         </div>
 
         <nav className="flex-1 p-3 space-y-4 overflow-y-auto">
@@ -215,6 +258,7 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <ToastContainer />
     </div>
   )
