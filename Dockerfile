@@ -19,7 +19,13 @@ COPY server/ ./
 RUN npm run build
 
 # ---- Stage 3: lean runtime image ----
-FROM node:22-slim AS runtime
+# Trixie (Debian 13) rather than bookworm purely for ffmpeg: bookworm ships
+# 5.1, which has neither -readrate_initial_burst (6.1+) nor -readrate_catchup
+# (7.0+), so every viewer connected with no buffer cushion and no way to earn
+# one back after a stall — the streaming path asks for both and silently went
+# without. Trixie ships 7.1. The build stages stay where they are; only
+# compiled JS crosses from them, and this is the stage ffmpeg comes from.
+FROM node:22-trixie-slim AS runtime
 # ffmpeg = streaming pipeline (later); openssl = required by Prisma;
 # fonts-dejavu-core = a known TTF on disk so ffmpeg's drawtext (burned-in
 # "coming up next" / schedule text) has a font to render with.
