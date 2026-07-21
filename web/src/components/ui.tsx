@@ -50,11 +50,12 @@ export function Badge({
   tone = 'neutral',
   className,
   children,
+  ...rest
 }: {
   tone?: 'neutral' | 'good' | 'warn' | 'bad' | 'accent'
   className?: string
   children: ReactNode
-}) {
+} & React.HTMLAttributes<HTMLSpanElement>) {
   const tones = {
     neutral: 'bg-raised text-ink-muted',
     good: 'bg-emerald-500/15 text-emerald-300',
@@ -62,7 +63,11 @@ export function Badge({
     bad: 'bg-rose-500/15 text-rose-300',
     accent: 'bg-indigo-500/15 text-indigo-300',
   }
-  return <span className={cx('text-xs rounded-full px-2 py-0.5', tones[tone], className)}>{children}</span>
+  return (
+    <span className={cx('text-xs rounded-full px-2 py-0.5', tones[tone], className)} {...rest}>
+      {children}
+    </span>
+  )
 }
 
 // ---- Buttons ----------------------------------------------------------------

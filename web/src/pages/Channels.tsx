@@ -7,7 +7,7 @@ import { errorMessage } from '../lib/errors'
 import { usePolling } from '../lib/hooks'
 import { toast } from '../lib/toast'
 import LogoPicker from '../components/LogoPicker'
-import { Banner, Button, Card, Field, Input, buttonClass } from '../components/ui'
+import { Banner, Button, Card, EmptyState, Field, Input, PageHeader, buttonClass } from '../components/ui'
 
 // mpegts.js is ~280 kB and only needed once a preview is actually opened, so
 // keep it out of the main bundle.
@@ -32,8 +32,8 @@ function IptvBar() {
     { label: 'XMLTV', url: `${origin}/iptv/xmltv.xml` },
   ]
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-2.5 mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-      <span className="text-slate-400 inline-flex items-center gap-1.5">
+    <div className="rounded-xl border border-edge bg-surface/40 px-4 py-2.5 mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+      <span className="text-ink-muted inline-flex items-center gap-1.5">
         <Icon name="channels" size={15} colored /> IPTV endpoints for Plex / Jellyfin / Threadfin:
       </span>
       {rows.map((r) =>
@@ -45,7 +45,7 @@ function IptvBar() {
             value={r.url}
             onFocus={(e) => e.currentTarget.select()}
             title="Copying was blocked by the browser — copy this manually"
-            className="rounded-lg border border-amber-500/60 bg-slate-950 text-amber-200 px-2.5 py-1 text-xs font-mono w-72 max-w-full"
+            className="rounded-lg border border-amber-500/60 bg-canvas text-amber-200 px-2.5 py-1 text-xs font-mono w-72 max-w-full"
           />
         ) : (
           <button
@@ -106,15 +106,16 @@ export default function Channels() {
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-4 mb-1">
-        <h1 className="text-2xl font-bold">Channels</h1>
-        <Button variant={creating ? 'secondary' : 'primary'} onClick={() => setCreating((v) => !v)}>
-          {creating ? 'Cancel' : '+ New channel'}
-        </Button>
-      </div>
-      <p className="text-slate-400 text-sm mb-6">
-        Each channel is a container: its collections, schedule, and fillers live inside it.
-      </p>
+      <PageHeader
+        title="Channels"
+        icon="channels"
+        description="Each channel is a container — its collections, schedule, and fillers all live inside it."
+        actions={
+          <Button variant={creating ? 'secondary' : 'primary'} onClick={() => setCreating((v) => !v)}>
+            {creating ? 'Cancel' : '+ New channel'}
+          </Button>
+        }
+      />
 
       {error && <Banner className="mb-5">{error}</Banner>}
 
@@ -145,29 +146,36 @@ export default function Channels() {
       <IptvBar />
 
       {channels.length === 0 ? (
-        <div className="text-slate-500 text-sm">No channels yet — click <span className="text-indigo-300">+ New channel</span> to create one.</div>
+        <EmptyState
+          icon="channels"
+          title="No channels yet"
+          description="A channel is where your collections, schedule and fillers come together into something that actually broadcasts."
+          action={
+            <Button onClick={() => setCreating(true)}>+ New channel</Button>
+          }
+        />
       ) : (
         <div className="space-y-2">
           {channels.map((c) => (
             <Card key={c.id} className="p-3 flex items-center gap-4">
               <div className="text-lg font-mono w-12 text-center shrink-0" title={c.number == null ? 'Draft — no number assigned' : undefined}>
-                {c.number == null ? <span className="text-xs text-slate-600 uppercase">draft</span> : <span className="text-indigo-300">{c.number}</span>}
+                {c.number == null ? <span className="text-xs text-ink-ghost uppercase">draft</span> : <span className="text-indigo-300">{c.number}</span>}
               </div>
-              <div className="w-11 h-11 rounded-lg bg-slate-950 border border-slate-800 shrink-0 flex items-center justify-center overflow-hidden">
+              <div className="w-11 h-11 rounded-lg bg-canvas border border-edge shrink-0 flex items-center justify-center overflow-hidden">
                 {c.logoId ? (
                   <img src={logoImageUrl(c.logoId)} alt="" className="max-w-full max-h-full object-contain" />
                 ) : (
-                  <Icon name="show" size={20} className="text-slate-700" />
+                  <Icon name="show" size={20} className="text-ink-ghost" />
                 )}
               </div>
               <Link to={`/channels/${c.id}`} className="flex-1 min-w-0 group">
                 <div className="font-medium group-hover:text-indigo-300 transition-colors truncate">
                   {c.name}
-                  {c.group && <span className="text-xs text-slate-500 ml-2">{c.group}</span>}
+                  {c.group && <span className="text-xs text-ink-faint ml-2">{c.group}</span>}
                 </div>
-                <div className="text-xs text-slate-500 truncate">
+                <div className="text-xs text-ink-faint truncate">
                   {c.nowPlaying ? (
-                    <span className="text-slate-400">▶ {c.nowPlaying}</span>
+                    <span className="text-ink-muted">▶ {c.nowPlaying}</span>
                   ) : (
                     <>
                       {c.rotationCount} rotation · {c.blockCount} blocks ·{' '}
@@ -178,7 +186,7 @@ export default function Channels() {
               </Link>
               {c.viewers > 0 && (
                 <span className="shrink-0 inline-flex items-center gap-1.5 text-xs text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-full px-2.5 py-1">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-400 pulse-live" />
                   {c.viewers} watching
                 </span>
               )}
