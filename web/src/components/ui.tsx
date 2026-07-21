@@ -7,6 +7,7 @@
 // (flex, margins, width) without forking the base style.
 
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
+import Icon, { type IconName } from './Icon'
 
 /** Join class names, dropping falsy ones. */
 export function cx(...parts: (string | false | null | undefined)[]): string {
@@ -16,7 +17,7 @@ export function cx(...parts: (string | false | null | undefined)[]): string {
 // ---- Surfaces ---------------------------------------------------------------
 
 /** The panel surface every card, form, and list container is built from. */
-const CARD_SURFACE = 'rounded-xl border border-slate-800 bg-slate-900/60'
+const CARD_SURFACE = 'rounded-xl border border-edge bg-surface/60'
 
 /** The card surface on its own, for elements that can't be a <Card> — e.g. a
  *  react-router <Link> that should look like one. */
@@ -26,12 +27,19 @@ export function cardClass(extra?: string): string {
 
 /** The standard panel surface: every card, form, and list container. */
 export function Card({
+  interactive = false,
   className,
   children,
   ...rest
-}: { className?: string; children: ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
+}: {
+  /** Adds the hover lift. Only for cards that are themselves a link or button —
+   *  a static panel that rises under the cursor reads as broken. */
+  interactive?: boolean
+  className?: string
+  children: ReactNode
+} & React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cx(CARD_SURFACE, className ?? 'p-5')} {...rest}>
+    <div className={cx(CARD_SURFACE, interactive && 'card-interactive', className ?? 'p-5')} {...rest}>
       {children}
     </div>
   )
@@ -48,7 +56,7 @@ export function Badge({
   children: ReactNode
 }) {
   const tones = {
-    neutral: 'bg-slate-800 text-slate-400',
+    neutral: 'bg-raised text-ink-muted',
     good: 'bg-emerald-500/15 text-emerald-300',
     warn: 'bg-amber-500/15 text-amber-300',
     bad: 'bg-rose-500/15 text-rose-300',
@@ -64,10 +72,10 @@ type ButtonSize = 'sm' | 'md' | 'lg'
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary: 'bg-indigo-500 hover:bg-indigo-400 font-medium',
-  secondary: 'border border-slate-700 hover:border-indigo-500 hover:text-indigo-300',
+  secondary: 'border border-edge-strong hover:border-indigo-500 hover:text-indigo-300',
   danger: 'border border-rose-500/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20',
   // For destructive/secondary actions that shouldn't draw the eye until hovered.
-  subtle: 'border border-slate-800 text-slate-500 hover:border-rose-500/50 hover:text-rose-400',
+  subtle: 'border border-edge text-ink-faint hover:border-rose-500/50 hover:text-rose-400',
 }
 
 const BUTTON_SIZES: Record<ButtonSize, string> = {
@@ -126,7 +134,7 @@ export function LinkButton({
 // ---- Form controls ----------------------------------------------------------
 
 const CONTROL_BASE =
-  'rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm outline-none transition-colors focus:border-indigo-500'
+  'rounded-lg bg-canvas border border-edge-strong px-3 py-2 text-sm outline-none transition-colors focus:border-indigo-500'
 
 export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={cx(CONTROL_BASE, className)} {...rest} />
@@ -154,9 +162,9 @@ export function Field({
 }) {
   return (
     <label className={cx('flex flex-col gap-1 text-sm', className)}>
-      <span className="text-slate-400">{label}</span>
+      <span className="text-ink-muted">{label}</span>
       {children}
-      {hint && <span className="text-xs text-slate-600">{hint}</span>}
+      {hint && <span className="text-xs text-ink-faint">{hint}</span>}
     </label>
   )
 }
@@ -172,8 +180,8 @@ export function Section({
   children: ReactNode
 }) {
   return (
-    <div className={cx('rounded-lg border border-slate-800 bg-slate-950/40 p-3', className)}>
-      <div className="text-xs uppercase tracking-wide text-slate-500 mb-2.5">{title}</div>
+    <div className={cx('rounded-lg border border-edge bg-sunken/40 p-3', className)}>
+      <div className="text-xs uppercase tracking-wide text-ink-faint mb-2.5">{title}</div>
       {children}
     </div>
   )
@@ -200,8 +208,8 @@ export function Banner({
     error: 'border-rose-500/40 bg-rose-500/10 text-rose-300',
     success: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',
     warn: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
-    info: 'border-slate-700 bg-slate-800/40 text-slate-300',
-    accent: 'border-violet-500/30 bg-violet-500/5 text-slate-300',
+    info: 'border-edge-strong bg-raised/40 text-ink-soft',
+    accent: 'border-violet-500/30 bg-violet-500/5 text-ink-soft',
   }
   return <div className={cx('rounded-lg border text-sm p-3', tones[tone], className)}>{children}</div>
 }
@@ -249,6 +257,179 @@ export function ProgressPanel({
   )
 }
 
+// ---- Page scaffolding -------------------------------------------------------
+
+/**
+ * The title block every page opens with: heading, one-line description, and an
+ * optional cluster of actions pinned to the right. Every page was hand-rolling
+ * this `<h1>` + `<p>` pair, which is how the bottom margins drifted between
+ * `mb-5` and `mb-6` and why no page had room for a toolbar.
+ *
+ * `description` should be a single plain sentence answering "what is this page
+ * for" — not the operating manual. Detail belongs in an <InfoHint> next to the
+ * control it explains.
+ */
+export function PageHeader({
+  title,
+  description,
+  icon,
+  actions,
+  children,
+  className,
+}: {
+  title: ReactNode
+  description?: ReactNode
+  icon?: IconName
+  /** Buttons and links, right-aligned on the title row. */
+  actions?: ReactNode
+  /** Anything below the description — usually a <Tabs> strip. */
+  children?: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cx('mb-6', className)}>
+      <div className="flex items-start gap-3 flex-wrap">
+        {icon && (
+          <span className="shrink-0 grid place-items-center w-10 h-10 rounded-xl border border-edge bg-surface/60">
+            <Icon name={icon} size={22} colored />
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+          {description && <p className="text-ink-muted text-sm mt-1 max-w-2xl">{description}</p>}
+        </div>
+        {actions && <div className="flex items-center gap-2 flex-wrap shrink-0">{actions}</div>}
+      </div>
+      {children && <div className="mt-5">{children}</div>}
+    </div>
+  )
+}
+
+/**
+ * What a page shows instead of an empty grid. An empty state that only says
+ * "nothing here" wastes the one moment the user is definitely looking — so
+ * `action` is where the next step goes, and it should almost always be set.
+ */
+export function EmptyState({
+  icon,
+  title,
+  description,
+  action,
+  className,
+}: {
+  icon?: IconName
+  title: ReactNode
+  description?: ReactNode
+  action?: ReactNode
+  className?: string
+}) {
+  return (
+    <div
+      className={cx(
+        'rounded-xl border border-dashed border-edge-strong bg-surface/30',
+        'px-6 py-12 flex flex-col items-center text-center',
+        className,
+      )}
+    >
+      {icon && (
+        <span className="grid place-items-center w-14 h-14 rounded-2xl border border-edge bg-surface mb-4">
+          <Icon name={icon} size={28} colored />
+        </span>
+      )}
+      <div className="font-medium text-ink">{title}</div>
+      {description && <p className="text-sm text-ink-muted mt-1.5 max-w-md">{description}</p>}
+      {action && <div className="mt-5 flex items-center gap-2 flex-wrap justify-center">{action}</div>}
+    </div>
+  )
+}
+
+/**
+ * A loading placeholder shaped like the thing that's coming. Prefer this over a
+ * spinner: the page keeps its layout, so content doesn't jump when it lands.
+ */
+export function Skeleton({ className }: { className?: string }) {
+  return <div className={cx('skeleton rounded-lg', className ?? 'h-4 w-full')} aria-hidden="true" />
+}
+
+/** A stack of skeleton cards, for a list or grid that hasn't loaded yet. */
+export function SkeletonCards({ count = 3, className }: { count?: number; className?: string }) {
+  return (
+    <div className={cx('grid gap-4', className)}>
+      {Array.from({ length: count }, (_, i) => (
+        <Skeleton key={i} className="h-24 rounded-xl" />
+      ))}
+    </div>
+  )
+}
+
+/**
+ * The small ⓘ that carries an explanation without spending a paragraph on it.
+ * This is the pressure valve for dense pages: put the one-line "what" in the
+ * label and the "why / when / what happens if" in here.
+ */
+export function InfoHint({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <span className={cx('relative inline-flex group align-middle', className)}>
+      <span
+        tabIndex={0}
+        role="button"
+        aria-label="More information"
+        className="grid place-items-center w-4 h-4 rounded-full border border-edge-strong text-[10px] text-ink-faint cursor-help transition-colors hover:border-indigo-500 hover:text-indigo-300"
+      >
+        i
+      </span>
+      <span
+        role="tooltip"
+        className={cx(
+          'pointer-events-none absolute left-1/2 bottom-full z-40 mb-2 w-64 -translate-x-1/2',
+          'rounded-lg border border-edge-strong bg-raised px-3 py-2 text-xs font-normal text-ink-soft shadow-xl',
+          'opacity-0 transition-opacity duration-150',
+          'group-hover:opacity-100 group-focus-within:opacity-100',
+        )}
+      >
+        {children}
+      </span>
+    </span>
+  )
+}
+
+/**
+ * A single headline number. `tone` tints the value for stats that carry a
+ * verdict (missing files, errors) — leave it off for neutral counts.
+ */
+export function StatTile({
+  label,
+  value,
+  sub,
+  icon,
+  tone = 'neutral',
+  className,
+}: {
+  label: ReactNode
+  value: ReactNode
+  sub?: ReactNode
+  icon?: IconName
+  tone?: 'neutral' | 'good' | 'warn' | 'bad'
+  className?: string
+}) {
+  const valueTone = {
+    neutral: 'text-ink',
+    good: 'text-emerald-300',
+    warn: 'text-amber-300',
+    bad: 'text-rose-300',
+  }[tone]
+  return (
+    <Card className={cx('p-4', className)}>
+      <div className="flex items-center gap-2">
+        {icon && <Icon name={icon} size={15} colored />}
+        <div className="text-ink-muted text-xs uppercase tracking-wide">{label}</div>
+      </div>
+      <div className={cx('text-2xl font-semibold mt-1.5 tabular-nums', valueTone)}>{value}</div>
+      {sub && <div className="text-ink-faint text-xs mt-1">{sub}</div>}
+    </Card>
+  )
+}
+
 // ---- Overlays ---------------------------------------------------------------
 
 /**
@@ -274,7 +455,7 @@ export function Modal({
       onClick={onClose}
     >
       <div
-        className={cx('rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl', panelClassName)}
+        className={cx('rounded-2xl border border-edge-strong bg-surface shadow-2xl', panelClassName)}
         onClick={(e) => e.stopPropagation()}
       >
         {children}
@@ -292,27 +473,36 @@ export function Tabs<T extends string>({
   onChange,
   className,
 }: {
-  tabs: readonly { id: T; label: string; badge?: number }[]
+  tabs: readonly { id: T; label: string; badge?: number; icon?: IconName }[]
   active: T
   onChange: (id: T) => void
   className?: string
 }) {
   return (
-    <div className={cx('flex gap-1 border-b border-slate-800 overflow-x-auto', className)}>
+    <div className={cx('flex gap-1 border-b border-edge overflow-x-auto', className)} role="tablist">
       {tabs.map((t) => (
         <button
           key={t.id}
+          role="tab"
+          aria-selected={active === t.id}
           onClick={() => onChange(t.id)}
           className={cx(
             'px-4 py-2 text-sm rounded-t-lg border-b-2 -mb-px whitespace-nowrap transition-colors',
+            'inline-flex items-center gap-1.5',
             active === t.id
               ? 'border-indigo-400 text-indigo-300'
-              : 'border-transparent text-slate-400 hover:text-slate-200',
+              : 'border-transparent text-ink-muted hover:text-ink-soft',
           )}
         >
+          {t.icon && <Icon name={t.icon} size={15} colored={active === t.id} />}
           {t.label}
           {t.badge != null && (
-            <span className="ml-1.5 text-[10px] rounded-full bg-slate-800 text-slate-400 px-1.5 py-0.5">
+            <span
+              className={cx(
+                'text-[10px] rounded-full px-1.5 py-0.5 transition-colors',
+                active === t.id ? 'bg-indigo-500/20 text-indigo-200' : 'bg-raised text-ink-muted',
+              )}
+            >
               {t.badge}
             </span>
           )}

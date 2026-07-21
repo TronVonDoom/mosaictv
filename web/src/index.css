@@ -4,7 +4,12 @@
    The brand accent is a violet drawn from the logo's cool side; the full
    rainbow (violet→blue→cyan→green→gold→pink) is reserved for hero moments.
    We retint Tailwind's `indigo` scale to the brand violet so every existing
-   accent (buttons, links, focus rings, active nav) adopts MosaicTV at once. */
+   accent (buttons, links, focus rings, active nav) adopts MosaicTV at once.
+
+   Below the accent sits a semantic layer: `surface`, `edge`, `ink`. Those are
+   the names components should reach for. The raw slate values they resolve to
+   are an implementation detail — changing the app's depth or contrast means
+   editing this block, not grepping for `slate-800` across forty files. */
 @theme {
   --color-indigo-200: #ddd6fe;
   --color-indigo-300: #c4b5fd;
@@ -16,6 +21,43 @@
   --gradient-brand: linear-gradient(
     90deg, #a855f7, #6366f1, #3b82f6, #22d3ee, #34d399, #fbbf24, #fb7185
   );
+
+  /* ── Surfaces, back to front ──────────────────────────────────────────
+     canvas  the page itself
+     sunken  insets that read as *below* the card (field groups, wells)
+     surface the standard panel — cards, forms, list containers
+     raised  a panel lifted above its neighbours (menus, hovers, modals) */
+  --color-canvas: #020617;
+  --color-sunken: #0b1120;
+  --color-surface: #0f172a;
+  --color-raised: #1e293b;
+
+  /* ── Borders ──────────────────────────────────────────────────────────
+     edge is the default hairline; edge-strong marks an interactive or
+     focused boundary (inputs, hovered cards). */
+  --color-edge: #1e293b;
+  --color-edge-strong: #334155;
+
+  /* ── Text, brightest to faintest ──────────────────────────────────────
+     ink       primary content
+     ink-soft  secondary content that still needs to be read
+     ink-muted labels, metadata, descriptions
+     ink-faint hints and captions
+     ink-ghost placeholders and disabled text — decorative, not readable */
+  --color-ink: #f1f5f9;
+  --color-ink-soft: #cbd5e1;
+  --color-ink-muted: #94a3b8;
+  --color-ink-faint: #64748b;
+  --color-ink-ghost: #475569;
+
+  /* ── Motion ───────────────────────────────────────────────────────────
+     Two durations only. `quick` for state that should feel instant (hover,
+     focus, colour); `smooth` for anything that moves or resizes. A single
+     standard easing keeps unrelated animations feeling related. */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-quick: 150ms;
+  --duration-smooth: 220ms;
 }
 
 @layer utilities {
@@ -34,6 +76,44 @@
   .toast-in {
     animation: toast-in 180ms ease-out;
   }
+
+  /* Interactive card: lifts and warms its border on hover. Pair with a link
+     or button wrapper — never on a static panel, or the page feels twitchy. */
+  .card-interactive {
+    transition:
+      border-color var(--duration-quick) var(--ease-standard),
+      background-color var(--duration-quick) var(--ease-standard),
+      transform var(--duration-quick) var(--ease-standard),
+      box-shadow var(--duration-quick) var(--ease-standard);
+  }
+  .card-interactive:hover {
+    border-color: color-mix(in oklab, var(--color-indigo-500) 55%, transparent);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px -12px rgb(0 0 0 / 0.7);
+  }
+
+  /* Loading placeholder — a slow sweep across a dim block. */
+  .skeleton {
+    background-image: linear-gradient(
+      90deg,
+      var(--color-raised) 0%,
+      color-mix(in oklab, var(--color-raised) 60%, var(--color-edge-strong)) 50%,
+      var(--color-raised) 100%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-sweep 1.4s ease-in-out infinite;
+  }
+
+  /* Entrance for content arriving after a fetch. Stagger children by setting
+     `animation-delay` inline — see the `stagger-*` helpers below. */
+  .rise-in {
+    animation: rise-in var(--duration-smooth) var(--ease-out-soft) both;
+  }
+
+  /* A live/recording pulse — the halo behind an "on air" dot. */
+  .pulse-live {
+    animation: pulse-live 2s var(--ease-standard) infinite;
+  }
 }
 
 @keyframes toast-in {
@@ -47,6 +127,52 @@
   }
 }
 
+@keyframes skeleton-sweep {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-live {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.35);
+  }
+}
+
+/* Anyone who has asked their OS to calm animations down gets stillness, not a
+   slower version of the same movement. Transitions stay (they carry meaning);
+   looping and travelling animations stop. */
+@media (prefers-reduced-motion: reduce) {
+  .toast-in,
+  .rise-in,
+  .skeleton,
+  .pulse-live {
+    animation: none;
+  }
+  .card-interactive:hover {
+    transform: none;
+  }
+}
+
 :root {
   color-scheme: dark;
 }
@@ -54,4 +180,12 @@
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* A consistent focus ring everywhere, including for keyboard users who tab
+   into a card or nav item that isn't a form control. */
+:focus-visible {
+  outline: 2px solid var(--color-indigo-400);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
 }
