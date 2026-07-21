@@ -62,18 +62,20 @@ hdhrRouter.post('/lineup.post', (_req, res) => {
   res.status(200).end()
 })
 
+// Always MPEG-TS, regardless of the global stream mode. A tuner URL is a raw
+// transport stream by contract — Plex GETs it and expects TS bytes, so handing
+// it the shared-HLS playlist makes tuning fail with "check your antenna". The
+// stream-mode setting stays a choice for the M3U, where players negotiate both.
 hdhrRouter.get('/lineup.json', async (req, res) => {
   const base = baseUrl(req)
   const channels = await prisma.channel.findMany({ orderBy: { number: 'asc' } })
-  const modeRow = await prisma.setting.findUnique({ where: { key: 'streamMode' } })
-  const hls = modeRow?.value === 'hls'
   res.json(
     channels
       .filter((c) => c.number != null)
       .map((c) => ({
         GuideNumber: String(c.number),
         GuideName: c.name,
-        URL: hls ? `${base}/iptv/channel/${c.number}/index.m3u8` : `${base}/iptv/channel/${c.number}.ts`,
+        URL: `${base}/iptv/channel/${c.number}.ts`,
       })),
   )
 })

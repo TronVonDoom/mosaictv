@@ -294,6 +294,11 @@ export default function Settings() {
                 Emby's HDHomeRun tuner type) can add it directly — no Threadfin/xTeVe needed. Add it
                 by IP; there's no broadcast discovery, so it won't appear on its own.{' '}
                 <InfoHint>
+                  The tuner always serves MPEG-TS, whatever the mode above says — a tuner URL is a
+                  raw transport stream by contract, and Plex fails to tune on anything else. So Plex
+                  costs one transcode per viewer even in shared-HLS mode.
+                  <br />
+                  <br />
                   One tuner slot = one concurrent Live TV stream Plex/Emby will pull from MosaicTV.
                   MosaicTV itself has no hard limit, so raise this if playback gets cut off when a
                   second person tunes in.

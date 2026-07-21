@@ -77,6 +77,12 @@ emulates one natively, so no Threadfin/xTeVe is required.
 > gets cut off when another person tunes in — Plex stops at the tuner count,
 > not at any real MosaicTV limit.
 
+> **The tuner always serves MPEG-TS**, whatever *Streaming mode* is set to. A
+> tuner URL is a raw transport stream by contract, and Plex fails to tune —
+> *"could not tune into your channel, check antenna"* — if handed an HLS
+> playlist. Shared HLS still applies to the M3U; Plex just costs one
+> transcode per viewer.
+
 Threadfin/xTeVe still work as a middle layer if you want their extra
 features (channel remapping, filtering) — point them at the M3U/XMLTV URLs
 above the same as before.
