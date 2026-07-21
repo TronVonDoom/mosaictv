@@ -87,6 +87,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false)
   const [wm, setWm] = useState<WatermarkConfig | null>(null)
   const [streamMode, setStreamMode] = useState<StreamMode>('mpegts')
+  const [tunerCount, setTunerCount] = useState(4)
   const [wipeAssets, setWipeAssets] = useState(true)
   const [resetBusy, setResetBusy] = useState(false)
 
@@ -97,6 +98,7 @@ export default function Settings() {
         setConfigured(s.tmdbConfigured)
         setWm(s.watermark)
         setStreamMode(s.streamMode)
+        setTunerCount(s.tunerCount)
       })
       .catch(() => {})
   }, [])
@@ -108,6 +110,16 @@ export default function Settings() {
       toast.success(`Streaming mode: ${mode === 'hls' ? 'Shared HLS' : 'MPEG-TS'}`)
     } catch (err) {
       toast.error(errorMessage(err, 'Failed to save streaming mode'))
+    }
+  }
+
+  async function saveTuners(n: number) {
+    setTunerCount(n)
+    try {
+      await api.saveTunerCount(n)
+      toast.success(`Tuner count: ${n}`)
+    } catch (err) {
+      toast.error(errorMessage(err, 'Failed to save tuner count'))
     }
   }
 
@@ -264,6 +276,41 @@ export default function Settings() {
               )
             })}
           </div>
+        </SettingsCard>
+      )}
+
+      {tab === 'streaming' && (
+        <SettingsCard
+          title="HDHomeRun tuner (Plex / Emby)"
+          description={
+            <>
+              MosaicTV emulates an HDHomeRun network tuner at{' '}
+              <code className="text-ink">{`${typeof window !== 'undefined' ? window.location.origin : ''}/discover.json`}</code>
+              , so Plex's Live TV & DVR setup (or Emby's HDHomeRun tuner type) can add it directly —
+              no Threadfin/xTeVe needed.{' '}
+              <InfoHint>
+                One tuner slot = one concurrent Live TV stream Plex/Emby will pull from MosaicTV.
+                MosaicTV itself has no hard limit, so raise this if playback gets cut off when a
+                second person tunes in.
+              </InfoHint>
+            </>
+          }
+        >
+          <label className="flex items-center gap-3 text-sm">
+            <span className="text-ink-muted">Tuner count</span>
+            <Input
+              type="number"
+              min={1}
+              max={32}
+              className="w-20"
+              value={tunerCount}
+              onChange={(e) => setTunerCount(Number(e.target.value))}
+              onBlur={(e) => {
+                const n = Math.round(Number(e.target.value))
+                if (Number.isFinite(n) && n >= 1 && n <= 32) saveTuners(n)
+              }}
+            />
+          </label>
         </SettingsCard>
       )}
 

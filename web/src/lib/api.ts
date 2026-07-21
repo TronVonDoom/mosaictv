@@ -157,6 +157,7 @@ export type SettingsInfo = {
   tmdbConfigured: boolean
   watermark: WatermarkConfig
   streamMode: StreamMode
+  tunerCount: number
 }
 
 export type MetadataStatus = {
@@ -500,6 +501,8 @@ export const api = {
     request<{ ok: boolean; watermark: WatermarkConfig }>('/api/settings/watermark', { method: 'POST', body: JSON.stringify(wm) }),
   saveStreamMode: (mode: StreamMode) =>
     request<{ ok: boolean; streamMode: StreamMode }>('/api/settings/stream-mode', { method: 'POST', body: JSON.stringify({ mode }) }),
+  saveTunerCount: (tunerCount: number) =>
+    request<{ ok: boolean; tunerCount: number }>('/api/settings/tuner-count', { method: 'POST', body: JSON.stringify({ tunerCount }) }),
 
   // --- collections ---
   collections: (channelId?: number) =>

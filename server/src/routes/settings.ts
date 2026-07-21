@@ -15,10 +15,13 @@ async function setSetting(k: string, v: string | null) {
 settingsRouter.get('/', async (_req, res) => {
   const key = await getTmdbKey()
   const modeRow = await prisma.setting.findUnique({ where: { key: 'streamMode' } })
+  const tunerRow = await prisma.setting.findUnique({ where: { key: 'tunerCount' } })
+  const tunerCount = Number(tunerRow?.value)
   res.json({
     tmdbConfigured: !!key,
     watermark: await loadWatermark(),
     streamMode: modeRow?.value === 'hls' ? 'hls' : 'mpegts',
+    tunerCount: Number.isFinite(tunerCount) && tunerCount > 0 ? tunerCount : 4,
   })
 })
 
@@ -35,6 +38,18 @@ settingsRouter.post('/stream-mode', async (req, res) => {
   const mode = req.body?.mode === 'hls' ? 'hls' : 'mpegts'
   await setSetting('streamMode', mode)
   res.json({ ok: true, streamMode: mode })
+})
+
+// How many concurrent streams the emulated HDHomeRun tuner advertises to
+// Plex/Emby — one tuner slot = one concurrent Live TV stream from their side.
+settingsRouter.post('/tuner-count', async (req, res) => {
+  const n = Number(req.body?.tunerCount)
+  if (!Number.isFinite(n) || n < 1 || n > 32) {
+    return res.status(400).json({ error: 'tunerCount must be a number between 1 and 32' })
+  }
+  const count = Math.round(n)
+  await setSetting('tunerCount', String(count))
+  res.json({ ok: true, tunerCount: count })
 })
 
 // Validate and save the TMDB API key in one step.

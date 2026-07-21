@@ -20,6 +20,7 @@ import { metadataRouter } from './routes/metadata.js'
 import { collectionsRouter } from './routes/collections.js'
 import { channelsRouter } from './routes/channels.js'
 import { iptvRouter } from './routes/iptv.js'
+import { hdhrRouter } from './routes/hdhr.js'
 import { logosRouter } from './routes/logos.js'
 import { logsRouter } from './routes/logs.js'
 import { metricsRouter } from './routes/metrics.js'
@@ -121,6 +122,9 @@ app.use('/api/assets', assetsRouter)
 app.use('/api/profiles', profilesRouter)
 app.use('/api/fillers', fillersRouter)
 app.use('/iptv', iptvRouter)
+// HDHomeRun emulation lives at root — Plex/Emby's tuner discovery expects
+// /discover.json etc. there, not namespaced under /iptv.
+app.use('/', hdhrRouter)
 // Loopback-only: the channel's outer ffmpeg fetches its per-item streams here.
 app.use('/internal', internalRouter)
 

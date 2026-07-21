@@ -30,11 +30,13 @@ function IptvBar() {
   const rows = [
     { label: 'M3U', url: `${origin}/iptv/channels.m3u` },
     { label: 'XMLTV', url: `${origin}/iptv/xmltv.xml` },
+    { label: 'HDHomeRun', url: origin },
   ]
   return (
     <div className="rounded-xl border border-edge bg-surface/40 px-4 py-2.5 mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
       <span className="text-ink-muted inline-flex items-center gap-1.5">
-        <Icon name="channels" size={15} colored /> IPTV endpoints for Plex / Jellyfin / Threadfin:
+        <Icon name="channels" size={15} colored /> IPTV endpoints for Jellyfin, and a tuner address for
+        Plex/Emby's native HDHomeRun setup:
       </span>
       {rows.map((r) =>
         failed === r.url ? (

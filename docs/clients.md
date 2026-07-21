@@ -57,17 +57,25 @@ URL, add an **XMLTV** guide source with the guide URL, refresh guide data.
 
 ## Plex
 
-Plex's Live TV wants a HDHomeRun-style tuner, not a raw M3U — so put
-**[Threadfin](https://github.com/Threadfin/Threadfin)** (or xTeVe) in between.
+Plex's Live TV wants a HDHomeRun-style tuner, not a raw M3U — MosaicTV
+emulates one natively, so no Threadfin/xTeVe is required.
 
-1. Run Threadfin (it's a small Docker container).
-2. In Threadfin: add the **M3U** URL and **XMLTV** URL above, and set the
-   number of tuners (how many simultaneous Plex streams you want).
-3. In Plex: **Settings → Live TV & DVR → Set Up** — Plex discovers Threadfin
-   as an HDHomeRun tuner. Use Threadfin's XMLTV output as the guide source.
+1. **Settings → Live TV & DVR → Set Up Plex DVR**. Plex broadcasts for
+   HDHomeRun devices on your LAN; if it doesn't find MosaicTV automatically,
+   use **"Enter the IP address of your HDHomeRun device"** and give it
+   `YOUR-SERVER:8688`.
+2. Plex reads `http://YOUR-SERVER:8688/discover.json` and `/lineup.json` to
+   pull in the channel list, then finishes setup with the guide from the
+   XMLTV URL above.
 
-> Give Threadfin enough tuners; one tuner = one concurrent stream, and Plex
-> stops playback when it runs out.
+> **Settings → Streaming → HDHomeRun tuner** controls how many simultaneous
+> streams the emulated tuner advertises (default 4). Raise it if playback
+> gets cut off when another person tunes in — Plex stops at the tuner count,
+> not at any real MosaicTV limit.
+
+Threadfin/xTeVe still work as a middle layer if you want their extra
+features (channel remapping, filtering) — point them at the M3U/XMLTV URLs
+above the same as before.
 
 ## VLC / IINA / mpv
 
