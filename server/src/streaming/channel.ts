@@ -14,7 +14,7 @@ import { programLabel } from '../labels.js'
 import { log } from '../logs.js'
 import { markEvent } from '../metrics.js'
 import { hasSubtitleStream, probeSar } from '../ffprobe.js'
-import { canNvdecCodec, detectReadrateBurst, detectTextOverlay, resolveEncoder } from './capabilities.js'
+import { detectReadrateBurst, detectTextOverlay, nvdecIfReady, resolveEncoder } from './capabilities.js'
 import { resolveProfile, type StreamProfile } from './profile.js'
 import { loadWatermark, parseComingUp, parseWatermark, type WatermarkConfig } from './overlays.js'
 import {
@@ -43,12 +43,21 @@ const TAIL_SKIP_SEC = READ_BURST_SEC + 2
 
 type SegmentResult = { code: number | null; stderr: string; spawnError?: Error; bytes: number; firstByteMs: number }
 
+// A mid-segment freeze is invisible in the logs today: nothing errors, nothing
+// exits, bytes just stop moving and the whole chain (encoder → concat → player)
+// sits idle, which is why container load falls away with nothing to show for
+// it. Watch each hop and say which side went quiet after this long.
+const STALL_SEC = 5
+
 /**
  * Pipe a child's stdout to the response with backpressure; resolve on exit.
  * Captures a tail of stderr, the exit code, bytes written, and how long until
  * the first byte arrived (a big first-byte delay is a stall the viewer sees).
+ *
+ * `tag` names this hop in stall warnings — omit it for short throwaway pipes
+ * (black filler) that aren't worth watching.
  */
-function pipeSegment(proc: ChildProcess, res: Response): Promise<SegmentResult> {
+function pipeSegment(proc: ChildProcess, res: Response, tag?: string): Promise<SegmentResult> {
   return new Promise((resolve) => {
     let stderr = ''
     let spawnError: Error | undefined
@@ -59,18 +68,55 @@ function pipeSegment(proc: ChildProcess, res: Response): Promise<SegmentResult> 
       stderr += d.toString()
       if (stderr.length > 6000) stderr = stderr.slice(-6000) // keep the tail
     })
+    // Which side of this hop is holding things up. `blocked` means WE couldn't
+    // write — the consumer downstream stopped reading; otherwise the child
+    // simply produced nothing. That distinction is the whole diagnosis.
+    let lastByteAt = Date.now()
+    let blocked = false
+    let stalled = false
+    const watchdog = tag
+      ? setInterval(() => {
+          const idleMs = Date.now() - lastByteAt
+          if (idleMs < STALL_SEC * 1000) {
+            if (stalled) {
+              stalled = false
+              log('info', 'stream', `${tag}: recovered after ${(idleMs / 1000).toFixed(0)}s of no data`)
+            }
+            return
+          }
+          if (stalled) return // already reported; wait for recovery or exit
+          stalled = true
+          log(
+            'warn',
+            'stream',
+            `${tag}: no data for ${(idleMs / 1000).toFixed(0)}s — stream is frozen here`,
+            blocked
+              ? 'blocked writing downstream — the consumer (player/concat) stopped reading'
+              : 'ffmpeg produced nothing — the producer stalled, downstream is still accepting data',
+          )
+        }, 1000)
+      : undefined
+    watchdog?.unref()
     const onData = (chunk: Buffer) => {
       if (firstByteMs < 0) firstByteMs = Date.now() - t0
       bytes += chunk.length
-      if (!res.write(chunk)) proc.stdout?.pause()
+      lastByteAt = Date.now()
+      if (!res.write(chunk)) {
+        blocked = true
+        proc.stdout?.pause()
+      }
     }
-    const onDrain = () => proc.stdout?.resume()
+    const onDrain = () => {
+      blocked = false
+      proc.stdout?.resume()
+    }
     proc.stdout?.on('data', onData)
     res.on('drain', onDrain)
     let settled = false
     const done = (code: number | null) => {
       if (settled) return
       settled = true
+      if (watchdog) clearInterval(watchdog)
       res.off('drain', onDrain)
       resolve({ code, stderr: stderr.trim(), spawnError, bytes, firstByteMs })
     }
@@ -258,7 +304,7 @@ export async function streamChannel(channelNumber: number, res: Response, req?: 
     const proc = spawn('ffmpeg', args)
     const kill = () => proc.kill('SIGKILL')
     res.on('close', kill)
-    const result = await pipeSegment(proc, res)
+    const result = await pipeSegment(proc, res, `Ch ${channelNumber} concat→player`)
     res.off('close', kill)
     if (res.destroyed || res.writableEnded) break // viewer left — the normal way out
     if (result.spawnError) {
@@ -288,6 +334,10 @@ export async function streamChannel(channelNumber: number, res: Response, req?: 
  * same thing and no per-client session state is needed.
  */
 export async function streamChannelItem(channelNumber: number, res: Response, req?: Request): Promise<void> {
+  // Nothing is written to the response until the encoder is spawned at the end
+  // of this function, so every millisecond spent here is dead air the viewer
+  // pays for out of their buffer. Time it, and say so when it gets dangerous.
+  const openedAt = Date.now()
   const channel = await prisma.channel.findFirst({
     where: { number: channelNumber },
     include: {
@@ -420,7 +470,7 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
     // so only offer those to the GPU when they're our generated files.
     const fillerHw =
       enc === 'h264_nvenc' && clip && path.basename(clip).startsWith('filler-')
-        ? await canNvdecCodec('h264')
+        ? await nvdecIfReady('h264')
         : false
     if (clip && segDur > 0.3) {
       seg = { filePath: clip, offsetSec: 0, loop: true, durationSec: segDur, hasAudio: true, logo, wmEpochSec, mediaWidth: FILLER_W, mediaHeight: FILLER_H, musicPath: music, isFiller: true, fadeInSec: 0, fadeOutSec: 0, hwDecode: fillerHw }
@@ -440,7 +490,7 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
     const dispW = Math.round((mi.width ?? FILLER_W) * sar)
     // Decode on the GPU when the probe says this codec is supported
     // there (per-chip: e.g. a GTX 970 does h264 but not hevc).
-    const hwDecode = enc === 'h264_nvenc' && mi.videoCodec ? await canNvdecCodec(mi.videoCodec.toLowerCase()) : false
+    const hwDecode = enc === 'h264_nvenc' && mi.videoCodec ? await nvdecIfReady(mi.videoCodec.toLowerCase()) : false
     const hasSubtitles = profile.burnSubtitles ? await hasSubtitleStream(mi.path) : false
     seg = { filePath: mi.path, offsetSec: offset, loop: false, durationSec: segDur, hasAudio: !!mi.audioCodec, logo, wmEpochSec, mediaWidth: dispW, mediaHeight: mi.height ?? FILLER_H, isFiller: false, fadeInSec, fadeOutSec, hwDecode, hasSubtitles }
     label = programLabel(mi, { withTitle: true })
@@ -531,7 +581,18 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
   } else {
     wmDesc = `watermark ${wm.mode}/${wm.position}${wm.constrainToMedia ? '/media-fit' : ''}`
   }
-  const startDetail = `source ${seg.mediaWidth}x${seg.mediaHeight}, decode ${seg.hwDecode ? 'GPU (nvdec)' : 'CPU'}, logo ${active.id != null ? '#' + active.id : active.raw ? 'url' : 'none'}, ${wmDesc}`
+  const prepMs = Date.now() - openedAt
+  // The connect-time cushion is READ_BURST_SEC; spending anywhere near it on
+  // preparation means the player runs dry at the seam and freezes.
+  if (prepMs > READ_BURST_SEC * 250) {
+    log(
+      'warn',
+      'stream',
+      `Channel ${channelNumber}: ${(prepMs / 1000).toFixed(1)}s of dead air preparing ${label} — the viewer's buffer drains while this runs`,
+      'probes and playout work belong at startup, not at a program boundary',
+    )
+  }
+  const startDetail = `source ${seg.mediaWidth}x${seg.mediaHeight}, decode ${seg.hwDecode ? 'GPU (nvdec)' : 'CPU'}, prep ${prepMs}ms, logo ${active.id != null ? '#' + active.id : active.raw ? 'url' : 'none'}, ${wmDesc}`
   log(
     'info',
     'stream',
@@ -550,7 +611,7 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
   res.writeHead(200, { 'Content-Type': 'video/mp2t', 'Cache-Control': 'no-cache, no-store' })
   const segStart = Date.now()
   current = spawn('ffmpeg', args)
-  const result = await pipeSegment(current, res)
+  const result = await pipeSegment(current, res, `Ch ${channelNumber} encoder→concat`)
   current = null
   // ffmpeg has read the caption files at init; safe to drop them now.
   if (captionFile) fs.rmSync(captionFile, { force: true })

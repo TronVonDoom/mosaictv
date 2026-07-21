@@ -144,6 +144,38 @@ export function canNvdecCodec(codec: string): Promise<boolean> {
   return probe
 }
 
+/**
+ * The nvdec answer only if it's already known (or lands within `graceMs`).
+ *
+ * The probe is cached, but the FIRST caller pays for it — and the callers are
+ * per-item handlers that run at a program boundary, where the viewer has only
+ * the connect-time cushion of buffer left and nothing is being written to the
+ * response yet. A cold hevc probe (encode a libx265 sample, then decode it) has
+ * been measured at 13s, which drains the cushion and freezes the player. Never
+ * wait that out on air: decode this one segment on the CPU and let the probe
+ * finish in the background for the next one.
+ */
+export function nvdecIfReady(codec: string, graceMs = 400): Promise<boolean> {
+  const probe = canNvdecCodec(codec)
+  return Promise.race([
+    probe,
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), graceMs).unref()),
+  ])
+}
+
+/**
+ * Run every probe once at boot, off the streaming path, so no viewer ever pays
+ * for one at a program boundary. Cheap ones first; the nvdec samples (which
+ * involve a libx265 encode) last, and only when nvenc is what we'd encode with.
+ */
+export async function warmCapabilities(): Promise<void> {
+  await detectReadrateBurst()
+  await detectTextOverlay()
+  const enc = await resolveEncoder('auto')
+  if (enc !== 'h264_nvenc') return
+  for (const codec of Object.keys(SAMPLE_ENCODERS)) await canNvdecCodec(codec)
+}
+
 // ---- Text overlay support ---------------------------------------------------
 // Burned-in text (coming-up-next, song chyron) needs drawtext, which is only
 // present when ffmpeg was built with libfreetype, plus a font file on disk.

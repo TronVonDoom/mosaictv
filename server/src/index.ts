@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import { prisma, initDb } from './db.js'
 import { log } from './logs.js'
 import { warmFiller } from './streaming/filler.js'
+import { warmCapabilities } from './streaming/capabilities.js'
 import { startMetrics } from './metrics.js'
 import { resetHls } from './hls.js'
 import { migrateCollectionOwnership, migrateFillersToLibrary } from './migrate.js'
@@ -176,8 +177,12 @@ async function boot(): Promise<void> {
     )
   })
   // Pre-build the default filler in the background so the first intermission
-  // never blocks on generation.
-  if (ffmpegAvailable) warmFiller().catch(() => {})
+  // never blocks on generation, and run the ffmpeg capability probes now so no
+  // viewer ever pays for one mid-stream at a program boundary.
+  if (ffmpegAvailable) {
+    warmFiller().catch(() => {})
+    warmCapabilities().catch((e) => log('warn', 'ffmpeg', 'Capability warm-up failed', String(e)))
+  }
 }
 
 boot()
