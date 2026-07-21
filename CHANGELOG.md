@@ -2,20 +2,47 @@
 
 ## Unreleased
 
+- **The navigation is six destinations in three groups.** Two pairs of nav items
+  were the same idea under different names: **Browse** showed what was indexed
+  and **Libraries** managed the folders it came from, so they merged into
+  **Library** with *Browse* and *Sources* tabs. **Media** became **Studio** —
+  "media" also meant the media in your library — and absorbed the **Logos** page,
+  which had its own route but never appeared in the nav. Everything is grouped
+  now: *Broadcast* (Dashboard, Channels), *Content* (Library, Studio), *System*
+  (Logs, Settings). Old links still work: `/browse/3/show/Foo` keeps its ids and
+  lands on `/library/3/show/Foo`.
+- **⌘K / Ctrl-K jumps to anything** — pages, settings and studio tabs by what
+  they do rather than what they're called ("backup" finds Maintenance, "bumper"
+  finds Fillers), plus every channel and library by name. There's a Search button
+  in the sidebar carrying the shortcut, so it's findable without knowing it.
+- **The Dashboard leads with the setup checklist** until it's complete, instead
+  of putting it below three panels of zeroes on a fresh instance. It shows
+  progress and marks the next actionable step; once you're broadcasting it
+  disappears and the live guide takes the top slot.
+- **Tabs are linkable.** Tab state across Settings, Studio, Library and the
+  channel editor lives in the URL hash, so a tab survives a reload and can be
+  linked to. One consequence: leaving a tab discards an unsaved form on it.
+- **The sidebar says whether you're on air** — how many channels are live and
+  how many people are watching, from anywhere in the app.
+- Descriptions throughout moved out of paragraph-length preambles into hints
+  attached to the control they explain, empty states now say what the thing is
+  and offer the next step, and pages show skeletons while loading instead of
+  popping in.
+
 - **Fillers are manageable from one place.** A block's filler mode moved off
   the Schedule tab's block form (where it was an unlabelled dropdown) onto the
   channel's **Fillers** tab, next to the clips it governs, and saves on its own.
   The tab now warns when nothing on the channel opens a filler slot at all —
   previously you could assign fillers to a rotation-only channel and silently
   get nothing on air. **+ New filler** builds one and assigns it without a trip
-  to the Media page and back.
+  to the Studio page and back.
 - **Filler previews are branded correctly.** Generating a preview read the
   Filler row's own channel/block, which the shared-library migration nulls, so
   every generated clip came out with the bundled mark instead of the channel
   logo it airs with. Previews now brand from an explicit **Preview as** channel,
   falling back to wherever the filler is assigned.
 - Editing a filler discards its generated clip instead of leaving a preview of
-  the old settings, generated clips are badged `generated` on the Media page
+  the old settings, generated clips are badged `generated` on the Studio page
   and no longer offered as a "custom clip" source, and deleting one clears the
   filler's reference to it.
 - **One Fillers tab instead of two.** "Filler clips" and "Fillers" merged: an

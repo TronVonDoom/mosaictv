@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react'
-import Icon from '../components/Icon'
+import { useEffect, useRef, useState } from 'react'
+import Icon from './Icon'
 import { Link } from 'react-router-dom'
 import { api, type Library, type LibraryKind } from '../lib/api'
 import { errorMessage } from '../lib/errors'
 import { useJobStatus } from '../lib/hooks'
 import { toast } from '../lib/toast'
-import DirectoryPicker from '../components/DirectoryPicker'
-import { Badge, Banner, Button, Card, Field, Input, ProgressPanel, Select } from '../components/ui'
+import DirectoryPicker from './DirectoryPicker'
+import { Badge, Banner, Button, Card, Field, InfoHint, Input, ProgressPanel, Select } from './ui'
 
 const KIND_LABELS: Record<LibraryKind, string> = {
   tv: 'TV Shows',
@@ -20,7 +20,10 @@ type PickerTarget =
   | { mode: 'new'; index: number }
   | { mode: 'add'; libraryId: number }
 
-export default function Libraries() {
+/** The "Sources" half of the Library page: add libraries, point them at
+ *  folders, scan them, and pull metadata. Browsing what's inside lives in
+ *  LibraryBrowse. */
+export default function LibrarySources({ focusAddForm }: { focusAddForm?: number }) {
   const [libraries, setLibraries] = useState<Library[]>([])
   const [tmdbConfigured, setTmdbConfigured] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -31,6 +34,15 @@ export default function Libraries() {
   })
   const [submitting, setSubmitting] = useState(false)
   const [picker, setPicker] = useState<PickerTarget | null>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
+
+  // The Browse tab's empty state sends people here to add their first library;
+  // land them in the name field rather than at the top of an unfamiliar form.
+  useEffect(() => {
+    if (!focusAddForm) return
+    nameRef.current?.focus()
+    nameRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [focusAddForm])
 
   const refresh = () => api.libraries().then(setLibraries).catch(() => {})
 
@@ -118,12 +130,6 @@ export default function Libraries() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-1">Libraries</h1>
-      <p className="text-slate-400 text-sm mb-6">
-        A library can span multiple folders under your mounted{' '}
-        <code className="text-slate-500">/media</code> volume.
-      </p>
-
       {error && (
         <Banner className="mb-5">{error}</Banner>
       )}
@@ -176,10 +182,17 @@ export default function Libraries() {
 
       {/* Add-library form */}
       <Card className="p-5 mb-6">
+        <div className="mb-4">
+          <h2 className="font-semibold">Add a library</h2>
+          <p className="text-sm text-ink-muted mt-0.5">
+            A library is one shelf of your collection — a name, a type, and the folders it lives in.
+          </p>
+        </div>
         <form onSubmit={handleAdd} className="space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
-            <Field label="Name">
+            <Field label="Name" hint="Shown in the guide and on the Browse tab.">
               <Input
+                ref={nameRef}
                 placeholder="Movies"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -200,7 +213,14 @@ export default function Libraries() {
           </div>
 
           <div className="space-y-2">
-            <span className="text-slate-400 text-sm">Folders</span>
+            <span className="text-ink-muted text-sm inline-flex items-center gap-1.5">
+              Folders
+              <InfoHint>
+                One library can span several folders — useful when a collection is split across
+                drives. Paths are inside the container, so they start at your mounted{' '}
+                <code className="text-ink">/media</code> volume, not your host filesystem.
+              </InfoHint>
+            </span>
             {form.folders.map((folder, i) => (
               <div key={i} className="flex gap-2">
                 <Input
@@ -255,7 +275,9 @@ export default function Libraries() {
 
       {/* Library list */}
       {libraries.length === 0 ? (
-        <div className="text-slate-500 text-sm">No libraries yet.</div>
+        <p className="text-ink-faint text-sm text-center py-6">
+          No libraries yet — add one above to get started.
+        </p>
       ) : (
         <div className="space-y-3">
           {libraries.map((lib) => (

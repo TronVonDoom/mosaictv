@@ -296,7 +296,7 @@ export default function FillerManager() {
                     <p className="text-[11px] text-slate-500 mt-1">
                       {f.style === 'custom'
                         ? 'Your uploaded clip, with the chosen audio mixed over it at playback.'
-                        : `Built for ${previewChannelName ?? "the channel it's assigned to"} — the same filler is rebuilt with each channel's own logo when it airs. Saved on the Media page as a generated filler asset.`}
+                        : `Built for ${previewChannelName ?? "the channel it's assigned to"} — the same filler is rebuilt with each channel's own logo when it airs. Saved on the Studio page as a generated filler asset.`}
                     </p>
                   </div>
                 )}

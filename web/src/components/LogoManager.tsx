@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, logoImageUrl, type Logo, type WatermarkConfig } from '../lib/api'
-import WatermarkFields from '../components/WatermarkFields'
+import WatermarkFields from './WatermarkFields'
 import { toast } from '../lib/toast'
 import { errorMessage } from '../lib/errors'
-import { Banner, Button, Card, Field, Input, Modal, buttonClass } from '../components/ui'
+import { Banner, Button, Card, Field, Input, Modal, buttonClass } from './ui'
 
-export default function Logos({ embedded = false }: { embedded?: boolean }) {
+/** The logo library: upload an image, then tune the watermark it renders as.
+ *  Lives under Studio → Logos; it had its own route until that page absorbed it. */
+export default function LogoManager() {
   const [logos, setLogos] = useState<Logo[]>([])
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -52,17 +54,6 @@ export default function Logos({ embedded = false }: { embedded?: boolean }) {
 
   return (
     <div>
-      {!embedded && (
-        <>
-          <h1 className="text-2xl font-bold mb-1">Logos</h1>
-          <p className="text-slate-400 text-sm mb-6">
-            Upload logos once, then pick them as channel or block watermarks (and guide images). Each logo
-            carries its own watermark settings — click <span className="text-slate-300">Watermark</span> on a
-            logo to tune size, position, opacity, and timing.
-          </p>
-        </>
-      )}
-
       {error && <Banner className="mb-5">{error}</Banner>}
 
       <Card className="p-5 mb-6">

@@ -8,7 +8,7 @@ import { Modal } from './ui'
 // Assign fillers from the global library (managed under Media) to a channel
 // (its default gap filler) or a time block. Checking a box assigns it; "+ New"
 // creates one here and assigns it, so building a filler doesn't mean leaving
-// the channel for the Media page and navigating back.
+// the channel for the Studio page and navigating back.
 export default function FillerAssignmentPicker({ owner, hint }: { owner: FillerOwner; hint?: string }) {
   const [fillers, setFillers] = useState<Filler[]>([])
   const [assigned, setAssigned] = useState<Set<number>>(new Set())
@@ -64,14 +64,14 @@ export default function FillerAssignmentPicker({ owner, hint }: { owner: FillerO
               + New filler
             </button>
           )}
-          <Link to="/media#fillers" className="text-xs text-indigo-300 hover:text-indigo-200">Manage library →</Link>
+          <Link to="/studio#fillers" className="text-xs text-indigo-300 hover:text-indigo-200">Manage library →</Link>
         </div>
       </div>
 
       {fillers.length === 0 ? (
         <p className="text-xs text-slate-600">
           No fillers in the library yet — make one with <span className="text-slate-400">+ New filler</span>, or
-          manage them all under <Link to="/media#fillers" className="text-indigo-300">Media → Fillers</Link>. Gaps
+          manage them all under <Link to="/studio#fillers" className="text-indigo-300">Studio → Fillers</Link>. Gaps
           use the default frosted-glass ident until then.
         </p>
       ) : (

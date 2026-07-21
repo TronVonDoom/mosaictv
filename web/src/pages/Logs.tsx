@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, logsDownloadUrl, type LogCategory, type LogEntry, type LogLevel } from '../lib/api'
 import { copyText } from '../lib/clipboard'
 import { usePolling } from '../lib/hooks'
+import { Button, LinkButton, PageHeader, Select } from '../components/ui'
 
 const LEVELS: { value: LogLevel | 'all'; label: string }[] = [
   { value: 'all', label: 'All levels' },
@@ -103,78 +104,73 @@ export default function Logs() {
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-4 mb-1">
-        <h1 className="text-2xl font-bold">Logs</h1>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={copyAll}
-            className="rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-700 px-3 py-1.5 text-sm"
-          >
-            {copied ? 'Copied ✓' : 'Copy all'}
-          </button>
-          <a
-            href={logsDownloadUrl}
-            className="rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-700 px-3 py-1.5 text-sm"
-          >
-            Download
-          </a>
-          <button
-            onClick={clearAll}
-            className="rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 px-3 py-1.5 text-sm"
-          >
-            Clear
-          </button>
-        </div>
-      </div>
-      <p className="text-slate-400 text-sm mb-5">
-        FFmpeg errors, stream connect/disconnect events, playout builds, and other diagnostics. Copy or
-        download these when reporting a problem.
-      </p>
+      <PageHeader
+        title="Logs"
+        icon="logs"
+        description="FFmpeg errors, stream connect/disconnect events, playout builds, and other diagnostics. Copy or download these when reporting a problem."
+        actions={
+          <>
+            <Button variant="secondary" size="sm" onClick={copyAll}>
+              {copied ? 'Copied ✓' : 'Copy all'}
+            </Button>
+            <LinkButton size="sm" href={logsDownloadUrl}>
+              Download
+            </LinkButton>
+            <Button variant="danger" size="sm" onClick={clearAll}>
+              Clear
+            </Button>
+          </>
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        <select
+        <Select
           value={level}
           onChange={(e) => setLevel(e.target.value as LogLevel | 'all')}
           className="py-1.5"
+          aria-label="Filter by level"
         >
           {LEVELS.map((l) => (
             <option key={l.value} value={l.value}>
               {l.label}
             </option>
           ))}
-        </select>
-        <select
+        </Select>
+        <Select
           value={category}
           onChange={(e) => setCategory(e.target.value as LogCategory | 'all')}
           className="py-1.5"
+          aria-label="Filter by source"
         >
           {CATEGORIES.map((c) => (
             <option key={c.value} value={c.value}>
               {c.label}
             </option>
           ))}
-        </select>
-        <label className="flex items-center gap-2 text-sm text-slate-400 select-none">
+        </Select>
+        <label className="flex items-center gap-2 text-sm text-ink-muted select-none">
           <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} />
           Auto-refresh
         </label>
-        <button onClick={manualRefresh} className="text-sm text-slate-400 hover:text-slate-200">
+        <button onClick={manualRefresh} className="text-sm text-ink-muted hover:text-ink-soft">
           {flash ? 'Refreshed ✓' : 'Refresh now'}
         </button>
-        <span className="text-xs text-slate-600 ml-auto">{total} matching entries</span>
+        <span className="text-xs text-ink-faint ml-auto tabular-nums">{total} matching entries</span>
       </div>
 
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="rounded-xl border border-slate-800 bg-slate-950/80 font-mono text-xs leading-relaxed h-[62vh] overflow-auto p-3 space-y-1"
+        className="rounded-xl border border-edge bg-canvas/80 font-mono text-xs leading-relaxed h-[62vh] overflow-auto p-3 space-y-1"
       >
         {entries.length === 0 ? (
-          <div className="text-slate-600 p-4 text-center">No log entries yet.</div>
+          <div className="text-ink-faint p-4 text-center">
+            No log entries match these filters.
+          </div>
         ) : (
           entries.map((e) => (
             <div key={e.id} className="flex gap-2 items-start">
-              <span className="text-slate-600 shrink-0 tabular-nums">
+              <span className="text-ink-faint shrink-0 tabular-nums">
                 {new Date(e.ts).toLocaleTimeString()}
               </span>
               <span
@@ -184,10 +180,10 @@ export default function Logs() {
               >
                 {e.level}
               </span>
-              <span className="text-slate-500 shrink-0">[{e.category}]</span>
-              <span className="text-slate-200 whitespace-pre-wrap break-words min-w-0">
+              <span className="text-ink-faint shrink-0">[{e.category}]</span>
+              <span className="text-ink-soft whitespace-pre-wrap break-words min-w-0">
                 {e.message}
-                {e.detail && <span className="block text-slate-500 mt-0.5 pl-1">{e.detail}</span>}
+                {e.detail && <span className="block text-ink-faint mt-0.5 pl-1">{e.detail}</span>}
               </span>
             </div>
           ))

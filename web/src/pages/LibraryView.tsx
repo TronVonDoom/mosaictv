@@ -73,9 +73,9 @@ export default function LibraryView() {
 
   return (
     <div>
-      <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
-        <Link to="/browse" className="hover:text-indigo-300">
-          Browse
+      <div className="flex items-center gap-2 text-sm text-ink-faint mb-1">
+        <Link to="/library" className="hover:text-indigo-300">
+          Library
         </Link>
         <span>/</span>
         <span className="text-slate-300">{library?.name ?? '…'}</span>
@@ -107,7 +107,7 @@ export default function LibraryView() {
                       : undefined
                 }
                 onClick={() =>
-                  navigate(`/browse/${id}/show/${encodeURIComponent(s.showTitle)}`)
+                  navigate(`/library/${id}/show/${encodeURIComponent(s.showTitle)}`)
                 }
               />
             ))}
@@ -159,10 +159,10 @@ export default function LibraryView() {
 
 function EmptyState() {
   return (
-    <div className="text-slate-500 text-sm">
+    <div className="text-ink-faint text-sm">
       Nothing here yet. Run a scan on this library from{' '}
-      <Link to="/libraries" className="text-indigo-300">
-        Libraries
+      <Link to="/library#sources" className="text-indigo-300">
+        Library → Sources
       </Link>
       .
     </div>

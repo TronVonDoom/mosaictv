@@ -1,35 +1,87 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { api, backupUrl, type StreamMode, type WatermarkConfig } from '../lib/api'
 import { errorMessage } from '../lib/errors'
 import WatermarkFields from '../components/WatermarkFields'
 import EncodingProfilesCard from '../components/EncodingProfilesCard'
 import { toast } from '../lib/toast'
-import { Badge, Button, Card, Input, LinkButton, Tabs, cx } from '../components/ui'
+import { useHashTab } from '../lib/hooks'
+import {
+  Badge,
+  Banner,
+  Button,
+  Card,
+  InfoHint,
+  Input,
+  LinkButton,
+  PageHeader,
+  Skeleton,
+  Tabs,
+  cx,
+} from '../components/ui'
 
-type SettingsTab = 'metadata' | 'streaming' | 'watermark' | 'encoding' | 'maintenance'
-const TABS: { id: SettingsTab; label: string }[] = [
-  { id: 'metadata', label: 'Metadata' },
-  { id: 'streaming', label: 'Streaming' },
-  { id: 'watermark', label: 'Watermark' },
-  { id: 'encoding', label: 'Encoding' },
-  { id: 'maintenance', label: 'Maintenance' },
-]
+const TABS = [
+  { id: 'metadata', label: 'Metadata', icon: 'browse' },
+  { id: 'streaming', label: 'Streaming', icon: 'channels' },
+  { id: 'watermark', label: 'Watermark', icon: 'image' },
+  { id: 'encoding', label: 'Encoding', icon: 'clip' },
+  { id: 'maintenance', label: 'Maintenance', icon: 'settings' },
+] as const
+
+type SettingsTab = (typeof TABS)[number]['id']
+const TAB_IDS = TABS.map((t) => t.id)
+
+const DESCRIPTIONS: Record<SettingsTab, string> = {
+  metadata: 'Where MosaicTV gets posters, overviews, genres and ratings for your library.',
+  streaming: 'How channel streams are produced and handed to your player.',
+  watermark: 'The fallback on-screen logo, for logos that carry no settings of their own.',
+  encoding: 'Reusable ffmpeg profiles that channels pick from when they transcode.',
+  maintenance: 'Back up your data, or wipe this instance back to a clean slate.',
+}
 
 const STREAM_MODES = [
   {
     id: 'hls',
     title: 'Shared HLS',
-    desc: 'One transcode per channel, served to every viewer. Best for multiple viewers / weaker CPUs. Recommended.',
+    badge: 'Recommended',
+    desc: 'One transcode per channel, served to every viewer.',
+    best: 'Best for multiple viewers, or a weaker CPU.',
   },
   {
     id: 'mpegts',
     title: 'MPEG-TS (per-client)',
-    desc: 'A separate transcode for each viewer. Simplest; fine for a single viewer or a very fast box.',
+    badge: null,
+    desc: 'A separate transcode for each viewer.',
+    best: 'Simplest; fine for a single viewer or a very fast box.',
   },
 ] as const
 
+/** A titled block inside a settings tab — the heading, the one-line "what", and
+ *  an optional badge for state that belongs next to the title. */
+function SettingsCard({
+  title,
+  description,
+  badge,
+  children,
+}: {
+  title: string
+  description?: ReactNode
+  badge?: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <Card>
+      <div className="flex items-center gap-3 mb-1">
+        <h2 className="font-semibold">{title}</h2>
+        {badge}
+      </div>
+      {description && <p className="text-ink-muted text-sm mb-4">{description}</p>}
+      {children}
+    </Card>
+  )
+}
+
 export default function Settings() {
-  const [tab, setTab] = useState<SettingsTab>('metadata')
+  const [tab, setTab] = useHashTab<SettingsTab>(TAB_IDS, 'metadata')
   const [configured, setConfigured] = useState<boolean | null>(null)
   const [key, setKey] = useState('')
   const [saving, setSaving] = useState(false)
@@ -106,35 +158,44 @@ export default function Settings() {
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-2xl font-bold mb-1">Settings</h1>
-      <p className="text-slate-400 text-sm mb-5">
-        Global defaults and external services. Fillers and logos live on each channel; assets live on the
-        Media page.
-      </p>
-
-      <Tabs tabs={TABS} active={tab} onChange={setTab} className="mb-6" />
+      <PageHeader
+        title="Settings"
+        icon="settings"
+        description={DESCRIPTIONS[tab]}
+      >
+        <Tabs tabs={TABS} active={tab} onChange={setTab} />
+      </PageHeader>
 
       {tab === 'metadata' && (
-        <Card>
-          <div className="flex items-center gap-3 mb-2">
-            <h2 className="font-semibold">TMDB (The Movie Database)</h2>
-            {configured != null && (
-              <Badge tone={configured ? 'good' : 'neutral'}>{configured ? 'configured' : 'not set'}</Badge>
-            )}
-          </div>
-          <p className="text-slate-400 text-sm mb-4">
-            Provides posters, overviews, genres and ratings. Get a free API key from your{' '}
-            <a
-              href="https://www.themoviedb.org/settings/api"
-              target="_blank"
-              rel="noreferrer"
-              className="text-indigo-300 hover:text-indigo-200"
-            >
-              TMDB account → API
-            </a>{' '}
-            (use the <span className="text-slate-300">API Key (v3 auth)</span>).
-          </p>
-
+        <SettingsCard
+          title="TMDB (The Movie Database)"
+          badge={
+            configured != null && (
+              <Badge tone={configured ? 'good' : 'neutral'}>
+                {configured ? 'configured' : 'not set'}
+              </Badge>
+            )
+          }
+          description={
+            <>
+              A free API key unlocks posters, overviews, genres and ratings. Grab one from your{' '}
+              <a
+                href="https://www.themoviedb.org/settings/api"
+                target="_blank"
+                rel="noreferrer"
+                className="text-indigo-300 hover:text-indigo-200"
+              >
+                TMDB account → API
+              </a>
+              .{' '}
+              <InfoHint>
+                Use the <span className="text-ink">API Key (v3 auth)</span> value, not the read access
+                token. MosaicTV verifies the key with TMDB before saving it, so a bad key fails here
+                rather than silently during a scan.
+              </InfoHint>
+            </>
+          }
+        >
           <form onSubmit={save} className="flex gap-2">
             <Input
               type="password"
@@ -148,92 +209,126 @@ export default function Settings() {
               {saving ? 'Verifying…' : 'Save & verify'}
             </Button>
           </form>
-        </Card>
+          {configured === false && (
+            <p className="text-xs text-ink-faint mt-3">
+              Without a key MosaicTV still scans and schedules everything — your channels just look
+              plainer, with no artwork in the guide.
+            </p>
+          )}
+        </SettingsCard>
       )}
 
       {tab === 'streaming' && (
-        <Card>
-          <h2 className="font-semibold mb-1">Streaming mode</h2>
-          <p className="text-slate-400 text-sm mb-4">
-            How the M3U hands out channel streams. Change takes effect the next time a player reloads the
-            playlist.
-          </p>
+        <SettingsCard
+          title="Streaming mode"
+          description={
+            <>
+              How the M3U hands out channel streams. Takes effect the next time a player reloads the
+              playlist.{' '}
+              <InfoHint>
+                Both endpoints stay live regardless of this setting — a channel is always reachable at{' '}
+                <code className="text-ink">/iptv/channel/N.ts</code> and{' '}
+                <code className="text-ink">/iptv/channel/N/index.m3u8</code>. This only changes which one
+                the playlist points at.
+              </InfoHint>
+            </>
+          }
+        >
           <div className="space-y-2">
-            {STREAM_MODES.map((o) => (
-              <label
-                key={o.id}
-                className={cx(
-                  'flex gap-3 rounded-lg border p-3 cursor-pointer transition-colors',
-                  streamMode === o.id
-                    ? 'border-indigo-500/60 bg-indigo-500/5'
-                    : 'border-slate-800 hover:border-slate-600',
-                )}
-              >
-                <input
-                  type="radio"
-                  name="streamMode"
-                  className="mt-0.5"
-                  checked={streamMode === o.id}
-                  onChange={() => saveMode(o.id)}
-                />
-                <div>
-                  <div className="text-sm font-medium">{o.title}</div>
-                  <div className="text-xs text-slate-500">{o.desc}</div>
-                </div>
-              </label>
-            ))}
+            {STREAM_MODES.map((o) => {
+              const active = streamMode === o.id
+              return (
+                <label
+                  key={o.id}
+                  className={cx(
+                    'flex gap-3 rounded-lg border p-3 cursor-pointer transition-colors',
+                    active ? 'border-indigo-500/60 bg-indigo-500/5' : 'border-edge hover:border-edge-strong',
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="streamMode"
+                    className="mt-1 shrink-0"
+                    checked={active}
+                    onChange={() => saveMode(o.id)}
+                  />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{o.title}</span>
+                      {o.badge && <Badge tone="accent">{o.badge}</Badge>}
+                    </div>
+                    <div className="text-xs text-ink-muted mt-0.5">{o.desc}</div>
+                    <div className="text-xs text-ink-faint mt-0.5">{o.best}</div>
+                  </div>
+                </label>
+              )
+            })}
           </div>
-          <p className="text-xs text-slate-500 mt-3">
-            Both endpoints stay live regardless of this setting — a channel is always reachable at{' '}
-            <code className="text-slate-400">/iptv/channel/N.ts</code> and{' '}
-            <code className="text-slate-400">/iptv/channel/N/index.m3u8</code>.
-          </p>
-        </Card>
+        </SettingsCard>
       )}
 
-      {tab === 'watermark' && wm && (
-        <Card>
-          <form onSubmit={saveWm}>
-            <h2 className="font-semibold mb-1">Default watermark (on-screen logo)</h2>
-            <p className="text-slate-400 text-sm mb-4">
-              The fallback watermark for logos without their own settings (and legacy URL logos). Set
-              per-logo overrides on the <span className="text-slate-300">Media</span> page. Intermittent
-              mode shows the logo for the set duration every so many minutes, aligned to wall-clock time.
-            </p>
-            <WatermarkFields wm={wm} onChange={setWm} />
-            <div className="flex justify-end mt-3">
-              <Button type="submit" size="lg">
-                Save default
-              </Button>
-            </div>
-          </form>
-        </Card>
-      )}
+      {tab === 'watermark' &&
+        (wm ? (
+          <SettingsCard
+            title="Default watermark"
+            description={
+              <>
+                The fallback on-screen logo, used by logos that have no settings of their own.{' '}
+                <InfoHint>
+                  Set per-logo overrides under Studio → Logos; those always win over this default.
+                  Intermittent mode shows the logo for the set duration every so many minutes, aligned
+                  to wall-clock time — so every channel flashes its logo together.
+                </InfoHint>
+              </>
+            }
+          >
+            <form onSubmit={saveWm}>
+              <WatermarkFields wm={wm} onChange={setWm} />
+              <div className="flex justify-end mt-3">
+                <Button type="submit" size="lg">
+                  Save default
+                </Button>
+              </div>
+            </form>
+          </SettingsCard>
+        ) : (
+          <Skeleton className="h-64 rounded-xl" />
+        ))}
 
       {tab === 'encoding' && <EncodingProfilesCard />}
 
       {tab === 'maintenance' && (
-        <Card>
-          <h2 className="font-semibold mb-1">Maintenance</h2>
-          <p className="text-slate-400 text-sm mb-4">
-            Back up your data (database + logos + filler) before experimenting, or reset to a clean slate
-            for a fresh start.
-          </p>
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="space-y-4">
+          <SettingsCard
+            title="Backup"
+            description="Everything that makes this instance yours — the database, your logos, and your filler clips — in one archive."
+          >
             <LinkButton href={backupUrl}>Download backup (.tar.gz)</LinkButton>
-            <label className="flex items-center gap-2 text-sm text-slate-400 select-none">
-              <input
-                type="checkbox"
-                checked={wipeAssets}
-                onChange={(e) => setWipeAssets(e.target.checked)}
-              />
-              Also delete uploaded logos &amp; filler
-            </label>
-            <Button variant="danger" onClick={resetInstance} disabled={resetBusy} className="ml-auto">
-              {resetBusy ? 'Resetting…' : 'Reset to clean slate'}
-            </Button>
-          </div>
-        </Card>
+          </SettingsCard>
+
+          <SettingsCard
+            title="Reset"
+            description="Wipe this instance back to a clean slate: every library, channel, collection, logo and setting."
+          >
+            <Banner tone="warn" className="mb-4">
+              This cannot be undone. Download a backup first if there's any chance you'll want this
+              instance back.
+            </Banner>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-ink-muted select-none">
+                <input
+                  type="checkbox"
+                  checked={wipeAssets}
+                  onChange={(e) => setWipeAssets(e.target.checked)}
+                />
+                Also delete uploaded logos &amp; filler
+              </label>
+              <Button variant="danger" onClick={resetInstance} disabled={resetBusy} className="ml-auto">
+                {resetBusy ? 'Resetting…' : 'Reset to clean slate'}
+              </Button>
+            </div>
+          </SettingsCard>
+        </div>
       )}
     </div>
   )

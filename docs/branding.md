@@ -50,13 +50,13 @@ Configure it per channel on the **Fillers** tab:
 - **Per-block filler** — a block can override that with its own set.
 
 Assign more than one and each gap plays one of them, rotating by start time.
-Fillers come from a shared library that lives under **Media → Fillers**; the
+Fillers come from a shared library that lives under **Studio → Fillers**; the
 **+ New filler** button on the Fillers tab creates one and assigns it without
 leaving the channel.
 
 ### The library
 
-**Media → Fillers** holds every filler in one list, with two ways to add one:
+**Studio → Fillers** holds every filler in one list, with two ways to add one:
 
 - **Upload clip** — your own bumper or ident reel. The upload and the filler
   that wraps it are created together; there's no separate step to "register"
@@ -95,7 +95,7 @@ The result is discarded automatically when you edit the filler, so a preview
 never shows stale settings.
 
 Generation runs **on the server**, not in the page: the progress bar shows a
-percentage, and leaving the Media page (or reloading) doesn't cancel anything —
+percentage, and leaving the Studio page (or reloading) doesn't cancel anything —
 come back and the bar picks up where the build actually is, or shows the
 finished clip.
 

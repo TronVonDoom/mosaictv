@@ -18,7 +18,7 @@ export const emptyFillerDraft: FillerInput = {
 // they're refined — re-add them here to bring them back.
 export const STYLES: { id: FillerInput['style']; label: string; desc: string }[] = [
   { id: 'frosted', label: 'Frosted glass', desc: 'logos scrolling behind blurred glass, sharp logos in front' },
-  { id: 'custom', label: 'Custom clip', desc: 'an uploaded video from the Media page' },
+  { id: 'custom', label: 'Custom clip', desc: 'an uploaded video from the Studio page' },
 ]
 
 // Display names, including the retired styles that older rows may still carry.
@@ -42,7 +42,7 @@ export function fillerSummary(f: Filler): string {
 
 /**
  * The create/edit form for one filler, owning its own draft state and the save
- * call. Used inline by the library (Media → Fillers) and inside a modal from a
+ * call. Used inline by the library (Studio → Fillers) and inside a modal from a
  * channel's Fillers tab, so a filler can be made without leaving the channel.
  */
 export default function FillerEditor({
@@ -156,7 +156,7 @@ export default function FillerEditor({
         </button>
       </div>
       <p className="text-[11px] text-slate-500">
-        Uploaded clips &amp; music live on the Media page. Fillers stretch to fill each gap; the chosen audio is
+        Uploaded clips &amp; music live on the Studio page. Fillers stretch to fill each gap; the chosen audio is
         baked into generated clips, and “Match audio” makes the loop equal the track length.
       </p>
     </div>
