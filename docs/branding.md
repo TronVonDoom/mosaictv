@@ -31,14 +31,41 @@ The watermark hides during filler by default, fading across the boundary.
 
 ## Station-ID filler
 
-Filler is what plays in the gaps: between programs inside a time block (so the
-block ends exactly on schedule), before a hard-start block, and between blocks
-on blocks-only channels.
+Filler is what plays in the gaps the schedule opens for it:
+
+- Between (or at the end of) the programs inside a time block, so the block
+  ends exactly on schedule — controlled by that block's **filler mode**.
+- Before a **hard-start** block, so it begins exactly on time.
+
+Nothing else creates a filler slot. In particular, the time between blocks on
+a blocks-only channel is dead air (black), and a rotation-only channel never
+plays filler at all — the channel editor warns you when that's the case.
 
 Configure it per channel on the **Fillers** tab:
 
-- **Channel default** — plays in any gap unless a block overrides it.
-- **Per-block filler** — each time block can have its own set.
+- **Filler mode** — per block, whether it fills its leftover time (off /
+  between programs / at the end).
+- **Channel default** — the clips used in any slot where the active block has
+  none of its own.
+- **Per-block filler** — a block can override that with its own set.
+
+Assign more than one and each gap plays one of them, rotating by start time.
+Fillers come from a shared library that lives under **Media → Fillers**; the
+**+ New filler** button on the Fillers tab creates one and assigns it without
+leaving the channel.
+
+### The library
+
+**Media → Fillers** holds every filler in one list, with two ways to add one:
+
+- **Upload clip** — your own bumper or ident reel. The upload and the filler
+  that wraps it are created together; there's no separate step to "register"
+  the file. (Deleting the filler removes the clip too, unless another filler
+  shares it.)
+- **+ Add filler** — a generated station ID built from a channel's logo.
+
+Anything uploaded that no filler uses shows under **Unused clips** at the
+bottom of the list, so nothing becomes unreachable — normally it's empty.
 
 ### Filler styles
 
@@ -48,19 +75,29 @@ composites the channel's (or block's) logo into an animated station-ID loop:
 | Style | Look | Uses your logo |
 | ----- | ---- | -------------- |
 | `frosted` | Frosted-glass scene: scrolling logo rows behind, logo in front | ✅ |
-| `logowall` | Tiled wall of the logo | ✅ |
-| `pulse` | Logo centered on a dark gradient that slowly breathes | ✅ |
-| `animated` | Drifting color gradient with a slow hue sway — "please stand by" | – |
-| `retro` | Retro broadcast look, logo-free | – |
-| `vintage` | Vintage look, logo-free | – |
 | `custom` | **Your own clip** — bumpers, ident reels, anything | your call |
 
-(For logo-free styles the live watermark still overlays during program
-playback — it just stays off during the filler itself.)
+Earlier builds also offered `logowall`, `pulse`, `animated`, `retro` and
+`vintage`. Only the polished frosted-glass ident ships today; existing fillers
+on a retired style keep playing and stay editable, but new ones can't pick it.
+(`animated` also remains the internal fallback whenever a branded clip can't be
+built.)
 
-Generation runs in the background with a progress indicator; clips are saved
-as assets and reused. You can attach an **audio track** to have the music baked
-in and the clip length matched to it.
+You can attach an **audio track** to have the music baked in and the clip
+length matched to it.
+
+**Generating is for previewing.** A filler plays on air whether or not you ever
+press it — the clip is built and cached on demand. Because a generated style
+composites *the logo of wherever it's playing*, one filler renders differently
+per channel, so the library's **Preview as** selector picks which channel's
+branding to build; without one it uses wherever the filler is first assigned.
+The result is discarded automatically when you edit the filler, so a preview
+never shows stale settings.
+
+Generation runs **on the server**, not in the page: the progress bar shows a
+percentage, and leaving the Media page (or reloading) doesn't cancel anything —
+come back and the bar picks up where the build actually is, or shows the
+finished clip.
 
 Filler is looped/trimmed to exactly fill each gap, so blocks always land on
 their boundaries. The watermark stays off during filler; "coming up next"

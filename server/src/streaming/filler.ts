@@ -355,26 +355,58 @@ export async function resolveFillerClip(f: FillerRow, logoFile: string | undefin
   return { clip: await ensureAnimatedFiller(dur, audioFile, onProgress) }
 }
 
+/** Where a preview should take its branding from. */
+export type FillerLogoContext = { channelId?: number | null; timeBlockId?: number | null }
+
+/**
+ * Which logo brands this filler's generated clip. A filler is a global library
+ * item, so one definition renders differently everywhere it's assigned: use the
+ * requested owner, else the first place it's assigned, so a preview matches what
+ * actually airs somewhere rather than the bundled fallback mark.
+ *
+ * (The Filler row's own channelId/timeBlockId are legacy and always null since
+ * the library migration — reading them was why previews came out unbranded.)
+ */
+async function fillerLogoFile(fillerId: number, ctx: FillerLogoContext): Promise<string | undefined> {
+  const blockOf = (id: number) =>
+    prisma.timeBlock.findUnique({ where: { id }, include: { channel: true, collection: true } })
+
+  let block = ctx.timeBlockId != null ? await blockOf(ctx.timeBlockId) : null
+  let channel = !block && ctx.channelId != null ? await prisma.channel.findUnique({ where: { id: ctx.channelId } }) : null
+
+  if (!block && !channel) {
+    const a = await prisma.fillerAssignment.findFirst({
+      where: { fillerId },
+      orderBy: { order: 'asc' },
+      include: { channel: true, timeBlock: { include: { channel: true, collection: true } } },
+    })
+    block = a?.timeBlock ?? null
+    channel = a?.channel ?? null
+  }
+
+  if (block) {
+    return logoFileById(
+      block.logoId ?? block.collection.logoId ?? block.channel.logoId,
+      block.logoUrl ?? block.channel.logoUrl,
+    )
+  }
+  if (channel) return logoFileById(channel.logoId, channel.logoUrl)
+  return logoFileById(null, null) // unassigned: the bundled mark is all we have
+}
+
 /**
  * Build (if needed) and return a Filler's branded clip — used by the generate
- * endpoint. `onProgress` reports 0..99% during generation.
+ * endpoint. `ctx` picks whose logo to brand it with. `onProgress` reports
+ * 0..99% during generation.
  */
-export async function resolveFillerClipById(id: number, onProgress?: ProgressCb): Promise<{ clip?: string; music?: string } | null> {
-  const f = await prisma.filler.findUnique({
-    where: { id },
-    include: { channel: true, timeBlock: { include: { channel: true, collection: true } } },
-  })
+export async function resolveFillerClipById(
+  id: number,
+  ctx: FillerLogoContext = {},
+  onProgress?: ProgressCb,
+): Promise<{ clip?: string; music?: string } | null> {
+  const f = await prisma.filler.findUnique({ where: { id } })
   if (!f) return null
-  let logoId: number | null = null
-  let logoUrl: string | null = null
-  if (f.timeBlock) {
-    logoId = f.timeBlock.logoId ?? f.timeBlock.collection.logoId ?? f.timeBlock.channel.logoId
-    logoUrl = f.timeBlock.logoUrl ?? f.timeBlock.channel.logoUrl
-  } else if (f.channel) {
-    logoId = f.channel.logoId
-    logoUrl = f.channel.logoUrl
-  }
-  return resolveFillerClip(f, await logoFileById(logoId, logoUrl), onProgress)
+  return resolveFillerClip(f, await fillerLogoFile(id, ctx), onProgress)
 }
 
 /**

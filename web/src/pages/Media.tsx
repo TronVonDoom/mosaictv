@@ -4,23 +4,33 @@ import AssetManager from '../components/AssetManager'
 import FillerManager from '../components/FillerManager'
 import Icon, { type IconName } from '../components/Icon'
 
-type Tab = 'images' | 'audio' | 'clips' | 'fillers'
+type Tab = 'images' | 'audio' | 'fillers'
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'images', label: 'Logos / Images', icon: 'image' },
   { id: 'audio', label: 'Audio', icon: 'audio' },
-  { id: 'clips', label: 'Filler clips', icon: 'clip' },
-  { id: 'fillers', label: 'Fillers', icon: 'channels' },
+  { id: 'fillers', label: 'Fillers', icon: 'clip' },
 ]
 
 export default function Media() {
-  const [tab, setTab] = useState<Tab>('images')
+  // Deep-linkable tab (the channel editor links straight to #fillers).
+  // "clips" was a separate tab for filler uploads before they merged into the
+  // library; keep the old anchor working rather than dumping people on Images.
+  const [tab, setTabState] = useState<Tab>(() => {
+    const h = window.location.hash.replace('#', '')
+    if (h === 'clips') return 'fillers'
+    return TABS.some((t) => t.id === h) ? (h as Tab) : 'images'
+  })
+  const setTab = (t: Tab) => {
+    setTabState(t)
+    window.location.hash = t
+  }
 
   return (
     <div>
       <h1 className="text-2xl font-bold mb-1">Media</h1>
       <p className="text-slate-400 text-sm mb-5">
-        All uploaded assets: logo/watermark images, ambient audio for intermissions, and custom filler
-        clips.
+        Everything the channels draw on besides your library: logo/watermark images, ambient audio for
+        intermissions, and the station-ID fillers that cover the gaps.
       </p>
 
       <div className="flex gap-1 border-b border-slate-800 mb-6">
@@ -50,19 +60,14 @@ export default function Media() {
           hint="Pick a track in a channel or block filler (channel editor → Fillers) to play it during intermissions."
         />
       )}
-      {tab === 'clips' && (
-        <AssetManager
-          kind="filler"
-          accept="video/*"
-          emptyText="No filler clips uploaded yet. Upload a video to use as a “Custom clip” filler."
-          hint="Referenced by a filler with the “Custom clip” visual (Fillers tab). Generated fillers also land here."
-        />
-      )}
       {tab === 'fillers' && (
         <div className="max-w-2xl">
           <p className="text-slate-400 text-sm mb-3">
-            Build station-ID fillers here, then assign them to channels or blocks from a channel's
-            <span className="text-slate-300"> Fillers</span> tab. Deleting one removes it everywhere it's used.
+            The shared library of station-ID fillers — upload your own clip or have one generated from a
+            channel's logo. Assign them to channels or blocks from a channel's
+            <span className="text-slate-300"> Fillers</span> tab, which can also create one on the spot.
+            Generating is only for previewing; a filler plays whether or not you build a preview here.
+            Deleting one removes it everywhere it's used.
           </p>
           <FillerManager />
         </div>

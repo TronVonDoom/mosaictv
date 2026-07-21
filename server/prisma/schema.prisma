@@ -183,6 +183,9 @@ model FillerAssignment {
   channelId   Int?
   timeBlock   TimeBlock? @relation(fields: [timeBlockId], references: [id], onDelete: Cascade)
   timeBlockId Int?
+  // Insertion order, which only fixes the pool's sequence — it is NOT a
+  // priority. Which filler airs in a gap is chosen from the pool by the gap's
+  // start time (see streaming/channel.ts), so every assigned filler gets used.
   order       Int        @default(0)
 
   @@unique([fillerId, channelId])

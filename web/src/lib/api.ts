@@ -229,6 +229,7 @@ export type FillerInput = {
   durationSec: number
 }
 export type FillerGenStatus = { percent?: number; done?: boolean; error?: string; assetId?: number; idle?: boolean }
+export type FillerGenJob = { fillerId: number; percent: number; done: boolean; error: string | null }
 export type Collection = {
   id: number
   name: string
@@ -270,6 +271,7 @@ export type Asset = {
   mime: string
   sizeBytes: number | null
   createdAt: string
+  generated?: boolean // built from a Filler definition rather than uploaded
 }
 export function assetFileUrl(id: number): string {
   return `/api/assets/${id}/file`
@@ -288,6 +290,21 @@ export type TimeBlock = {
   startMode: string
   comingUp: string | null // JSON ComingUpConfig; null = inherit channel
   collection: { id: number; name: string }
+}
+
+// What a time block accepts on write. Omitted fields keep the schema default on
+// create, and are left untouched on update.
+export type BlockInput = {
+  collectionId: number
+  days: string
+  startMinute: number
+  endMinute: number
+  playbackOrder: string
+  logoUrl?: string | null
+  logoId?: number | null
+  fillerMode?: string
+  startMode?: string
+  comingUp?: ComingUpConfig | null
 }
 
 export type Channel = {
@@ -526,9 +543,20 @@ export const api = {
     request<Filler>('/api/fillers', { method: 'POST', body: JSON.stringify(data) }),
   updateFiller: (id: number, data: FillerInput) =>
     request<Filler>(`/api/fillers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  deleteFiller: (id: number) => request<void>(`/api/fillers/${id}`, { method: 'DELETE' }),
-  generateFillerClip: (id: number) => request<{ started: boolean }>(`/api/fillers/${id}/generate`, { method: 'POST' }),
+  // Deleting a custom filler also deletes the clip it was created with, unless
+  // another filler shares it or `keepSource` is set.
+  deleteFiller: (id: number, keepSource = false) =>
+    request<void>(`/api/fillers/${id}${keepSource ? '?keepSource=1' : ''}`, { method: 'DELETE' }),
+  // `owner` brands the generated preview with that channel's/block's logo — the
+  // same filler renders differently everywhere it's assigned.
+  generateFillerClip: (id: number, owner?: FillerOwner) => {
+    const qs = owner?.channelId != null ? `?channelId=${owner.channelId}` : owner?.timeBlockId != null ? `?timeBlockId=${owner.timeBlockId}` : ''
+    return request<{ started: boolean }>(`/api/fillers/${id}/generate${qs}`, { method: 'POST' })
+  },
   fillerGenStatus: (id: number) => request<FillerGenStatus>(`/api/fillers/${id}/generate/status`),
+  // Every generation the server is running or recently finished — lets a page
+  // that wasn't open for the whole build resume showing its progress.
+  fillerGenJobs: () => request<FillerGenJob[]>('/api/fillers/generating'),
   // Assigning library fillers to a channel (default gap filler) or a block.
   fillerAssignments: (owner: FillerOwner) => {
     const qs = owner.channelId != null ? `channelId=${owner.channelId}` : `timeBlockId=${owner.timeBlockId}`
@@ -565,15 +593,12 @@ export const api = {
   ) => request<RotationItem>(`/api/channels/${channelId}/rotation`, { method: 'POST', body: JSON.stringify(data) }),
   deleteRotation: (channelId: number, itemId: number) =>
     request<void>(`/api/channels/${channelId}/rotation/${itemId}`, { method: 'DELETE' }),
-  addBlock: (
-    channelId: number,
-    data: { collectionId: number; days: string; startMinute: number; endMinute: number; playbackOrder: string; logoUrl?: string | null; fillerMode?: string; logoId?: number | null; startMode?: string; comingUp?: ComingUpConfig | null },
-  ) => request<TimeBlock>(`/api/channels/${channelId}/blocks`, { method: 'POST', body: JSON.stringify(data) }),
-  updateBlock: (
-    channelId: number,
-    blockId: number,
-    data: { collectionId: number; days: string; startMinute: number; endMinute: number; playbackOrder: string; logoUrl?: string | null; fillerMode?: string; logoId?: number | null; startMode?: string; comingUp?: ComingUpConfig | null },
-  ) => request<TimeBlock>(`/api/channels/${channelId}/blocks/${blockId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  addBlock: (channelId: number, data: BlockInput) =>
+    request<TimeBlock>(`/api/channels/${channelId}/blocks`, { method: 'POST', body: JSON.stringify(data) }),
+  // PATCH is field-by-field on the server, so a caller may send just the one
+  // field it owns (the Fillers tab patches fillerMode alone).
+  updateBlock: (channelId: number, blockId: number, data: Partial<BlockInput>) =>
+    request<TimeBlock>(`/api/channels/${channelId}/blocks/${blockId}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteBlock: (channelId: number, blockId: number) =>
     request<void>(`/api/channels/${channelId}/blocks/${blockId}`, { method: 'DELETE' }),
   buildPlayout: (channelId: number, hours = 48) =>

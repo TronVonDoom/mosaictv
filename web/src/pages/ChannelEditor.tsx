@@ -79,7 +79,9 @@ export default function ChannelEditor() {
   const [chForm, setChForm] = useState<{ number: string; name: string; group: string; logoUrl: string; logoId: number | null; profileId: number | null }>({ number: '', name: '', group: '', logoUrl: '', logoId: null, profileId: null })
   const [cu, setCu] = useState<ComingUpConfig>(offComingUp())
   const [rot, setRot] = useState({ collectionId: '', mode: 'one', count: '1', playbackOrder: 'chronological' })
-  const [blk, setBlk] = useState<{ collectionId: string; days: number[]; start: string; end: string; playbackOrder: string; logoUrl: string; logoId: number | null; fillerMode: string; startMode: string; comingUp: ComingUpConfig | null }>({
+  // Note: a block's fillerMode is deliberately absent here — it's edited on the
+  // Fillers tab, next to the fillers it governs, and patched on its own.
+  const [blk, setBlk] = useState<{ collectionId: string; days: number[]; start: string; end: string; playbackOrder: string; logoUrl: string; logoId: number | null; startMode: string; comingUp: ComingUpConfig | null }>({
     collectionId: '',
     days: [1, 2, 3, 4, 5],
     start: '18:00',
@@ -87,7 +89,6 @@ export default function ChannelEditor() {
     playbackOrder: 'chronological',
     logoUrl: '',
     logoId: null,
-    fillerMode: 'none',
     startMode: 'soft',
     comingUp: null,
   })
@@ -163,7 +164,7 @@ export default function ChannelEditor() {
 
   function resetBlockForm() {
     setEditingBlock(null)
-    setBlk({ collectionId: '', days: [1, 2, 3, 4, 5], start: '18:00', end: '21:00', playbackOrder: 'chronological', logoUrl: '', logoId: null, fillerMode: 'none', startMode: 'soft', comingUp: null })
+    setBlk({ collectionId: '', days: [1, 2, 3, 4, 5], start: '18:00', end: '21:00', playbackOrder: 'chronological', logoUrl: '', logoId: null, startMode: 'soft', comingUp: null })
   }
 
   // Grid click on an empty slot → start a new block prefilled with that day/time.
@@ -182,10 +183,15 @@ export default function ChannelEditor() {
       playbackOrder: b.playbackOrder,
       logoUrl: b.logoUrl ?? '',
       logoId: b.logoId ?? null,
-      fillerMode: b.fillerMode ?? 'none',
       startMode: b.startMode ?? 'soft',
       comingUp: parseComingUp(b.comingUp),
     })
+  }
+
+  // Filler mode lives on the Fillers tab and saves on its own — patching just
+  // this field avoids clobbering an edit in progress on the Schedule tab.
+  async function setBlockFillerMode(blockId: number, fillerMode: string) {
+    await guard(() => api.updateBlock(channelId, blockId, { fillerMode }), 'Filler mode saved')
   }
 
   async function submitBlock(e: React.FormEvent) {
@@ -202,7 +208,6 @@ export default function ChannelEditor() {
       playbackOrder: blk.playbackOrder,
       logoUrl: blk.logoUrl || null,
       logoId: blk.logoId,
-      fillerMode: blk.fillerMode,
       startMode: blk.startMode,
       comingUp: blk.comingUp,
     }
@@ -246,6 +251,10 @@ export default function ChannelEditor() {
   if (!ch) return <div className="text-slate-500 text-sm">Loading…</div>
 
   const hasSchedule = ch.rotationItems.length > 0 || ch.timeBlocks.length > 0
+  // Filler only ever enters the schedule from a block that fills its leftover
+  // time, or from the gap a "hard start" block leaves in front of it. With
+  // neither, every assignment on the Fillers tab is dead weight.
+  const makesFillerSlots = ch.timeBlocks.some((b) => (b.fillerMode || 'none') !== 'none' || b.startMode === 'hard')
   const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: 'general', label: 'General' },
     { id: 'collections', label: 'Collections', badge: cols.length || undefined },
@@ -448,11 +457,6 @@ export default function ChannelEditor() {
                   <option value="rotate">rotate shows</option>
                   <option value="shuffle">shuffle</option>
                 </Select>
-                <Select value={blk.fillerMode} onChange={(e) => setBlk({ ...blk, fillerMode: e.target.value })} title="Fill the leftover time so the block ends on schedule">
-                  <option value="none">no filler</option>
-                  <option value="between">filler between</option>
-                  <option value="end">filler at end</option>
-                </Select>
                 <Select value={blk.startMode} onChange={(e) => setBlk({ ...blk, startMode: e.target.value })} title="Soft: starts at the next program boundary. Hard: starts exactly on time (fills the gap before it).">
                   <option value="soft">soft start</option>
                   <option value="hard">hard start</option>
@@ -470,30 +474,62 @@ export default function ChannelEditor() {
       {/* ------- Fillers ------- */}
       {tab === 'fillers' && (
         <div className="space-y-6">
+          {!makesFillerSlots && (
+            <Banner tone="warn">
+              <strong className="font-semibold">Nothing on this channel plays filler yet.</strong> A filler only
+              airs in a slot the schedule opens for it: a time block with its filler turned on below, or the gap
+              before a “hard start” block. Until then, anything assigned here sits unused.
+              {ch.timeBlocks.length === 0 && (
+                <>
+                  {' '}Add a time block on the <button type="button" onClick={() => setTab('schedule')} className="underline hover:text-amber-200">Schedule tab</button> to get started.
+                </>
+              )}
+            </Banner>
+          )}
+
           <Card>
             <h2 className="font-semibold mb-1">Channel default</h2>
             <p className="text-slate-500 text-xs mb-3">
-              Assign fillers from the library to play during gaps, unless a block below has its own. Build and
-              generate fillers under <Link to="/media" className="text-indigo-300">Media → Fillers</Link>.
+              Plays in any filler slot where the active block has none of its own. Build and generate fillers
+              under <Link to="/media#fillers" className="text-indigo-300">Media → Fillers</Link>.
             </p>
             <FillerAssignmentPicker owner={{ channelId }} hint="channel default" />
           </Card>
 
-          {ch.timeBlocks.map((b) => (
-            <Card key={b.id}>
-              <h2 className="font-semibold mb-1">
-                {b.collection.name}{' '}
-                <span className="text-xs text-slate-500 font-normal">
-                  {formatDays(b.days)} · {minutesToTime(b.startMinute)}–{minutesToTime(b.endMinute)}
-                </span>
-              </h2>
-              <p className="text-slate-500 text-xs mb-3">
-                Overrides the channel default while this block is on. Frosted uses the block's logo (else the
-                channel's).
-              </p>
-              <FillerAssignmentPicker owner={{ timeBlockId: b.id }} hint={`during ${b.collection.name}`} />
-            </Card>
-          ))}
+          {ch.timeBlocks.map((b) => {
+            const mode = b.fillerMode || 'none'
+            return (
+              <Card key={b.id}>
+                <h2 className="font-semibold mb-1">
+                  {b.collection.name}{' '}
+                  <span className="text-xs text-slate-500 font-normal">
+                    {formatDays(b.days)} · {minutesToTime(b.startMinute)}–{minutesToTime(b.endMinute)}
+                  </span>
+                </h2>
+                <p className="text-slate-500 text-xs mb-3">
+                  Overrides the channel default while this block is on. Frosted uses the block's logo (else the
+                  channel's).
+                </p>
+
+                <label className="flex flex-wrap items-center gap-2 text-sm mb-3">
+                  <span className="text-slate-300">Fill leftover time</span>
+                  <Select value={mode} onChange={(e) => setBlockFillerMode(b.id, e.target.value)} className="w-auto">
+                    <option value="none">Off — no filler in this block</option>
+                    <option value="between">Between programs — spread it out</option>
+                    <option value="end">At the end — one stretch before the block ends</option>
+                  </Select>
+                </label>
+                {mode === 'none' && (
+                  <p className="text-xs text-amber-400/90 mb-3">
+                    This block opens no filler slots, so the fillers below won't play while it's on air.
+                    {b.startMode === 'hard' && ' (Its hard start still fills the gap before it, using the channel default above.)'}
+                  </p>
+                )}
+
+                <FillerAssignmentPicker owner={{ timeBlockId: b.id }} hint={`during ${b.collection.name}`} />
+              </Card>
+            )
+          })}
 
           {ch.timeBlocks.length === 0 && (
             <p className="text-sm text-slate-500">No time blocks yet — add some on the Schedule tab to give each its own filler.</p>

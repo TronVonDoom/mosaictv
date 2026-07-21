@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- **Fillers are manageable from one place.** A block's filler mode moved off
+  the Schedule tab's block form (where it was an unlabelled dropdown) onto the
+  channel's **Fillers** tab, next to the clips it governs, and saves on its own.
+  The tab now warns when nothing on the channel opens a filler slot at all —
+  previously you could assign fillers to a rotation-only channel and silently
+  get nothing on air. **+ New filler** builds one and assigns it without a trip
+  to the Media page and back.
+- **Filler previews are branded correctly.** Generating a preview read the
+  Filler row's own channel/block, which the shared-library migration nulls, so
+  every generated clip came out with the bundled mark instead of the channel
+  logo it airs with. Previews now brand from an explicit **Preview as** channel,
+  falling back to wherever the filler is assigned.
+- Editing a filler discards its generated clip instead of leaving a preview of
+  the old settings, generated clips are badged `generated` on the Media page
+  and no longer offered as a "custom clip" source, and deleting one clears the
+  filler's reference to it.
+- **One Fillers tab instead of two.** "Filler clips" and "Fillers" merged: an
+  uploaded clip was only ever readable through a filler that pointed at it, so
+  uploading now creates that filler in the same action. Leftover uploads nothing
+  points at are listed under a collapsed *Unused clips* disclosure, and deleting
+  a custom filler takes its clip with it unless another filler shares it.
+- **Generation survives leaving the page.** It always ran on the server, but the
+  progress bar was local state, so navigating away made a running build look
+  stopped — and coming back offered "Generate" again. The server now exposes its
+  job list (`GET /api/fillers/generating`), the page resumes any build in flight
+  on mount, and the bar carries a percentage.
+- Docs corrected: the gaps *between* blocks on a blocks-only channel are dead
+  air, not filler, and the retired filler styles are documented as retired.
+
 - **Container load chart** on the Dashboard — CPU and memory sampled every 3s
   from the container's cgroup, graphed over the last 5/15/60 minutes with a
   marker at every playout change (episode, filler, music video). Sampling runs

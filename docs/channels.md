@@ -72,16 +72,18 @@ Per block:
     cut off.
   - **hard** — the block starts exactly on time; the gap before it is filled
     with filler so the previous program doesn't overrun.
-- **Filler mode** — how leftover time inside the block is handled so it ends
-  on schedule: **none** (programs may overrun), **between** (filler spread
-  between programs), or **end** (one filler stretch at the end). Which clips
-  play is set on the **Fillers** tab.
 - **Logo override** — a different on-screen watermark while the block airs.
 - **"Coming up next" override** — per-block caption settings, including
   turning it off for just this block.
 
-Blocks-only channels (no rotation) are fine: the channel plays filler between
-blocks.
+A block's **filler mode** — how leftover time inside it is handled so it ends
+on schedule — lives on the **Fillers** tab instead, next to the clips it
+governs: **off** (programs may overrun), **between** (filler spread between
+programs), or **end** (one filler stretch at the end).
+
+Blocks-only channels (no rotation) are fine, but note that the time *between*
+blocks is dead air (black), not filler — only the gaps described under
+[Station-ID filler](branding.md#station-id-filler) are filled.
 
 ## The playout (guide)
 
