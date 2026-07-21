@@ -374,6 +374,33 @@ export type LogEntry = {
 }
 export type LogsResponse = { entries: LogEntry[]; lastId: number; total: number }
 
+// Resource sampling. `cpuPct` is percent of ONE core, so it can exceed 100 on a
+// multi-core box; divide by `cores` for a whole-machine figure. Any field may
+// be -1, meaning "not measurable here" (see `source`).
+export type MetricSource = 'cgroup2' | 'cgroup1' | 'process' | 'none'
+export type MetricSample = {
+  ts: number
+  cpuPct: number
+  memBytes: number
+  memLimitBytes: number
+  ffmpegCount: number
+}
+export type MetricMarker = {
+  id: number
+  ts: number
+  channel: number
+  kind: 'program' | 'filler' | 'song'
+  label: string
+  detail?: string
+}
+export type MetricsResponse = {
+  source: MetricSource
+  cores: number
+  sampleMs: number
+  samples: MetricSample[]
+  markers: MetricMarker[]
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
@@ -566,6 +593,10 @@ export const api = {
     return request<LogsResponse>(`/api/logs${q ? `?${q}` : ''}`)
   },
   clearLogs: () => request<void>('/api/logs', { method: 'DELETE' }),
+
+  // --- metrics ---
+  metrics: (minutes?: number) =>
+    request<MetricsResponse>(`/api/metrics${minutes ? `?minutes=${minutes}` : ''}`),
 
   // --- media assets ---
   assets: (kind?: AssetKind) =>

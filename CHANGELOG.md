@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Container load chart** on the Dashboard — CPU and memory sampled every 3s
+  from the container's cgroup, graphed over the last 5/15/60 minutes with a
+  marker at every playout change (episode, filler, music video). Sampling runs
+  continuously and transitions annotate the timeline, so a step change in load
+  can be attributed to the item that caused it rather than to the encoder spawn.
+  Exposed at `GET /api/metrics`.
+
 ## 0.7.0 — Scale & polish (2026-07-20)
 
 - **Shared HLS output** — one transcode per channel instead of one per viewer,

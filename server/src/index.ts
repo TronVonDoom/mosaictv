@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import { prisma, initDb } from './db.js'
 import { log } from './logs.js'
 import { warmFiller } from './streaming/filler.js'
+import { startMetrics } from './metrics.js'
 import { resetHls } from './hls.js'
 import { migrateCollectionOwnership, migrateFillersToLibrary } from './migrate.js'
 import { seedDefaultAudio } from './seedDefaults.js'
@@ -21,6 +22,7 @@ import { channelsRouter } from './routes/channels.js'
 import { iptvRouter } from './routes/iptv.js'
 import { logosRouter } from './routes/logos.js'
 import { logsRouter } from './routes/logs.js'
+import { metricsRouter } from './routes/metrics.js'
 import { adminRouter } from './routes/admin.js'
 import { assetsRouter } from './routes/assets.js'
 import { profilesRouter } from './routes/profiles.js'
@@ -113,6 +115,7 @@ app.use('/api/collections', collectionsRouter)
 app.use('/api/channels', channelsRouter)
 app.use('/api/logos', logosRouter)
 app.use('/api/logs', logsRouter)
+app.use('/api/metrics', metricsRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api/assets', assetsRouter)
 app.use('/api/profiles', profilesRouter)
@@ -154,11 +157,19 @@ async function boot(): Promise<void> {
   await migrateFillersToLibrary().catch((e) => log('error', 'system', 'Filler library migration failed', String(e?.stack || e)))
   await seedDefaultAudio().catch((e) => log('error', 'system', 'Default audio seed failed', String(e?.stack || e)))
   resetHls() // clear any stale shared-HLS output from a previous run
+  const metricSource = startMetrics()
   await checkFfmpeg()
   app.listen(PORT, () => {
     console.log(`MosaicTV v${VERSION} listening on http://0.0.0.0:${PORT}`)
     console.log(`ffmpeg available: ${ffmpegAvailable}`)
     log('info', 'system', `MosaicTV v${VERSION} started — ffmpeg ${ffmpegAvailable ? 'available' : 'NOT available'}`)
+    // Say which scope the resource graph is measuring: 'process' means we
+    // couldn't find a cgroup and the numbers exclude ffmpeg entirely.
+    log(
+      metricSource === 'cgroup2' || metricSource === 'cgroup1' ? 'info' : 'warn',
+      'system',
+      `Resource sampling via ${metricSource}${metricSource === 'process' ? ' — container totals unavailable, ffmpeg load NOT counted' : ''}`,
+    )
   })
   // Pre-build the default filler in the background so the first intermission
   // never blocks on generation.

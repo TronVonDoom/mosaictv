@@ -11,6 +11,7 @@ import { prisma } from '../db.js'
 import { buildPlayout, prunePlayout } from '../playout.js'
 import { dataDir, logosDir } from '../paths.js'
 import { log } from '../logs.js'
+import { markEvent } from '../metrics.js'
 import { hasSubtitleStream, probeSar } from '../ffprobe.js'
 import { canNvdecCodec, detectReadrateBurst, detectTextOverlay, resolveEncoder } from './capabilities.js'
 import { resolveProfile, type StreamProfile } from './profile.js'
@@ -531,11 +532,20 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
   } else {
     wmDesc = `watermark ${wm.mode}/${wm.position}${wm.constrainToMedia ? '/media-fit' : ''}`
   }
+  const startDetail = `source ${seg.mediaWidth}x${seg.mediaHeight}, decode ${seg.hwDecode ? 'GPU (nvdec)' : 'CPU'}, logo ${active.id != null ? '#' + active.id : active.raw ? 'url' : 'none'}, ${wmDesc}`
   log(
     'info',
     'stream',
     `Ch ${channelNumber} ▶ ${label}${offset > 1 ? ` (resuming at ${Math.round(offset)}s)` : ''}`,
-    `source ${seg.mediaWidth}x${seg.mediaHeight}, decode ${seg.hwDecode ? 'GPU (nvdec)' : 'CPU'}, logo ${active.id != null ? '#' + active.id : active.raw ? 'url' : 'none'}, ${wmDesc}`,
+    startDetail,
+  )
+  // Annotate the resource timeline, so a step change in CPU can be traced back
+  // to the item that started at that moment.
+  markEvent(
+    channelNumber,
+    thisIsFiller ? 'filler' : mi?.type === 'music' ? 'song' : 'program',
+    label,
+    `${enc}, ${startDetail}`,
   )
   log('debug', 'ffmpeg', `Ch ${channelNumber} ffmpeg command`, 'ffmpeg ' + args.join(' '))
   res.writeHead(200, { 'Content-Type': 'video/mp2t', 'Cache-Control': 'no-cache, no-store' })

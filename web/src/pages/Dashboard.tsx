@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Icon from '../components/Icon'
+import ResourceChart from '../components/ResourceChart'
 import TimelineView from '../components/TimelineView'
 import { api, logoImageUrl, type Channel, type Health, type Playout, type Stats } from '../lib/api'
 import { formatDuration } from '../lib/format'
@@ -225,6 +226,10 @@ export default function Dashboard() {
           </Card>
         </div>
       )}
+
+      <div className="mt-6">
+        <ResourceChart />
+      </div>
 
       {stats && <GettingStarted stats={stats} channels={channels} />}
     </div>

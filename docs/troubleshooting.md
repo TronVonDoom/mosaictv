@@ -6,6 +6,20 @@
 starts/stops, ffmpeg fallbacks, errors — and has a download button for filing
 issues. Most mysteries are explained there.
 
+## Second stop: the Container load chart
+
+The **Dashboard** graphs container CPU and memory over the last 5/15/60 minutes,
+with a vertical rule at every playout change — an episode, a filler, or a music
+video starting. Hover any point to read the exact figures and what was playing.
+
+Read it for *step changes*, not spikes: every transition spawns an encoder, so a
+brief jump at each rule is normal. What matters is CPU that climbs at a rule and
+never comes back down — that names the item that cost you.
+
+CPU is shown as **percent of one core**, so on an 8-core box 800% is fully
+saturated. If the chart warns that no cgroup was found, the numbers cover the
+app process only and exclude ffmpeg — the figures are meaningless in that case.
+
 ## Common issues
 
 ### The dashboard says "ffmpeg: NOT available"
@@ -45,6 +59,8 @@ client gets its own stream, and in shared-HLS mode they all read one.
 - Remember: only channels **being watched** are encoded.
 - Look for `encoder slower than real-time` in **Logs** — that's the encoder
   failing to keep up, and it's what viewers see as freezing.
+- Cross-check the Dashboard's **Container load** chart: if CPU steps up at one
+  transition and stays there, that item (or the profile it's using) is the cost.
 
 ### Schedule times are off by hours
 Set the `TZ` environment variable to your timezone and restart the container.
