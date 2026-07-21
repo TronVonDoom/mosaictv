@@ -1,7 +1,7 @@
 import { Router } from 'express'
-import { randomBytes } from 'node:crypto'
 import { prisma } from '../db.js'
 import { baseUrl } from '../http.js'
+import { deviceId, friendlyName, tunerCount } from '../tuner.js'
 
 export const hdhrRouter = Router()
 
@@ -10,36 +10,10 @@ export const hdhrRouter = Router()
 // a network tuner. There's no SSDP/UDP responder here, so MosaicTV never shows
 // up in a broadcast scan; adding it means entering its address by hand.
 
-async function tunerCount(): Promise<number> {
-  const row = await prisma.setting.findUnique({ where: { key: 'tunerCount' } })
-  const n = Number(row?.value)
-  return Number.isFinite(n) && n > 0 ? n : 4
-}
-
-/**
- * Plex keys a tuner on its DeviceID and treats two devices sharing one as the
- * same tuner, so this is generated once per instance and then kept: a value
- * that changed on restart would re-register the tuner and orphan the channel
- * mapping. Eight uppercase hex digits is the shape real HDHomeRuns use.
- */
-async function deviceId(): Promise<string> {
-  const existing = await prisma.setting.findUnique({ where: { key: 'hdhrDeviceId' } })
-  if (existing?.value) return existing.value
-  const id = randomBytes(4).toString('hex').toUpperCase()
-  // Concurrent first requests can race here; upsert so the first one wins and
-  // the loser returns the stored value rather than a second, conflicting ID.
-  const row = await prisma.setting.upsert({
-    where: { key: 'hdhrDeviceId' },
-    create: { key: 'hdhrDeviceId', value: id },
-    update: {},
-  })
-  return row.value
-}
-
 hdhrRouter.get('/discover.json', async (req, res) => {
   const base = baseUrl(req)
   res.json({
-    FriendlyName: 'MosaicTV',
+    FriendlyName: await friendlyName(),
     Manufacturer: 'Silicondust',
     ModelNumber: 'HDTC-2US',
     FirmwareName: 'hdhomeruntc_atsc',

@@ -72,10 +72,16 @@ emulates one natively, so no Threadfin/xTeVe is required.
    pull in the channel list, then finishes setup with the guide from the
    XMLTV URL above.
 
-> **Settings → Streaming → HDHomeRun tuner** controls how many simultaneous
-> streams the emulated tuner advertises (default 4). Raise it if playback
-> gets cut off when another person tunes in — Plex stops at the tuner count,
-> not at any real MosaicTV limit.
+**Settings → Streaming → HDHomeRun tuner** holds what the tuner reports:
+
+- **Device ID** — generated once per instance, read-only. Plex identifies the
+  tuner by this, so a new one would register as a second, unrelated tuner.
+- **Tuner name** — what Plex lists the device as. Worth changing if you run
+  more than one instance, since both otherwise appear as "MosaicTV". Plex may
+  keep showing the old name until the DVR entry is re-added.
+- **Tuner count** — how many simultaneous streams the tuner advertises
+  (default 4). Raise it if playback gets cut off when another person tunes in;
+  Plex stops at the tuner count, not at any real MosaicTV limit.
 
 > **The tuner always serves MPEG-TS**, whatever *Streaming mode* is set to. A
 > tuner URL is a raw transport stream by contract, and Plex fails to tune —

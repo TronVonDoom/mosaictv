@@ -10,10 +10,12 @@
   same way. There's no broadcast discovery, so it won't show up in a device
   scan — add it by address. The tuner always hands out MPEG-TS regardless of
   the streaming mode, since a tuner URL is a raw transport stream by contract
-  and Plex won't tune anything else. **Settings → Streaming** sets how many
-  simultaneous streams the tuner advertises, since Plex stops playback once it
-  runs out of tuners. Threadfin still works if you want its remapping and
-  filtering.
+  and Plex won't tune anything else. **Settings → Streaming** shows the tuner's
+  device ID and lets you set its name and how many simultaneous streams it
+  advertises — the name is worth setting if you run two instances, which would
+  otherwise both show up in Plex as "MosaicTV", and the count matters because
+  Plex stops playback once it runs out of tuners. Threadfin still works if you
+  want its remapping and filtering.
 
 - **Collections play in the order you arrange them.** Members were stored with
   a position that nothing ever read — the resolver re-sorted everything

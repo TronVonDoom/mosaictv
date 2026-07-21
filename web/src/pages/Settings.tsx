@@ -10,6 +10,7 @@ import {
   Banner,
   Button,
   Card,
+  Field,
   InfoHint,
   Input,
   LinkButton,
@@ -89,6 +90,9 @@ export default function Settings() {
   const [streamMode, setStreamMode] = useState<StreamMode>('mpegts')
   const [tunerCount, setTunerCount] = useState(4)
   const [tunerDraft, setTunerDraft] = useState('4')
+  const [deviceId, setDeviceId] = useState('')
+  const [tunerName, setTunerName] = useState('MosaicTV')
+  const [nameDraft, setNameDraft] = useState('MosaicTV')
   const [wipeAssets, setWipeAssets] = useState(true)
   const [resetBusy, setResetBusy] = useState(false)
 
@@ -101,6 +105,9 @@ export default function Settings() {
         setStreamMode(s.streamMode)
         setTunerCount(s.tunerCount)
         setTunerDraft(String(s.tunerCount))
+        setDeviceId(s.hdhrDeviceId)
+        setTunerName(s.hdhrFriendlyName)
+        setNameDraft(s.hdhrFriendlyName)
       })
       .catch(() => {})
   }, [])
@@ -127,6 +134,21 @@ export default function Settings() {
       setTunerCount(previous)
       setTunerDraft(String(previous))
       toast.error(errorMessage(err, 'Failed to save tuner count'))
+    }
+  }
+
+  async function saveTunerName(name: string) {
+    if (name === tunerName) return // blur with nothing changed — don't re-save
+    const previous = tunerName
+    setTunerName(name)
+    setNameDraft(name)
+    try {
+      await api.saveTunerName(name)
+      toast.success(`Tuner name: ${name}`)
+    } catch (err) {
+      setTunerName(previous)
+      setNameDraft(previous)
+      toast.error(errorMessage(err, 'Failed to save tuner name'))
     }
   }
 
@@ -306,25 +328,58 @@ export default function Settings() {
               </>
             }
           >
-            <label className="flex items-center gap-3 text-sm">
-              <span className="text-ink-muted">Tuner count</span>
-              <Input
-                type="number"
-                min={1}
-                max={32}
-                className="w-20"
-                // Held as a string while editing so clearing the box doesn't
-                // collapse to 0; blur commits a valid number or restores the
-                // last saved one, so the field never disagrees with the server.
-                value={tunerDraft}
-                onChange={(e) => setTunerDraft(e.target.value)}
-                onBlur={() => {
-                  const n = Math.round(Number(tunerDraft))
-                  if (tunerDraft.trim() && Number.isFinite(n) && n >= 1 && n <= 32) saveTuners(n)
-                  else setTunerDraft(String(tunerCount))
-                }}
-              />
-            </label>
+            <div className="space-y-4">
+              <Field
+                label="Device ID"
+                hint="Generated once for this instance. Plex identifies the tuner by this, so it isn't editable — a new ID would register as a second, unrelated tuner."
+              >
+                <Input
+                  readOnly
+                  value={deviceId || '—'}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="w-40 font-mono text-ink-muted cursor-default"
+                />
+              </Field>
+
+              <Field
+                label="Tuner name"
+                hint="What Plex lists the device as. Safe to change any time, though Plex may keep showing the old name until the DVR entry is re-added."
+              >
+                <Input
+                  maxLength={60}
+                  className="w-64"
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  onBlur={() => {
+                    const name = nameDraft.trim()
+                    if (name) saveTunerName(name)
+                    else setNameDraft(tunerName) // empty isn't a name — put back the saved one
+                  }}
+                />
+              </Field>
+
+              <Field
+                label="Tuner count"
+                hint="How many streams Plex/Emby will pull at once before refusing to tune."
+              >
+                <Input
+                  type="number"
+                  min={1}
+                  max={32}
+                  className="w-20"
+                  // Held as a string while editing so clearing the box doesn't
+                  // collapse to 0; blur commits a valid number or restores the
+                  // last saved one, so the field never disagrees with the server.
+                  value={tunerDraft}
+                  onChange={(e) => setTunerDraft(e.target.value)}
+                  onBlur={() => {
+                    const n = Math.round(Number(tunerDraft))
+                    if (tunerDraft.trim() && Number.isFinite(n) && n >= 1 && n <= 32) saveTuners(n)
+                    else setTunerDraft(String(tunerCount))
+                  }}
+                />
+              </Field>
+            </div>
           </SettingsCard>
         </div>
       )}

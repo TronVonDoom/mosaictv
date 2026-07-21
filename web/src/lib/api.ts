@@ -158,6 +158,8 @@ export type SettingsInfo = {
   watermark: WatermarkConfig
   streamMode: StreamMode
   tunerCount: number
+  hdhrDeviceId: string
+  hdhrFriendlyName: string
 }
 
 export type MetadataStatus = {
@@ -503,6 +505,8 @@ export const api = {
     request<{ ok: boolean; streamMode: StreamMode }>('/api/settings/stream-mode', { method: 'POST', body: JSON.stringify({ mode }) }),
   saveTunerCount: (tunerCount: number) =>
     request<{ ok: boolean; tunerCount: number }>('/api/settings/tuner-count', { method: 'POST', body: JSON.stringify({ tunerCount }) }),
+  saveTunerName: (friendlyName: string) =>
+    request<{ ok: boolean; hdhrFriendlyName: string }>('/api/settings/tuner-name', { method: 'POST', body: JSON.stringify({ friendlyName }) }),
 
   // --- collections ---
   collections: (channelId?: number) =>

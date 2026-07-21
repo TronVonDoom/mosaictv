@@ -2,6 +2,14 @@ import { Router } from 'express'
 import { getTmdbKey, setTmdbKey, validateKey } from '../tmdb.js'
 import { loadWatermark, sanitizeWatermark } from '../streaming/overlays.js'
 import { prisma } from '../db.js'
+import {
+  MAX_FRIENDLY_NAME,
+  MAX_TUNER_COUNT,
+  MIN_TUNER_COUNT,
+  deviceId,
+  friendlyName,
+  tunerCount,
+} from '../tuner.js'
 
 export const settingsRouter = Router()
 
@@ -15,13 +23,16 @@ async function setSetting(k: string, v: string | null) {
 settingsRouter.get('/', async (_req, res) => {
   const key = await getTmdbKey()
   const modeRow = await prisma.setting.findUnique({ where: { key: 'streamMode' } })
-  const tunerRow = await prisma.setting.findUnique({ where: { key: 'tunerCount' } })
-  const tunerCount = Number(tunerRow?.value)
   res.json({
     tmdbConfigured: !!key,
     watermark: await loadWatermark(),
     streamMode: modeRow?.value === 'hls' ? 'hls' : 'mpegts',
-    tunerCount: Number.isFinite(tunerCount) && tunerCount > 0 ? tunerCount : 4,
+    tunerCount: await tunerCount(),
+    // Read-only in the UI, but surfaced so you can tell which device Plex is
+    // talking to. Reading it mints the ID if this instance has never served a
+    // tuner request, so it's visible before Plex ever connects.
+    hdhrDeviceId: await deviceId(),
+    hdhrFriendlyName: await friendlyName(),
   })
 })
 
@@ -44,12 +55,27 @@ settingsRouter.post('/stream-mode', async (req, res) => {
 // Plex/Emby — one tuner slot = one concurrent Live TV stream from their side.
 settingsRouter.post('/tuner-count', async (req, res) => {
   const n = Number(req.body?.tunerCount)
-  if (!Number.isFinite(n) || n < 1 || n > 32) {
-    return res.status(400).json({ error: 'tunerCount must be a number between 1 and 32' })
+  if (!Number.isFinite(n) || n < MIN_TUNER_COUNT || n > MAX_TUNER_COUNT) {
+    return res
+      .status(400)
+      .json({ error: `tunerCount must be a number between ${MIN_TUNER_COUNT} and ${MAX_TUNER_COUNT}` })
   }
   const count = Math.round(n)
   await setSetting('tunerCount', String(count))
   res.json({ ok: true, tunerCount: count })
+})
+
+// The name Plex lists the tuner under. Safe to change at any time — Plex keys
+// the device on its ID, not this — though it may keep showing the old name
+// until the DVR entry is re-added.
+settingsRouter.post('/tuner-name', async (req, res) => {
+  const name = String(req.body?.friendlyName ?? '').trim()
+  if (!name) return res.status(400).json({ error: 'friendlyName is required' })
+  if (name.length > MAX_FRIENDLY_NAME) {
+    return res.status(400).json({ error: `friendlyName must be ${MAX_FRIENDLY_NAME} characters or fewer` })
+  }
+  await setSetting('hdhrFriendlyName', name)
+  res.json({ ok: true, hdhrFriendlyName: name })
 })
 
 // Validate and save the TMDB API key in one step.
