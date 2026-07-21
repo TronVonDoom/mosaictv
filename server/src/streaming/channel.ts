@@ -43,11 +43,20 @@ const TAIL_SKIP_SEC = READ_BURST_SEC + 2
 
 type SegmentResult = { code: number | null; stderr: string; spawnError?: Error; bytes: number; firstByteMs: number }
 
-// A mid-segment freeze is invisible in the logs today: nothing errors, nothing
-// exits, bytes just stop moving and the whole chain (encoder → concat → player)
-// sits idle, which is why container load falls away with nothing to show for
-// it. Watch each hop and say which side went quiet after this long.
-const STALL_SEC = 5
+// A mid-segment freeze is invisible in the logs otherwise: nothing errors,
+// nothing exits, bytes just stop moving and the whole chain (encoder → concat
+// → player) sits idle, which is why container load falls away with nothing to
+// show for it. So watch each hop — but only the half of it that can actually
+// be wrong.
+//
+// The encoder runs flat out while the outer concat meters at -readrate 1.0, so
+// it fills the pipe, blocks, waits for the meter to drain a few seconds, then
+// bursts and blocks again. Being blocked is this design working: a healthy
+// stream sits in backpressure roughly 5-6s at a time, indefinitely. Only a
+// backpressure spell far longer than that means the consumer really did stop.
+// A quiet encoder with a *drainable* pipe, though, is always a fault.
+const STARVED_SEC = 5
+const BACKPRESSURE_SEC = 30
 
 /**
  * Pipe a child's stdout to the response with backpressure; resolve on exit.
@@ -69,15 +78,15 @@ function pipeSegment(proc: ChildProcess, res: Response, tag?: string): Promise<S
       if (stderr.length > 6000) stderr = stderr.slice(-6000) // keep the tail
     })
     // Which side of this hop is holding things up. `blocked` means WE couldn't
-    // write — the consumer downstream stopped reading; otherwise the child
-    // simply produced nothing. That distinction is the whole diagnosis.
+    // write, so the consumer is pacing us; otherwise the child simply produced
+    // nothing. That distinction sets how long the quiet is allowed to last.
     let lastByteAt = Date.now()
     let blocked = false
     let stalled = false
     const watchdog = tag
       ? setInterval(() => {
           const idleMs = Date.now() - lastByteAt
-          if (idleMs < STALL_SEC * 1000) {
+          if (idleMs < (blocked ? BACKPRESSURE_SEC : STARVED_SEC) * 1000) {
             if (stalled) {
               stalled = false
               log('info', 'stream', `${tag}: recovered after ${(idleMs / 1000).toFixed(0)}s of no data`)
@@ -91,7 +100,7 @@ function pipeSegment(proc: ChildProcess, res: Response, tag?: string): Promise<S
             'stream',
             `${tag}: no data for ${(idleMs / 1000).toFixed(0)}s — stream is frozen here`,
             blocked
-              ? 'blocked writing downstream — the consumer (player/concat) stopped reading'
+              ? 'still blocked writing downstream — the consumer (player/concat) has stopped reading for far longer than pacing explains'
               : 'ffmpeg produced nothing — the producer stalled, downstream is still accepting data',
           )
         }, 1000)
