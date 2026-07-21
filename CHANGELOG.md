@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Plex can add MosaicTV directly — no Threadfin.** Plex's Live TV wants an
+  HDHomeRun tuner rather than a raw M3U, which meant running Threadfin or xTeVe
+  purely to translate. MosaicTV now answers the tuner protocol itself
+  (`/discover.json`, `/lineup.json`), so you point Plex's "enter the address
+  manually" box at it and the channels come straight in. Emby accepts it the
+  same way. There's no broadcast discovery, so it won't show up in a device
+  scan — add it by address. **Settings → Streaming** sets how many simultaneous
+  streams the tuner advertises, since Plex stops playback once it runs out of
+  tuners. Threadfin still works if you want its remapping and filtering.
+
 - **Collections play in the order you arrange them.** Members were stored with
   a position that nothing ever read — the resolver re-sorted everything
   alphabetically, so adding *Rugrats, Doug, Hey Arnold* always aired Doug first.

@@ -4,6 +4,7 @@ import { prisma } from '../db.js'
 import { streamChannel } from '../streaming/channel.js'
 import { ensureHls, touchHls, hlsPlaylistFile, hlsSegmentFile } from '../hls.js'
 import { episodeCode } from '../labels.js'
+import { baseUrl } from '../http.js'
 
 export const iptvRouter = Router()
 
@@ -50,12 +51,6 @@ iptvRouter.get(/^\/channel\/(\d+)\/(seg_\d+\.ts)$/, (req, res) => {
     if (err && !res.headersSent) res.status(404).end()
   })
 })
-
-function baseUrl(req: Request): string {
-  const proto = String(req.headers['x-forwarded-proto'] ?? '').split(',')[0] || req.protocol || 'http'
-  const host = (req.headers['x-forwarded-host'] as string) || req.headers.host
-  return `${proto}://${host}`
-}
 
 function escapeXml(s: string): string {
   return s

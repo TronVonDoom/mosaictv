@@ -1,23 +1,39 @@
 import { Router } from 'express'
-import type { Request } from 'express'
+import { randomBytes } from 'node:crypto'
 import { prisma } from '../db.js'
+import { baseUrl } from '../http.js'
 
 export const hdhrRouter = Router()
 
-// Plex's Live TV & DVR setup (and Emby/Jellyfin's HDHomeRun tuner type) speak
-// this small HTTP protocol — the same one Threadfin/xTeVe implement — to
-// treat MosaicTV as a network tuner. No UDP/SSDP broadcast is needed: Plex's
-// "enter the IP manually" option is enough once these three endpoints exist.
-function baseUrl(req: Request): string {
-  const proto = String(req.headers['x-forwarded-proto'] ?? '').split(',')[0] || req.protocol || 'http'
-  const host = (req.headers['x-forwarded-host'] as string) || req.headers.host
-  return `${proto}://${host}`
-}
+// Plex's Live TV & DVR setup (and Emby's HDHomeRun tuner type) speak this small
+// HTTP protocol — the same one Threadfin/xTeVe implement — to treat MosaicTV as
+// a network tuner. There's no SSDP/UDP responder here, so MosaicTV never shows
+// up in a broadcast scan; adding it means entering its address by hand.
 
 async function tunerCount(): Promise<number> {
   const row = await prisma.setting.findUnique({ where: { key: 'tunerCount' } })
   const n = Number(row?.value)
   return Number.isFinite(n) && n > 0 ? n : 4
+}
+
+/**
+ * Plex keys a tuner on its DeviceID and treats two devices sharing one as the
+ * same tuner, so this is generated once per instance and then kept: a value
+ * that changed on restart would re-register the tuner and orphan the channel
+ * mapping. Eight uppercase hex digits is the shape real HDHomeRuns use.
+ */
+async function deviceId(): Promise<string> {
+  const existing = await prisma.setting.findUnique({ where: { key: 'hdhrDeviceId' } })
+  if (existing?.value) return existing.value
+  const id = randomBytes(4).toString('hex').toUpperCase()
+  // Concurrent first requests can race here; upsert so the first one wins and
+  // the loser returns the stored value rather than a second, conflicting ID.
+  const row = await prisma.setting.upsert({
+    where: { key: 'hdhrDeviceId' },
+    create: { key: 'hdhrDeviceId', value: id },
+    update: {},
+  })
+  return row.value
 }
 
 hdhrRouter.get('/discover.json', async (req, res) => {
@@ -28,7 +44,7 @@ hdhrRouter.get('/discover.json', async (req, res) => {
     ModelNumber: 'HDTC-2US',
     FirmwareName: 'hdhomeruntc_atsc',
     FirmwareVersion: '20170612',
-    DeviceID: '5344544D',
+    DeviceID: await deviceId(),
     DeviceAuth: 'mosaictv',
     BaseURL: base,
     LineupURL: `${base}/lineup.json`,

@@ -55,15 +55,19 @@ player that dislikes HLS: it's a continuous stream with no segment latency.
 Same shape as Jellyfin: **Live TV** → add an **M3U** tuner with the playlist
 URL, add an **XMLTV** guide source with the guide URL, refresh guide data.
 
+Emby also accepts MosaicTV as an **HDHomeRun** tuner — add one pointed at
+`YOUR-SERVER:8688` (entered by hand; there's no broadcast discovery) and pair
+it with the XMLTV guide source. Either route works; the M3U one is simpler.
+
 ## Plex
 
 Plex's Live TV wants a HDHomeRun-style tuner, not a raw M3U — MosaicTV
 emulates one natively, so no Threadfin/xTeVe is required.
 
-1. **Settings → Live TV & DVR → Set Up Plex DVR**. Plex broadcasts for
-   HDHomeRun devices on your LAN; if it doesn't find MosaicTV automatically,
-   use **"Enter the IP address of your HDHomeRun device"** and give it
-   `YOUR-SERVER:8688`.
+1. **Settings → Live TV & DVR → Set Up Plex DVR**. MosaicTV does **not**
+   answer broadcast scans, so it will never appear in the device list on its
+   own — click **"Don't see your HDHomeRun? Enter its network address
+   manually"** and give it `YOUR-SERVER:8688`.
 2. Plex reads `http://YOUR-SERVER:8688/discover.json` and `/lineup.json` to
    pull in the channel list, then finishes setup with the guide from the
    XMLTV URL above.

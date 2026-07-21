@@ -88,6 +88,7 @@ export default function Settings() {
   const [wm, setWm] = useState<WatermarkConfig | null>(null)
   const [streamMode, setStreamMode] = useState<StreamMode>('mpegts')
   const [tunerCount, setTunerCount] = useState(4)
+  const [tunerDraft, setTunerDraft] = useState('4')
   const [wipeAssets, setWipeAssets] = useState(true)
   const [resetBusy, setResetBusy] = useState(false)
 
@@ -99,6 +100,7 @@ export default function Settings() {
         setWm(s.watermark)
         setStreamMode(s.streamMode)
         setTunerCount(s.tunerCount)
+        setTunerDraft(String(s.tunerCount))
       })
       .catch(() => {})
   }, [])
@@ -114,11 +116,16 @@ export default function Settings() {
   }
 
   async function saveTuners(n: number) {
+    if (n === tunerCount) return // blur with nothing changed — don't re-save
+    const previous = tunerCount
     setTunerCount(n)
+    setTunerDraft(String(n))
     try {
       await api.saveTunerCount(n)
       toast.success(`Tuner count: ${n}`)
     } catch (err) {
+      setTunerCount(previous)
+      setTunerDraft(String(previous))
       toast.error(errorMessage(err, 'Failed to save tuner count'))
     }
   }
@@ -231,87 +238,90 @@ export default function Settings() {
       )}
 
       {tab === 'streaming' && (
-        <SettingsCard
-          title="Streaming mode"
-          description={
-            <>
-              How the M3U hands out channel streams. Takes effect the next time a player reloads the
-              playlist.{' '}
-              <InfoHint>
-                Both endpoints stay live regardless of this setting — a channel is always reachable at{' '}
-                <code className="text-ink">/iptv/channel/N.ts</code> and{' '}
-                <code className="text-ink">/iptv/channel/N/index.m3u8</code>. This only changes which one
-                the playlist points at.
-              </InfoHint>
-            </>
-          }
-        >
-          <div className="space-y-2">
-            {STREAM_MODES.map((o) => {
-              const active = streamMode === o.id
-              return (
-                <label
-                  key={o.id}
-                  className={cx(
-                    'flex gap-3 rounded-lg border p-3 cursor-pointer transition-colors',
-                    active ? 'border-indigo-500/60 bg-indigo-500/5' : 'border-edge hover:border-edge-strong',
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="streamMode"
-                    className="mt-1 shrink-0"
-                    checked={active}
-                    onChange={() => saveMode(o.id)}
-                  />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{o.title}</span>
-                      {o.badge && <Badge tone="accent">{o.badge}</Badge>}
+        <div className="space-y-4">
+          <SettingsCard
+            title="Streaming mode"
+            description={
+              <>
+                How the M3U hands out channel streams. Takes effect the next time a player reloads
+                the playlist.{' '}
+                <InfoHint>
+                  Both endpoints stay live regardless of this setting — a channel is always reachable
+                  at <code className="text-ink">/iptv/channel/N.ts</code> and{' '}
+                  <code className="text-ink">/iptv/channel/N/index.m3u8</code>. This only changes
+                  which one the playlist points at.
+                </InfoHint>
+              </>
+            }
+          >
+            <div className="space-y-2">
+              {STREAM_MODES.map((o) => {
+                const active = streamMode === o.id
+                return (
+                  <label
+                    key={o.id}
+                    className={cx(
+                      'flex gap-3 rounded-lg border p-3 cursor-pointer transition-colors',
+                      active ? 'border-indigo-500/60 bg-indigo-500/5' : 'border-edge hover:border-edge-strong',
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="streamMode"
+                      className="mt-1 shrink-0"
+                      checked={active}
+                      onChange={() => saveMode(o.id)}
+                    />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{o.title}</span>
+                        {o.badge && <Badge tone="accent">{o.badge}</Badge>}
+                      </div>
+                      <div className="text-xs text-ink-muted mt-0.5">{o.desc}</div>
+                      <div className="text-xs text-ink-faint mt-0.5">{o.best}</div>
                     </div>
-                    <div className="text-xs text-ink-muted mt-0.5">{o.desc}</div>
-                    <div className="text-xs text-ink-faint mt-0.5">{o.best}</div>
-                  </div>
-                </label>
-              )
-            })}
-          </div>
-        </SettingsCard>
-      )}
+                  </label>
+                )
+              })}
+            </div>
+          </SettingsCard>
 
-      {tab === 'streaming' && (
-        <SettingsCard
-          title="HDHomeRun tuner (Plex / Emby)"
-          description={
-            <>
-              MosaicTV emulates an HDHomeRun network tuner at{' '}
-              <code className="text-ink">{`${typeof window !== 'undefined' ? window.location.origin : ''}/discover.json`}</code>
-              , so Plex's Live TV & DVR setup (or Emby's HDHomeRun tuner type) can add it directly —
-              no Threadfin/xTeVe needed.{' '}
-              <InfoHint>
-                One tuner slot = one concurrent Live TV stream Plex/Emby will pull from MosaicTV.
-                MosaicTV itself has no hard limit, so raise this if playback gets cut off when a
-                second person tunes in.
-              </InfoHint>
-            </>
-          }
-        >
-          <label className="flex items-center gap-3 text-sm">
-            <span className="text-ink-muted">Tuner count</span>
-            <Input
-              type="number"
-              min={1}
-              max={32}
-              className="w-20"
-              value={tunerCount}
-              onChange={(e) => setTunerCount(Number(e.target.value))}
-              onBlur={(e) => {
-                const n = Math.round(Number(e.target.value))
-                if (Number.isFinite(n) && n >= 1 && n <= 32) saveTuners(n)
-              }}
-            />
-          </label>
-        </SettingsCard>
+          <SettingsCard
+            title="HDHomeRun tuner (Plex / Emby)"
+            description={
+              <>
+                MosaicTV emulates an HDHomeRun network tuner, so Plex's Live TV &amp; DVR setup (or
+                Emby's HDHomeRun tuner type) can add it directly — no Threadfin/xTeVe needed. Add it
+                by IP; there's no broadcast discovery, so it won't appear on its own.{' '}
+                <InfoHint>
+                  One tuner slot = one concurrent Live TV stream Plex/Emby will pull from MosaicTV.
+                  MosaicTV itself has no hard limit, so raise this if playback gets cut off when a
+                  second person tunes in.
+                </InfoHint>
+              </>
+            }
+          >
+            <label className="flex items-center gap-3 text-sm">
+              <span className="text-ink-muted">Tuner count</span>
+              <Input
+                type="number"
+                min={1}
+                max={32}
+                className="w-20"
+                // Held as a string while editing so clearing the box doesn't
+                // collapse to 0; blur commits a valid number or restores the
+                // last saved one, so the field never disagrees with the server.
+                value={tunerDraft}
+                onChange={(e) => setTunerDraft(e.target.value)}
+                onBlur={() => {
+                  const n = Math.round(Number(tunerDraft))
+                  if (tunerDraft.trim() && Number.isFinite(n) && n >= 1 && n <= 32) saveTuners(n)
+                  else setTunerDraft(String(tunerCount))
+                }}
+              />
+            </label>
+          </SettingsCard>
+        </div>
       )}
 
       {tab === 'watermark' &&
