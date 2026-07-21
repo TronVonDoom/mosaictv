@@ -20,8 +20,8 @@ function GettingStarted({ stats, channels }: { stats: Stats; channels: Channel[]
   const channelPath = firstChannel ? `/channels/${firstChannel.id}` : '/channels'
 
   const steps: Step[] = [
-    { title: 'Add a library', hint: 'Point at a folder under /media', to: '/libraries', done: stats.libraries > 0 },
-    { title: 'Scan your media', hint: 'Index shows & movies (grab TMDB posters after)', to: '/libraries', done: stats.items > 0 },
+    { title: 'Add a library', hint: 'Point at a folder under /media', to: '/library#sources', done: stats.libraries > 0 },
+    { title: 'Scan your media', hint: 'Index shows & movies (grab TMDB posters after)', to: '/library#sources', done: stats.items > 0 },
     { title: 'Create a channel', hint: 'Name it — leave the number blank for now', to: '/channels', done: channels.length > 0 },
     { title: 'Schedule it', hint: 'Add collections, then a rotation or time blocks', to: channelPath, done: scheduled },
     { title: 'Build the guide', hint: 'Guide tab → Build 48h to generate the timeline', to: channelPath, done: built },

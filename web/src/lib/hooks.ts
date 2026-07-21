@@ -1,4 +1,37 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+
+/**
+ * A tab selection mirrored into the URL hash, so a tab is linkable, survives a
+ * reload, and responds to the back button. Pages that group several tools under
+ * one route (Library, Studio, Settings) all need this, and each was previously
+ * poking at `window.location.hash` by hand — which reads the hash once on mount
+ * and then quietly disagrees with the URL when the user navigates.
+ *
+ * `aliases` keeps old anchors working after a tab is renamed or merged, so
+ * links out in the wild (and in other pages' copy) still land somewhere sane.
+ */
+export function useHashTab<T extends string>(
+  tabs: readonly T[],
+  fallback: T,
+  aliases: Partial<Record<string, T>> = {},
+): [T, (tab: T) => void] {
+  const { hash } = useLocation()
+  const navigate = useNavigate()
+
+  const resolve = (raw: string): T => {
+    const id = raw.replace(/^#/, '')
+    if ((tabs as readonly string[]).includes(id)) return id as T
+    return aliases[id] ?? fallback
+  }
+
+  const active = resolve(hash)
+  // `replace` so tab-flipping doesn't stack up history entries between the page
+  // the user arrived from and wherever they go next.
+  const setTab = useCallback((tab: T) => navigate(`#${tab}`, { replace: true }), [navigate])
+
+  return [active, setTab]
+}
 
 /**
  * Run `fn` every `intervalMs` while `enabled`. Pure interval semantics — it

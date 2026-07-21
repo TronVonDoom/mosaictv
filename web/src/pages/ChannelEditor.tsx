@@ -491,7 +491,7 @@ export default function ChannelEditor() {
             <h2 className="font-semibold mb-1">Channel default</h2>
             <p className="text-slate-500 text-xs mb-3">
               Plays in any filler slot where the active block has none of its own. Build and generate fillers
-              under <Link to="/media#fillers" className="text-indigo-300">Media → Fillers</Link>.
+              under <Link to="/studio#fillers" className="text-indigo-300">Studio → Fillers</Link>.
             </p>
             <FillerAssignmentPicker owner={{ channelId }} hint="channel default" />
           </Card>

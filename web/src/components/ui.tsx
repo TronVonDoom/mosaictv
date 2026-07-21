@@ -6,7 +6,7 @@
 // Every primitive takes `className`, appended last so a caller can add layout
 // (flex, margins, width) without forking the base style.
 
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
+import type { ButtonHTMLAttributes, ComponentPropsWithRef, ReactNode, SelectHTMLAttributes } from 'react'
 import Icon, { type IconName } from './Icon'
 
 /** Join class names, dropping falsy ones. */
@@ -136,7 +136,10 @@ export function LinkButton({
 const CONTROL_BASE =
   'rounded-lg bg-canvas border border-edge-strong px-3 py-2 text-sm outline-none transition-colors focus:border-indigo-500'
 
-export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
+// `ComponentPropsWithRef` rather than `InputHTMLAttributes` so callers can pass
+// a `ref` (React 19 forwards it as an ordinary prop, but the attribute types
+// don't include it).
+export function Input({ className, ...rest }: ComponentPropsWithRef<'input'>) {
   return <input className={cx(CONTROL_BASE, className)} {...rest} />
 }
 

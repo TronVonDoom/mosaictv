@@ -109,7 +109,7 @@ export default function Settings() {
       <h1 className="text-2xl font-bold mb-1">Settings</h1>
       <p className="text-slate-400 text-sm mb-5">
         Global defaults and external services. Fillers and logos live on each channel; assets live on the
-        Media page.
+        Studio page.
       </p>
 
       <Tabs tabs={TABS} active={tab} onChange={setTab} className="mb-6" />
@@ -197,7 +197,7 @@ export default function Settings() {
             <h2 className="font-semibold mb-1">Default watermark (on-screen logo)</h2>
             <p className="text-slate-400 text-sm mb-4">
               The fallback watermark for logos without their own settings (and legacy URL logos). Set
-              per-logo overrides on the <span className="text-slate-300">Media</span> page. Intermittent
+              per-logo overrides on the <span className="text-slate-300">Studio</span> page. Intermittent
               mode shows the logo for the set duration every so many minutes, aligned to wall-clock time.
             </p>
             <WatermarkFields wm={wm} onChange={setWm} />

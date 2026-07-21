@@ -23,12 +23,21 @@ export default function ShowView() {
   const [detail, setDetail] = useState<ShowDetail | null>(null)
   const [openSeason, setOpenSeason] = useState<number | null | undefined>(undefined)
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  // Only for the breadcrumb — the show payload doesn't carry its library's name.
+  const [libraryName, setLibraryName] = useState<string | null>(null)
 
   useEffect(() => {
     if (!showTitle) return
     setOpenSeason(undefined)
     api.showDetail(id, showTitle).then(setDetail).catch(() => {})
   }, [id, showTitle])
+
+  useEffect(() => {
+    api
+      .libraries()
+      .then((ls) => setLibraryName(ls.find((l) => l.id === id)?.name ?? null))
+      .catch(() => {})
+  }, [id])
 
   const current: SeasonGroup | undefined = useMemo(
     () => detail?.seasons.find((s) => s.season === openSeason),
@@ -37,13 +46,13 @@ export default function ShowView() {
 
   return (
     <div>
-      <div className="flex items-center gap-2 text-sm text-slate-500 mb-1 flex-wrap">
-        <Link to="/browse" className="hover:text-indigo-300">
-          Browse
+      <div className="flex items-center gap-2 text-sm text-ink-faint mb-1 flex-wrap">
+        <Link to="/library" className="hover:text-indigo-300">
+          Library
         </Link>
         <span>/</span>
-        <Link to={`/browse/${id}`} className="hover:text-indigo-300">
-          Library
+        <Link to={`/library/${id}`} className="hover:text-indigo-300">
+          {libraryName ?? '…'}
         </Link>
         <span>/</span>
         {current ? (
