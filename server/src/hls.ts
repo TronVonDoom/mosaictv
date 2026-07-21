@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { hlsDir } from './paths.js'
 import { log } from './logs.js'
+import { closeSession, openSession, type Session } from './sessions.js'
 import { internalConcatUrl, ensureChannelReady } from './streaming/channel.js'
 import { detectReadrateBurst } from './streaming/capabilities.js'
 
@@ -31,6 +32,9 @@ type ChannelState = {
   starting: boolean
   startPromise: Promise<HlsStatus>
   viewers: Map<string, number> // ip -> last-seen ms
+  // One session per channel here, not per viewer: this encoder is shared, so
+  // its log lines belong to the channel rather than to any one player.
+  session: Session | null
 }
 
 const channels = new Map<number, ChannelState>()
@@ -58,6 +62,10 @@ async function startEncoder(n: number, st: ChannelState): Promise<HlsStatus> {
     fs.rmSync(st.dir, { recursive: true, force: true })
     fs.mkdirSync(st.dir, { recursive: true })
 
+    const session = openSession(n, 'hls')
+    st.session = session
+    const tag = session.tag
+
     const burst = (await detectReadrateBurst()) ? ['-readrate_initial_burst', '4', '-readrate_catchup', '1.5'] : []
     const args = [
       '-hide_banner', '-loglevel', 'error', '-nostdin',
@@ -66,7 +74,7 @@ async function startEncoder(n: number, st: ChannelState): Promise<HlsStatus> {
       // Meter at real time so segments are produced ~1s of media per 1s.
       '-readrate', '1.0', ...burst,
       '-stream_loop', '-1',
-      '-i', internalConcatUrl(n),
+      '-i', internalConcatUrl(n, session.id),
       // Inner streams are already normalized to the channel format — remux only.
       '-c', 'copy',
       '-f', 'hls',
@@ -83,12 +91,12 @@ async function startEncoder(n: number, st: ChannelState): Promise<HlsStatus> {
     st.proc = proc
     let stderr = ''
     proc.stderr?.on('data', (d) => (stderr = (stderr + d).slice(-2000)))
-    proc.on('error', (e) => log('error', 'ffmpeg', `Channel ${n} HLS encoder failed to spawn`, String(e)))
+    proc.on('error', (e) => log('error', 'ffmpeg', `Channel ${n} HLS encoder failed to spawn`, String(e), tag))
     proc.on('exit', (code, sig) => {
       if (st.proc === proc) st.proc = null
       // 255 / SIGKILL is our own reaper; anything else mid-life is a real fault.
       if (code && code !== 255 && sig !== 'SIGKILL') {
-        log('warn', 'ffmpeg', `Channel ${n} HLS encoder exited ${code} — will restart on next request`, stderr || '(no stderr)')
+        log('warn', 'ffmpeg', `Channel ${n} HLS encoder exited ${code} — will restart on next request`, stderr || '(no stderr)', tag)
       }
     })
 
@@ -96,7 +104,7 @@ async function startEncoder(n: number, st: ChannelState): Promise<HlsStatus> {
     while (Date.now() < end) {
       if (proc.exitCode !== null) return 'unavailable' // encoder died on startup
       if (playlistReady(playlistFileFor(n))) {
-        log('info', 'stream', `▶ Channel ${n} HLS encoder started (shared across viewers)`)
+        log('info', 'stream', `▶ Channel ${n} HLS encoder started (shared across viewers)`, undefined, tag)
         return 'ready'
       }
       await sleep(200)
@@ -109,20 +117,34 @@ async function startEncoder(n: number, st: ChannelState): Promise<HlsStatus> {
   }
 }
 
+/**
+ * Note a viewer of the shared encoder. Viewers here are identified by IP rather
+ * than by session — they all share one transcode — so the first sighting of an
+ * IP is the closest thing to a "connected" event this path has.
+ */
+function noteViewer(n: number, st: ChannelState, ip: string, client?: string): void {
+  if (!st.viewers.has(ip)) {
+    log('info', 'stream', `Channel ${n}: ${client || 'a client'} at ${ip} joined the shared HLS stream`, undefined, st.session?.tag)
+  }
+  st.viewers.set(ip, Date.now())
+}
+
 /** Ensure the channel's shared HLS encoder is running; report readiness so the
  *  route can serve (ready), ask the player to retry (starting), or 409
  *  (unavailable = missing / nothing scheduled). */
-export async function ensureHls(n: number, ip?: string): Promise<HlsStatus> {
+export async function ensureHls(n: number, ip?: string, client?: string): Promise<HlsStatus> {
   const existing = channels.get(n)
   if (existing) {
     existing.lastAccess = Date.now()
-    if (ip) existing.viewers.set(ip, Date.now())
+    if (ip) noteViewer(n, existing, ip, client)
     if (existing.proc && existing.proc.exitCode === null) {
       // Running: re-check readiness live (don't return a stale start result).
       return playlistReady(playlistFileFor(n)) ? 'ready' : 'starting'
     }
     if (existing.starting) return existing.startPromise
-    // Dead encoder (crashed) — fall through to restart.
+    // Dead encoder (crashed) — fall through to restart, retiring its session so
+    // the restarted encoder logs under a fresh one.
+    if (existing.session) closeSession(existing.session.id)
   }
   const st: ChannelState = {
     proc: null,
@@ -131,6 +153,7 @@ export async function ensureHls(n: number, ip?: string): Promise<HlsStatus> {
     starting: true,
     startPromise: Promise.resolve('starting'),
     viewers: new Map(ip ? [[ip, Date.now()]] : []),
+    session: null,
   }
   channels.set(n, st)
   st.startPromise = startEncoder(n, st)
@@ -138,11 +161,11 @@ export async function ensureHls(n: number, ip?: string): Promise<HlsStatus> {
 }
 
 /** Register a segment/playlist fetch so the reaper keeps the encoder alive. */
-export function touchHls(n: number, ip?: string): void {
+export function touchHls(n: number, ip?: string, client?: string): void {
   const st = channels.get(n)
   if (!st) return
   st.lastAccess = Date.now()
-  if (ip) st.viewers.set(ip, Date.now())
+  if (ip) noteViewer(n, st, ip, client)
 }
 
 export const hlsPlaylistFile = (n: number) => playlistFileFor(n)
@@ -171,7 +194,9 @@ function stopChannel(n: number, st: ChannelState): void {
   st.proc?.kill('SIGKILL')
   fs.rm(st.dir, { recursive: true, force: true }, () => {})
   channels.delete(n)
-  log('info', 'stream', `⏹ Channel ${n} HLS encoder stopped (idle)`)
+  const tag = st.session?.tag
+  if (st.session) closeSession(st.session.id)
+  log('info', 'stream', `⏹ Channel ${n} HLS encoder stopped (idle)`, undefined, tag)
 }
 
 // Reap idle channels. Unref'd so it never keeps the process alive on its own.

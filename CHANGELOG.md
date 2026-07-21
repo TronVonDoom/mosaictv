@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- **The log says which stream each line belongs to.** With two people watching,
+  every ffmpeg exit and stall warning read as though it came from the same
+  place. Each viewer connection now gets a tag — `V3 Plex`, `V4 Jellyfin`,
+  identified from the player's own User-Agent — carried through everything that
+  session does, including the per-item encodes the outer ffmpeg fetches back
+  over loopback. Click a tag in **Logs** to follow just that viewer, or pick one
+  from the new stream filter. Shared-HLS channels log under `HLS ch5` instead,
+  since that encoder genuinely is shared, with a line when a new client joins
+  it.
+- **Container load is logged every minute.** The resource graph only lives in
+  memory, so a downloaded log said nothing about what the box was doing when the
+  freeze happened. CPU (average and peak over the minute), memory against the
+  container's limit, the live ffmpeg count, and who was watching now go into the
+  log itself. A healthy beat is a debug line so it doesn't crowd the view; it's
+  raised to info when CPU is near saturation or memory near the limit. Idle
+  minutes are thinned to one line every five.
+- **Debug lines are hidden until you ask for them**, behind an *Include debug*
+  switch in **Logs** — they're always recorded, they were just burying the lines
+  that matter. **Copy all** and **Download** now hand over the entire log
+  regardless of any filter, so a filter you forgot about can't quietly withhold
+  the line that explains the bug.
+
 - **Plex can add MosaicTV directly — no Threadfin.** Plex's Live TV wants an
   HDHomeRun tuner rather than a raw M3U, which meant running Threadfin or xTeVe
   purely to translate. MosaicTV now answers the tuner protocol itself

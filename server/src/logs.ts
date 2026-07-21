@@ -16,6 +16,7 @@ export type LogEntry = {
   category: LogCategory
   message: string
   detail?: string // longer context (e.g. ffmpeg stderr tail)
+  session?: string // which viewer stream this belongs to, e.g. "V3 Plex"
 }
 
 const MAX_ENTRIES = 3000 // in-memory ring buffer size
@@ -44,20 +45,38 @@ function rotateIfNeeded(file: string): void {
   }
 }
 
+/** One entry as a plain-text line (plus indented detail), for file + dump. */
+function formatEntry(e: LogEntry): string {
+  let line = `${e.ts} [${e.level.toUpperCase()}] [${e.category}]`
+  if (e.session) line += ` [${e.session}]`
+  line += ` ${e.message}`
+  if (e.detail) line += '\n' + e.detail.split('\n').map((l) => '    ' + l).join('\n')
+  return line
+}
+
 function appendToFile(entry: LogEntry): void {
   try {
     const file = logFile()
     rotateIfNeeded(file)
-    let line = `${entry.ts} [${entry.level.toUpperCase()}] [${entry.category}] ${entry.message}`
-    if (entry.detail) line += '\n' + entry.detail.split('\n').map((l) => '    ' + l).join('\n')
-    fs.appendFileSync(file, line + '\n')
+    fs.appendFileSync(file, formatEntry(entry) + '\n')
   } catch {
     /* never let logging throw */
   }
 }
 
-/** Record a log entry (in-memory + file). Safe to call from anywhere. */
-export function log(level: LogLevel, category: LogCategory, message: string, detail?: string): void {
+/**
+ * Record a log entry (in-memory + file). Safe to call from anywhere.
+ *
+ * `session` names the viewer stream the entry belongs to (see sessions.ts) so
+ * concurrent viewers stay tellable apart; omit it for server-wide events.
+ */
+export function log(
+  level: LogLevel,
+  category: LogCategory,
+  message: string,
+  detail?: string,
+  session?: string,
+): void {
   const entry: LogEntry = {
     id: nextId++,
     ts: new Date().toISOString(),
@@ -65,13 +84,15 @@ export function log(level: LogLevel, category: LogCategory, message: string, det
     category,
     message,
     detail: detail ? detail.slice(-MAX_DETAIL) : undefined,
+    session,
   }
   buffer.push(entry)
   if (buffer.length > MAX_ENTRIES) buffer.splice(0, buffer.length - MAX_ENTRIES)
   appendToFile(entry)
   // Mirror warnings/errors to the container log too, so `docker logs` shows them.
-  if (level === 'error') console.error(`[${category}] ${message}`)
-  else if (level === 'warn') console.warn(`[${category}] ${message}`)
+  const who = session ? `[${session}] ` : ''
+  if (level === 'error') console.error(`[${category}] ${who}${message}`)
+  else if (level === 'warn') console.warn(`[${category}] ${who}${message}`)
 }
 
 export type LogQuery = {
@@ -79,12 +100,19 @@ export type LogQuery = {
   category?: LogCategory
   sinceId?: number // only entries with id > sinceId (for incremental polling)
   limit?: number
+  // Debug is verbose (every ffmpeg command line, every segment, the load
+  // heartbeat) and drowns the interesting lines, so the viewer asks for it
+  // explicitly. Everything is still recorded either way — this only filters
+  // what's handed back, never what's kept or dumped.
+  includeDebug?: boolean
 }
 
 /** Read entries matching a filter, newest last. */
 export function getLogs(q: LogQuery = {}): { entries: LogEntry[]; lastId: number; total: number } {
   let entries = buffer
   if (q.sinceId != null) entries = entries.filter((e) => e.id > q.sinceId!)
+  // An explicit level filter of 'debug' is itself a request for debug.
+  if (!q.includeDebug && q.level !== 'debug') entries = entries.filter((e) => e.level !== 'debug')
   if (q.level) entries = entries.filter((e) => e.level === q.level)
   if (q.category) entries = entries.filter((e) => e.category === q.category)
   const total = entries.length
@@ -107,11 +135,5 @@ export function clearLogs(): void {
 
 /** Full plain-text dump (buffer only) for the download button. */
 export function dumpText(): string {
-  return buffer
-    .map((e) => {
-      let line = `${e.ts} [${e.level.toUpperCase()}] [${e.category}] ${e.message}`
-      if (e.detail) line += '\n' + e.detail.split('\n').map((l) => '    ' + l).join('\n')
-      return line
-    })
-    .join('\n')
+  return buffer.map(formatEntry).join('\n')
 }

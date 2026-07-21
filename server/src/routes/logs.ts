@@ -6,7 +6,7 @@ export const logsRouter = Router()
 const LEVELS: LogLevel[] = ['debug', 'info', 'warn', 'error']
 const CATEGORIES: LogCategory[] = ['stream', 'ffmpeg', 'playout', 'system']
 
-// GET /api/logs?level=&category=&sinceId=&limit=
+// GET /api/logs?level=&category=&sinceId=&limit=&debug=1
 logsRouter.get('/', (req, res) => {
   const level = LEVELS.includes(req.query.level as LogLevel) ? (req.query.level as LogLevel) : undefined
   const category = CATEGORIES.includes(req.query.category as LogCategory)
@@ -14,7 +14,8 @@ logsRouter.get('/', (req, res) => {
     : undefined
   const sinceId = req.query.sinceId != null ? Number(req.query.sinceId) : undefined
   const limit = req.query.limit != null ? Number(req.query.limit) : undefined
-  res.json(getLogs({ level, category, sinceId, limit }))
+  const includeDebug = req.query.debug === '1' || req.query.debug === 'true'
+  res.json(getLogs({ level, category, sinceId, limit, includeDebug }))
 })
 
 // GET /api/logs/download — plain-text dump for handing off.

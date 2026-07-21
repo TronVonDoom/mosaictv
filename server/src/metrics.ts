@@ -1,5 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
+import { log } from './logs.js'
+import { activeSessions, sessionSummary } from './sessions.js'
 
 // Resource sampling for diagnosing "what made the box fall over".
 //
@@ -35,6 +37,16 @@ export type MetricSource = 'cgroup2' | 'cgroup1' | 'process' | 'none'
 const SAMPLE_MS = 3000
 const MAX_SAMPLES = 1200 // ~1 hour at 3s
 const MAX_MARKERS = 300
+
+// How often the load line is written to the log. The graph only lives in
+// memory, so a downloaded log would otherwise say nothing about what the
+// container was doing when a viewer complained — this is the part that
+// survives a restart and travels with a bug report.
+const HEARTBEAT_MS = 60_000
+// While nothing is streaming there's nothing to diagnose, so idle heartbeats
+// are thinned to one every this many beats rather than dropped entirely (a gap
+// in the log shouldn't be ambiguous between "idle" and "server was down").
+const IDLE_EVERY = 5
 
 const samples: MetricSample[] = []
 const markers: MetricMarker[] = []
@@ -161,7 +173,63 @@ function sample(): void {
   }
 }
 
+// --- load heartbeat ---------------------------------------------------------
+
+const gb = (bytes: number) => (bytes / 1e9).toFixed(2) + ' GB'
+
+let beat = 0
+
+/**
+ * Write one line describing container load, periodically. Averaged over the
+ * beat rather than instantaneous, so a single unlucky sample at a program
+ * boundary doesn't read as sustained load — and paired with the peak, which is
+ * what actually breaks a stream.
+ */
+function heartbeat(): void {
+  try {
+    const recent = samples.slice(-Math.max(1, Math.round(HEARTBEAT_MS / SAMPLE_MS)))
+    const last = samples[samples.length - 1]
+    if (!last) return
+    const cpus = recent.map((s) => s.cpuPct).filter((v) => v >= 0)
+    const avg = cpus.length ? cpus.reduce((a, b) => a + b, 0) / cpus.length : -1
+    const peak = cpus.length ? Math.max(...cpus) : -1
+    const ffmpeg = last.ffmpegCount
+    const idle = ffmpeg <= 0 && activeSessions().length === 0
+    if (idle && beat++ % IDLE_EVERY !== 0) return
+
+    const capacity = cores * 100
+    const cpuPart =
+      avg < 0
+        ? `CPU unknown (sampling via ${source})`
+        : `CPU ${avg.toFixed(0)}% avg / ${peak.toFixed(0)}% peak of ${capacity}% (${cores} cores)`
+    const memPart =
+      last.memBytes < 0
+        ? 'memory unknown'
+        : `memory ${gb(last.memBytes)}${last.memLimitBytes > 0 ? ' of ' + gb(last.memLimitBytes) : ''}`
+    const ffPart = ffmpeg < 0 ? 'ffmpeg count unknown' : `${ffmpeg} ffmpeg process(es)`
+
+    // A healthy heartbeat is background noise — it belongs in the log for the
+    // timeline it builds, not in anyone's face — so it goes in at debug. Load
+    // that a viewer would actually feel is raised to info: near-saturated CPU
+    // means the encoders can't keep real time, and a near-full memory limit
+    // means the OOM killer is next. 'warn' stays reserved for real faults.
+    const hot = avg >= 0 && avg > capacity * 0.9
+    const tight = last.memLimitBytes > 0 && last.memBytes > last.memLimitBytes * 0.9
+    const why = hot && tight ? ' — CPU and memory both near their limit' : hot ? ' — CPU near saturation, encoders may fall behind real time' : tight ? ' — close to the memory limit' : ''
+
+    log(
+      hot || tight ? 'info' : 'debug',
+      'system',
+      `Container load: ${cpuPart}, ${memPart}, ${ffPart}${why}`,
+      sessionSummary(),
+    )
+  } catch {
+    /* diagnostics must never take the server down */
+  }
+}
+
 let timer: NodeJS.Timeout | null = null
+let beatTimer: NodeJS.Timeout | null = null
 
 /** Begin sampling. Safe to call twice; the second call is a no-op. */
 export function startMetrics(): MetricSource {
@@ -170,6 +238,8 @@ export function startMetrics(): MetricSource {
   sample() // prime the CPU delta so the first real sample is usable
   timer = setInterval(sample, SAMPLE_MS)
   timer.unref() // never hold the process open for diagnostics
+  beatTimer = setInterval(heartbeat, HEARTBEAT_MS)
+  beatTimer.unref()
   return source
 }
 

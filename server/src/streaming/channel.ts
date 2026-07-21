@@ -13,6 +13,7 @@ import { dataDir, logosDir } from '../paths.js'
 import { programLabel } from '../labels.js'
 import { log } from '../logs.js'
 import { markEvent } from '../metrics.js'
+import { clientIp, clientName, closeSession, openSession, sessionTag } from '../sessions.js'
 import { hasSubtitleStream, probeSar } from '../ffprobe.js'
 import { detectReadrateBurst, detectTextOverlay, nvdecIfReady, resolveEncoder } from './capabilities.js'
 import { resolveProfile, type StreamProfile } from './profile.js'
@@ -64,9 +65,10 @@ const BACKPRESSURE_SEC = 30
  * the first byte arrived (a big first-byte delay is a stall the viewer sees).
  *
  * `tag` names this hop in stall warnings — omit it for short throwaway pipes
- * (black filler) that aren't worth watching.
+ * (black filler) that aren't worth watching. `session` attributes those
+ * warnings to the viewer whose stream froze.
  */
-function pipeSegment(proc: ChildProcess, res: Response, tag?: string): Promise<SegmentResult> {
+function pipeSegment(proc: ChildProcess, res: Response, tag?: string, session?: string): Promise<SegmentResult> {
   return new Promise((resolve) => {
     let stderr = ''
     let spawnError: Error | undefined
@@ -89,7 +91,7 @@ function pipeSegment(proc: ChildProcess, res: Response, tag?: string): Promise<S
           if (idleMs < (blocked ? BACKPRESSURE_SEC : STARVED_SEC) * 1000) {
             if (stalled) {
               stalled = false
-              log('info', 'stream', `${tag}: recovered after ${(idleMs / 1000).toFixed(0)}s of no data`)
+              log('info', 'stream', `${tag}: recovered after ${(idleMs / 1000).toFixed(0)}s of no data`, undefined, session)
             }
             return
           }
@@ -102,6 +104,7 @@ function pipeSegment(proc: ChildProcess, res: Response, tag?: string): Promise<S
             blocked
               ? 'still blocked writing downstream — the consumer (player/concat) has stopped reading for far longer than pacing explains'
               : 'ffmpeg produced nothing — the producer stalled, downstream is still accepting data',
+            session,
           )
         }, 1000)
       : undefined
@@ -139,12 +142,8 @@ function pipeSegment(proc: ChildProcess, res: Response, tag?: string): Promise<S
 
 function clientInfo(req?: Request): string {
   if (!req) return 'unknown client'
-  const ip =
-    (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-    req.socket?.remoteAddress ||
-    'unknown'
   const ua = (req.headers['user-agent'] as string) || 'unknown'
-  return `${ip} — ${ua}`
+  return `${clientName(req)} at ${clientIp(req)} — ${ua}`
 }
 
 // Count of live viewers per channel number, for logging concurrency.
@@ -156,8 +155,8 @@ export function viewerCount(channelNumber: number | null): number {
 }
 
 /** Stream black for `durSec` so the concat session survives a gap. */
-async function streamBlack(res: Response, p: StreamProfile, enc: string, durSec: number, why: string, channelNumber: number): Promise<void> {
-  log('warn', 'stream', `Channel ${channelNumber}: filling ${durSec.toFixed(1)}s with black — ${why}`)
+async function streamBlack(res: Response, p: StreamProfile, enc: string, durSec: number, why: string, channelNumber: number, session?: string): Promise<void> {
+  log('warn', 'stream', `Channel ${channelNumber}: filling ${durSec.toFixed(1)}s with black — ${why}`, undefined, session)
   if (!res.headersSent) res.writeHead(200, { 'Content-Type': 'video/mp2t', 'Cache-Control': 'no-cache, no-store' })
   const proc = spawn('ffmpeg', blackArgs(p, enc, durSec))
   res.on('close', () => proc.kill('SIGKILL'))
@@ -173,9 +172,14 @@ function internalBase(): string {
 /**
  * The internal concat playlist URL a channel's outer ffmpeg reads (shared by the
  * per-client MPEG-TS path and the shared-HLS path).
+ *
+ * `sessionId` rides along so the per-item fetches ffmpeg makes back into us can
+ * be attributed to the viewer they're feeding — otherwise every item looks like
+ * an anonymous loopback request and two concurrent viewers are indistinguishable.
  */
-export function internalConcatUrl(channelNumber: number): string {
-  return `${internalBase()}/internal/concat/${channelNumber}`
+export function internalConcatUrl(channelNumber: number, sessionId?: number): string {
+  const q = sessionId != null ? `?s=${sessionId}` : ''
+  return `${internalBase()}/internal/concat/${channelNumber}${q}`
 }
 
 /**
@@ -184,8 +188,8 @@ export function internalConcatUrl(channelNumber: number): string {
  * the URL, which hands back whatever should be on air at that moment. (Same trick
  * ErsatzTV uses.)
  */
-export function concatPlaylist(channelNumber: number): string {
-  const url = `${internalBase()}/internal/stream/${channelNumber}`
+export function concatPlaylist(channelNumber: number, sessionId?: number): string {
+  const url = `${internalBase()}/internal/stream/${channelNumber}${sessionId != null ? `?s=${sessionId}` : ''}`
   return `ffconcat version 1.0\nfile ${url}\nfile ${url}\n`
 }
 
@@ -193,23 +197,24 @@ export function concatPlaylist(channelNumber: number): string {
 async function ensurePlayout(
   channel: { id: number; playoutCursor: Date | null; rotationItems: unknown[] },
   channelNumber: number,
+  session?: string,
 ): Promise<boolean> {
   const now = Date.now()
   if (channel.playoutCursor && channel.playoutCursor.getTime() >= now + 30 * 60 * 1000) return true
 
   const blocks = await prisma.timeBlock.count({ where: { channelId: channel.id } })
   if (channel.rotationItems.length === 0 && blocks === 0) {
-    log('warn', 'stream', `Channel ${channelNumber} has nothing scheduled — no rotation or time blocks`)
+    log('warn', 'stream', `Channel ${channelNumber} has nothing scheduled — no rotation or time blocks`, undefined, session)
     return false
   }
   await prunePlayout(channel.id).catch((e) =>
-    log('warn', 'playout', `Prune failed for channel ${channelNumber}`, String(e)),
+    log('warn', 'playout', `Prune failed for channel ${channelNumber}`, String(e), session),
   )
   const built = await buildPlayout(channel.id, new Date(now + 4 * 3600 * 1000)).catch((e) => {
-    log('error', 'playout', `Playout build failed for channel ${channelNumber}`, String(e?.stack || e))
+    log('error', 'playout', `Playout build failed for channel ${channelNumber}`, String(e?.stack || e), session)
     return -1
   })
-  if (built >= 0) log('debug', 'playout', `Channel ${channelNumber}: built ${built} playout item(s) on connect`)
+  if (built >= 0) log('debug', 'playout', `Channel ${channelNumber}: built ${built} playout item(s) on connect`, undefined, session)
   return true
 }
 
@@ -258,6 +263,12 @@ export async function streamChannel(channelNumber: number, res: Response, req?: 
     return
   }
 
+  // Identify this viewer for the rest of the session: every line it produces —
+  // including the per-item ones ffmpeg fetches back over loopback — is tagged
+  // with it, so two people watching at once stay tellable apart in the log.
+  const session = openSession(channelNumber, 'mpegts', req)
+  const tag = session.tag
+
   const nViewers = (viewers.get(channelNumber) ?? 0) + 1
   viewers.set(channelNumber, nViewers)
   log(
@@ -265,6 +276,7 @@ export async function streamChannel(channelNumber: number, res: Response, req?: 
     'stream',
     `▶ Channel ${channelNumber} (${channel.name}) connected — ${nViewers} viewer(s) now watching this channel`,
     clientInfo(req),
+    tag,
   )
 
   // Send the first few seconds unmetered so the player starts with a buffer
@@ -287,11 +299,11 @@ export async function streamChannel(channelNumber: number, res: Response, req?: 
     '-readrate', '1.0',
     ...burst,
     '-stream_loop', '-1',
-    '-i', internalConcatUrl(channelNumber),
+    '-i', internalConcatUrl(channelNumber, session.id),
     '-c', 'copy',
     '-f', 'mpegts', '-muxpreload', '0', '-muxdelay', '0', 'pipe:1',
   ]
-  log('debug', 'ffmpeg', `Ch ${channelNumber} concat command`, 'ffmpeg ' + args.join(' '))
+  log('debug', 'ffmpeg', `Ch ${channelNumber} concat command`, 'ffmpeg ' + args.join(' '), tag)
 
   res.on('error', () => {}) // a torn-down client socket must not throw
   res.socket?.setNoDelay(true) // TS chunks go out as they're written, not Nagle-batched
@@ -313,26 +325,34 @@ export async function streamChannel(channelNumber: number, res: Response, req?: 
     const proc = spawn('ffmpeg', args)
     const kill = () => proc.kill('SIGKILL')
     res.on('close', kill)
-    const result = await pipeSegment(proc, res, `Ch ${channelNumber} concat→player`)
+    const result = await pipeSegment(proc, res, `Ch ${channelNumber} concat→player`, tag)
     res.off('close', kill)
     if (res.destroyed || res.writableEnded) break // viewer left — the normal way out
     if (result.spawnError) {
       reason = 'failed to launch ffmpeg'
-      log('error', 'ffmpeg', `Channel ${channelNumber}: could not launch the concat process`, String(result.spawnError))
+      log('error', 'ffmpeg', `Channel ${channelNumber}: could not launch the concat process`, String(result.spawnError), tag)
       break
     }
     strikes = Date.now() - startedAt > 60_000 ? 1 : strikes + 1
     if (strikes >= 3) {
       reason = `ffmpeg exited ${result.code} repeatedly`
-      log('error', 'ffmpeg', `Channel ${channelNumber}: concat process kept dying (exit ${result.code}) — giving up`, result.stderr || '(no stderr)')
+      log('error', 'ffmpeg', `Channel ${channelNumber}: concat process kept dying (exit ${result.code}) — giving up`, result.stderr || '(no stderr)', tag)
       break
     }
-    log('warn', 'ffmpeg', `Channel ${channelNumber}: concat process exited ${result.code ?? 'n/a'} mid-session — restarting`, result.stderr || '(no stderr)')
+    log('warn', 'ffmpeg', `Channel ${channelNumber}: concat process exited ${result.code ?? 'n/a'} mid-session — restarting`, result.stderr || '(no stderr)', tag)
   }
 
   const left = (viewers.get(channelNumber) ?? 1) - 1
   viewers.set(channelNumber, Math.max(0, left))
-  log('info', 'stream', `⏹ Channel ${channelNumber} (${channel.name}) stream ended — ${reason}; ${Math.max(0, left)} viewer(s) still watching`)
+  const watchedS = Math.round((Date.now() - session.startedAt) / 1000)
+  closeSession(session.id)
+  log(
+    'info',
+    'stream',
+    `⏹ Channel ${channelNumber} (${channel.name}) stream ended after ${watchedS}s — ${reason}; ${Math.max(0, left)} viewer(s) still watching`,
+    undefined,
+    tag,
+  )
   if (!res.writableEnded) res.end()
 }
 
@@ -347,6 +367,9 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
   // of this function, so every millisecond spent here is dead air the viewer
   // pays for out of their buffer. Time it, and say so when it gets dangerous.
   const openedAt = Date.now()
+  // Which viewer this item is being fetched for: the outer ffmpeg carries the
+  // session id on the URL we handed it (see concatPlaylist).
+  const tag = sessionTag(req && req.query.s != null ? Number(req.query.s) : undefined)
   const channel = await prisma.channel.findFirst({
     where: { number: channelNumber },
     include: {
@@ -360,7 +383,7 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
     res.status(404).end()
     return
   }
-  if (!(await ensurePlayout(channel, channelNumber))) {
+  if (!(await ensurePlayout(channel, channelNumber, tag))) {
     res.status(409).end()
     return
   }
@@ -406,7 +429,7 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
   const next = inTail ? items[2] : items[1]
   const prevKind = inTail && tail ? tail.kind : prevRow?.kind
   if (!item) {
-    await streamBlack(res, profile, enc, 2, 'nothing on air (playout exhausted)', channelNumber)
+    await streamBlack(res, profile, enc, 2, 'nothing on air (playout exhausted)', channelNumber, tag)
     return
   }
   // Not on air yet (dead air between blocks on a blocks-only channel): hold
@@ -414,7 +437,7 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
   // refetch re-evaluates against the clock.
   const leadGapSec = (item.startTime.getTime() - now.getTime()) / 1000
   if (leadGapSec > TAIL_SKIP_SEC) {
-    await streamBlack(res, profile, enc, Math.min(leadGapSec, 30), 'dead air until the next scheduled item', channelNumber)
+    await streamBlack(res, profile, enc, Math.min(leadGapSec, 30), 'dead air until the next scheduled item', channelNumber, tag)
     return
   }
 
@@ -474,7 +497,7 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
         (await ensureAnimatedFiller())
     }
     const genMs = Date.now() - genStart
-    if (genMs > 500) log('warn', 'system', `Channel ${channelNumber}: filler resolve blocked ${genMs}ms (should be pre-warmed)`)
+    if (genMs > 500) log('warn', 'system', `Channel ${channelNumber}: filler resolve blocked ${genMs}ms (should be pre-warmed)`, undefined, tag)
     // Generated filler is always our own H.264; custom clips are unknown,
     // so only offer those to the GPU when they're our generated files.
     const fillerHw =
@@ -485,12 +508,12 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
       seg = { filePath: clip, offsetSec: 0, loop: true, durationSec: segDur, hasAudio: true, logo, wmEpochSec, mediaWidth: FILLER_W, mediaHeight: FILLER_H, musicPath: music, isFiller: true, fadeInSec: 0, fadeOutSec: 0, hwDecode: fillerHw }
     }
     label = `filler (${Math.round(segDur)}s)${music ? ' +music' : ''}${src}`
-    if (!clip) log('error', 'stream', `Channel ${channelNumber}: no filler clip — a ${Math.round(segDur)}s gap will play black`)
+    if (!clip) log('error', 'stream', `Channel ${channelNumber}: no filler clip — a ${Math.round(segDur)}s gap will play black`, undefined, tag)
   } else if (fs.existsSync(mi.path) && offset >= (mi.durationSec ?? Infinity) - 0.2) {
     // The file is shorter than the slot it was given. Seeking past its end
     // would produce nothing, and concat would refetch this same item on a
     // tight loop until the slot expired.
-    await streamBlack(res, profile, enc, Math.min(segDur, 10), `${mi.title} ran out ${offset.toFixed(1)}s in (file shorter than its slot)`, channelNumber)
+    await streamBlack(res, profile, enc, Math.min(segDur, 10), `${mi.title} ran out ${offset.toFixed(1)}s in (file shorter than its slot)`, channelNumber, tag)
     return
   } else if (fs.existsSync(mi.path)) {
     // Only anamorphic sources need correcting, and only a constrained
@@ -504,12 +527,12 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
     seg = { filePath: mi.path, offsetSec: offset, loop: false, durationSec: segDur, hasAudio: !!mi.audioCodec, logo, wmEpochSec, mediaWidth: dispW, mediaHeight: mi.height ?? FILLER_H, isFiller: false, fadeInSec, fadeOutSec, hwDecode, hasSubtitles }
     label = programLabel(mi, { withTitle: true })
   } else {
-    log('warn', 'stream', `Channel ${channelNumber}: media file missing, skipping`, mi.path)
+    log('warn', 'stream', `Channel ${channelNumber}: media file missing, skipping`, mi.path, tag)
     label = mi.title
   }
 
   if (!seg) {
-    await streamBlack(res, profile, enc, Math.min(segDur, 10), `no playable segment for ${label}`, channelNumber)
+    await streamBlack(res, profile, enc, Math.min(segDur, 10), `no playable segment for ${label}`, channelNumber, tag)
     return
   }
 
@@ -538,9 +561,9 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
         try {
           fs.writeFileSync(captionFile, text)
           textFilter = comingUpFilter(cu, support.font, captionFile, windows, profile) ?? undefined
-          if (textFilter) log('debug', 'stream', `Ch ${channelNumber} coming-up caption: "${text}"`, `${windows.length} window(s)`)
+          if (textFilter) log('debug', 'stream', `Ch ${channelNumber} coming-up caption: "${text}"`, `${windows.length} window(s)`, tag)
         } catch (e) {
-          log('warn', 'stream', `Channel ${channelNumber}: could not stage coming-up caption`, String(e))
+          log('warn', 'stream', `Channel ${channelNumber}: could not stage coming-up caption`, String(e), tag)
           captionFile = undefined
         }
       }
@@ -568,10 +591,10 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
         const chyron = songChyronFilter(support.font, titleFile, subFile, a, b, profile)
         if (chyron) {
           textFilter = textFilter ? `${textFilter},${chyron}` : chyron
-          log('debug', 'stream', `Ch ${channelNumber} song chyron: "${title}${sub ? ' — ' + sub : ''}"`)
+          log('debug', 'stream', `Ch ${channelNumber} song chyron: "${title}${sub ? ' — ' + sub : ''}"`, undefined, tag)
         }
       } catch (e) {
-        log('warn', 'stream', `Channel ${channelNumber}: could not stage song chyron`, String(e))
+        log('warn', 'stream', `Channel ${channelNumber}: could not stage song chyron`, String(e), tag)
       }
     }
   }
@@ -599,6 +622,7 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
       'stream',
       `Channel ${channelNumber}: ${(prepMs / 1000).toFixed(1)}s of dead air preparing ${label} — the viewer's buffer drains while this runs`,
       'probes and playout work belong at startup, not at a program boundary',
+      tag,
     )
   }
   const startDetail = `source ${seg.mediaWidth}x${seg.mediaHeight}, decode ${seg.hwDecode ? 'GPU (nvdec)' : 'CPU'}, prep ${prepMs}ms, logo ${active.id != null ? '#' + active.id : active.raw ? 'url' : 'none'}, ${wmDesc}`
@@ -607,6 +631,7 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
     'stream',
     `Ch ${channelNumber} ▶ ${label}${offset > 1 ? ` (resuming at ${Math.round(offset)}s)` : ''}`,
     startDetail,
+    tag,
   )
   // Annotate the resource timeline, so a step change in CPU can be traced back
   // to the item that started at that moment.
@@ -616,11 +641,11 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
     label,
     `${enc}, ${startDetail}`,
   )
-  log('debug', 'ffmpeg', `Ch ${channelNumber} ffmpeg command`, 'ffmpeg ' + args.join(' '))
+  log('debug', 'ffmpeg', `Ch ${channelNumber} ffmpeg command`, 'ffmpeg ' + args.join(' '), tag)
   res.writeHead(200, { 'Content-Type': 'video/mp2t', 'Cache-Control': 'no-cache, no-store' })
   const segStart = Date.now()
   current = spawn('ffmpeg', args)
-  const result = await pipeSegment(current, res, `Ch ${channelNumber} encoder→concat`)
+  const result = await pipeSegment(current, res, `Ch ${channelNumber} encoder→concat`, tag)
   current = null
   // ffmpeg has read the caption files at init; safe to drop them now.
   if (captionFile) fs.rmSync(captionFile, { force: true })
@@ -634,25 +659,25 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
   const mb = (result.bytes / 1e6).toFixed(1)
   const detail = `${mb} MB in ${wallS}s (expected ~${Math.round(segDur)}s), first byte ${result.firstByteMs < 0 ? 'never' : result.firstByteMs + 'ms'}, exit ${result.code ?? 'n/a'}`
   if (result.spawnError) {
-    log('error', 'ffmpeg', `Channel ${channelNumber}: failed to launch ffmpeg for ${path.basename(seg.filePath)}`, String(result.spawnError))
+    log('error', 'ffmpeg', `Channel ${channelNumber}: failed to launch ffmpeg for ${path.basename(seg.filePath)}`, String(result.spawnError), tag)
   } else if (result.code && result.code !== 0) {
-    log('error', 'ffmpeg', `Channel ${channelNumber}: ffmpeg exited ${result.code} on ${path.basename(seg.filePath)}`, `${detail}\n${result.stderr || '(no stderr)'}`)
+    log('error', 'ffmpeg', `Channel ${channelNumber}: ffmpeg exited ${result.code} on ${path.basename(seg.filePath)}`, `${detail}\n${result.stderr || '(no stderr)'}`, tag)
   } else if (result.bytes === 0) {
-    log('error', 'ffmpeg', `Channel ${channelNumber}: ffmpeg produced NO output for ${path.basename(seg.filePath)} — viewers see a freeze/black`, `${detail}\n${result.stderr || '(no stderr)'}`)
+    log('error', 'ffmpeg', `Channel ${channelNumber}: ffmpeg produced NO output for ${path.basename(seg.filePath)} — viewers see a freeze/black`, `${detail}\n${result.stderr || '(no stderr)'}`, tag)
   } else if (result.firstByteMs > 2500) {
-    log('warn', 'ffmpeg', `Channel ${channelNumber}: slow start (${result.firstByteMs}ms to first byte) on ${path.basename(seg.filePath)} — possible stall`, detail)
+    log('warn', 'ffmpeg', `Channel ${channelNumber}: slow start (${result.firstByteMs}ms to first byte) on ${path.basename(seg.filePath)} — possible stall`, detail, tag)
   } else if (segDur > 5 && wallMs > (segDur + 3) * 1000 * 1.15) {
     // Took much longer than real time → the encoder can't sustain the
     // stream, so viewers' buffers underrun and it freezes/stutters.
-    log('warn', 'ffmpeg', `Channel ${channelNumber}: encoder slower than real-time (${wallS}s for a ${Math.round(segDur)}s segment, ${enc}) — likely cause of freezing`, detail)
+    log('warn', 'ffmpeg', `Channel ${channelNumber}: encoder slower than real-time (${wallS}s for a ${Math.round(segDur)}s segment, ${enc}) — likely cause of freezing`, detail, tag)
   } else {
-    log('debug', 'ffmpeg', `Channel ${channelNumber}: segment done — ${label}`, `${detail}${result.stderr ? '\n' + result.stderr : ''}`)
+    log('debug', 'ffmpeg', `Channel ${channelNumber}: segment done — ${label}`, `${detail}${result.stderr ? '\n' + result.stderr : ''}`, tag)
   }
   // A segment that produced nothing would hand the concat demuxer an empty
   // entry, which it treats as fatal — the whole viewer session dies.
   // Substitute valid black TS so the session survives the slot.
   if (result.bytes === 0 && !res.writableEnded && !res.destroyed) {
-    await streamBlack(res, profile, enc, Math.min(Math.max(segDur, 1), 8), `encoder produced no output for ${label}`, channelNumber)
+    await streamBlack(res, profile, enc, Math.min(Math.max(segDur, 1), 8), `encoder produced no output for ${label}`, channelNumber, tag)
   }
 
   // Viewer accounting lives on the outer /iptv stream; this endpoint is just one

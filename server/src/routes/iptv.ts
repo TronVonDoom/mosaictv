@@ -5,6 +5,7 @@ import { streamChannel } from '../streaming/channel.js'
 import { ensureHls, touchHls, hlsPlaylistFile, hlsSegmentFile } from '../hls.js'
 import { episodeCode } from '../labels.js'
 import { baseUrl } from '../http.js'
+import { clientName } from '../sessions.js'
 
 export const iptvRouter = Router()
 
@@ -25,7 +26,7 @@ iptvRouter.get(/^\/channel\/(\d+)\.ts$/, (req, res) => {
 iptvRouter.get(/^\/channel\/(\d+)\/index\.m3u8$/, async (req, res) => {
   const n = Number((req.params as unknown as string[])[0])
   try {
-    const status = await ensureHls(n, clientIp(req))
+    const status = await ensureHls(n, clientIp(req), clientName(req))
     if (status === 'unavailable') return res.status(409).end() // missing / nothing scheduled
     if (status === 'starting') {
       res.setHeader('Retry-After', '2')
@@ -44,7 +45,7 @@ iptvRouter.get(/^\/channel\/(\d+)\/(seg_\d+\.ts)$/, (req, res) => {
   const n = Number(params[0])
   const file = hlsSegmentFile(n, params[1])
   if (!file) return res.status(404).end()
-  touchHls(n, clientIp(req))
+  touchHls(n, clientIp(req), clientName(req))
   res.setHeader('Content-Type', 'video/mp2t')
   res.setHeader('Cache-Control', 'no-cache, no-store')
   res.sendFile(file, (err) => {

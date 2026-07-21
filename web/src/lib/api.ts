@@ -397,6 +397,7 @@ export type LogEntry = {
   category: LogCategory
   message: string
   detail?: string
+  session?: string // which viewer stream this line belongs to, e.g. "V3 Plex"
 }
 export type LogsResponse = { entries: LogEntry[]; lastId: number; total: number }
 
@@ -634,11 +635,12 @@ export const api = {
     request<Playout>(`/api/channels/${channelId}/playout?hours=${hours}`),
 
   // --- logs ---
-  logs: (params: { level?: LogLevel; category?: LogCategory; limit?: number } = {}) => {
+  logs: (params: { level?: LogLevel; category?: LogCategory; limit?: number; debug?: boolean } = {}) => {
     const qs = new URLSearchParams()
     if (params.level) qs.set('level', params.level)
     if (params.category) qs.set('category', params.category)
     if (params.limit) qs.set('limit', String(params.limit))
+    if (params.debug) qs.set('debug', '1')
     const q = qs.toString()
     return request<LogsResponse>(`/api/logs${q ? `?${q}` : ''}`)
   },
