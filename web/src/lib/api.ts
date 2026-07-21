@@ -195,11 +195,13 @@ export type ScanStatus = {
   error: string | null
 }
 
+export type MemberKind = 'show' | 'season' | 'episode' | 'movie'
 export type CollectionItem = {
   id: number
-  kind: 'show' | 'movie'
+  kind: MemberKind
   showTitle: string | null
   libraryId: number | null
+  season: number | null
   mediaItemId: number | null
   label: string | null
   order: number
@@ -235,6 +237,8 @@ export type Collection = {
   name: string
   channelId: number | null
   logoId: number | null
+  // The order used wherever a rotation item or block says "inherit".
+  defaultOrder: string
   libraryId: number | null
   filterType: string | null
   filterShow: string | null
@@ -246,6 +250,8 @@ export type Collection = {
 
 export type MediaSearchResult =
   | { kind: 'show'; showTitle: string; libraryId: number; libraryName: string; episodeCount: number }
+  | { kind: 'season'; showTitle: string; libraryId: number; libraryName: string; season: number; episodeCount: number }
+  | { kind: 'episode'; mediaItemId: number; title: string; showTitle: string | null; season: number | null; episode: number | null }
   | { kind: 'movie'; mediaItemId: number; title: string; year: number | null }
 
 export type RotationItem = {
@@ -255,7 +261,7 @@ export type RotationItem = {
   playbackOrder: string
   mode: string
   count: number
-  collection: { id: number; name: string }
+  collection: { id: number; name: string; defaultOrder: string }
 }
 
 export type Logo = { id: number; name: string; mime: string; watermark: WatermarkConfig }
@@ -289,7 +295,7 @@ export type TimeBlock = {
   fillerMode: string
   startMode: string
   comingUp: string | null // JSON ComingUpConfig; null = inherit channel
-  collection: { id: number; name: string }
+  collection: { id: number; name: string; defaultOrder: string }
 }
 
 // What a time block accepts on write. Omitted fields keep the schema default on
@@ -503,6 +509,7 @@ export const api = {
     channelId?: number | null
     logoId?: number | null
     libraryId?: number | null
+    defaultOrder?: string
     filterType?: string | null
     filterShow?: string | null
     filterSearch?: string | null
@@ -516,19 +523,24 @@ export const api = {
       name?: string
       logoId?: number | null
       libraryId?: number | null
+      defaultOrder?: string
       filterType?: string | null
       filterSearch?: string | null
       filterGenre?: string | null
     },
   ) => request<Collection>(`/api/collections/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  collectionPreview: (id: number) =>
-    request<{ count: number; sample: MediaItem[] }>(`/api/collections/${id}/preview`),
+  collectionPreview: (id: number, order = 'chronological') =>
+    request<{ count: number; order: string; sample: MediaItem[] }>(
+      `/api/collections/${id}/preview?order=${encodeURIComponent(order)}`,
+    ),
   searchMedia: (q: string) =>
     request<{ results: MediaSearchResult[] }>(`/api/collections/search?q=${encodeURIComponent(q)}`),
   addCollectionItem: (
     collectionId: number,
     member:
       | { kind: 'show'; showTitle: string; libraryId: number; label: string }
+      | { kind: 'season'; showTitle: string; libraryId: number; season: number; label: string }
+      | { kind: 'episode'; mediaItemId: number; label: string }
       | { kind: 'movie'; mediaItemId: number; label: string },
   ) =>
     request<CollectionItem>(`/api/collections/${collectionId}/items`, {
@@ -537,6 +549,12 @@ export const api = {
     }),
   deleteCollectionItem: (collectionId: number, itemId: number) =>
     request<void>(`/api/collections/${collectionId}/items/${itemId}`, { method: 'DELETE' }),
+  // `ids` = the members in their new order; drives the "hand-picked" playback order.
+  reorderCollectionItems: (collectionId: number, ids: number[]) =>
+    request<CollectionItem[]>(`/api/collections/${collectionId}/items/reorder`, {
+      method: 'PATCH',
+      body: JSON.stringify({ ids }),
+    }),
   // The global filler library (created & generated under Media).
   fillers: () => request<Filler[]>('/api/fillers'),
   addFiller: (data: FillerInput) =>

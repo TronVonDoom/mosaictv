@@ -1,5 +1,6 @@
 import { useMemo, useRef, useEffect } from 'react'
 import type { Playout } from '../lib/api'
+import { programLabel } from '../lib/format'
 
 const PX = 4 // pixels per minute
 const HOURS = 24
@@ -9,11 +10,7 @@ function progLabel(it: Playout['items'][number]): string {
   const m = it.mediaItem
   if (!m) return it.title || 'Station ID'
   if (m.type === 'music' && m.artist) return `${m.artist} – ${m.title}`
-  if (m.type === 'episode' && m.showTitle) {
-    const se = m.season != null && m.episode != null ? ` S${String(m.season).padStart(2, '0')}E${String(m.episode).padStart(2, '0')}` : ''
-    return `${m.showTitle}${se}`
-  }
-  return m.title
+  return programLabel(m)
 }
 
 // A Jellyfin-style horizontal EPG lane for one channel: programs as time-scaled

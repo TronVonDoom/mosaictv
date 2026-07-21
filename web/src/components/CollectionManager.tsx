@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import Icon from './Icon'
-import { api, type Collection, type Library, type MediaSearchResult } from '../lib/api'
+import { api, type Collection, type Library, type MediaItem, type MediaSearchResult } from '../lib/api'
+import { PLAYBACK_ORDERS, orderLabel } from '../lib/playback'
+import { programLabel } from '../lib/format'
 import MediaSearchInput from './MediaSearchInput'
 import LogoPicker from './LogoPicker'
 import { toast } from '../lib/toast'
@@ -24,13 +26,19 @@ export default function CollectionManager({
 
   const [name, setName] = useState('')
   const [newLogoId, setNewLogoId] = useState<number | null>(null)
+  const [dragId, setDragId] = useState<number | null>(null)
   const [editId, setEditId] = useState<number | null>(null)
-  const [editForm, setEditForm] = useState({ name: '', logoId: null as number | null, libraryId: '', filterType: '', filterSearch: '', filterGenre: '' })
+  const [editForm, setEditForm] = useState({ name: '', logoId: null as number | null, defaultOrder: 'chronological', libraryId: '', filterType: '', filterSearch: '', filterGenre: '' })
+  // Which collection's "what will this air?" panel is open, and its contents.
+  const [previewId, setPreviewId] = useState<number | null>(null)
+  const [preview, setPreview] = useState<{ count: number; order: string; sample: MediaItem[] } | null>(null)
 
   const refresh = () =>
     api.collections(channelId).then((c) => {
       setCols(c)
       onChange?.()
+      // Keep an open preview honest after a drag, an add, or a removal.
+      if (previewId != null) api.collectionPreview(previewId).then(setPreview).catch(() => {})
     }).catch(() => {})
   useEffect(() => {
     refresh()
@@ -63,6 +71,7 @@ export default function CollectionManager({
     setEditForm({
       name: c.name,
       logoId: c.logoId,
+      defaultOrder: c.defaultOrder,
       libraryId: c.libraryId ? String(c.libraryId) : '',
       filterType: c.filterType ?? '',
       filterSearch: c.filterSearch ?? '',
@@ -75,6 +84,7 @@ export default function CollectionManager({
       await api.updateCollection(editId, {
         name: editForm.name,
         logoId: editForm.logoId,
+        defaultOrder: editForm.defaultOrder,
         libraryId: editForm.libraryId ? Number(editForm.libraryId) : null,
         filterType: editForm.filterType || null,
         filterSearch: editForm.filterSearch || null,
@@ -85,12 +95,49 @@ export default function CollectionManager({
     })
   }
 
-  async function addMember(collectionId: number, r: MediaSearchResult) {
-    await guard(() =>
-      r.kind === 'show'
-        ? api.addCollectionItem(collectionId, { kind: 'show', showTitle: r.showTitle, libraryId: r.libraryId, label: r.showTitle })
-        : api.addCollectionItem(collectionId, { kind: 'movie', mediaItemId: r.mediaItemId, label: r.title }),
+  // What this collection actually airs, in its own default order — the answer
+  // to "did my hand-picked arrangement come out the way I meant?".
+  function showPreview(id: number) {
+    if (previewId === id) {
+      setPreviewId(null)
+      return
+    }
+    setPreviewId(id)
+    setPreview(null)
+    api.collectionPreview(id).then(setPreview).catch(() => setPreview(null))
+  }
+
+  // Drop `fromId` onto `toId`'s slot. The member order is what the "hand-picked
+  // order" playback mode airs, so persist it; the local swap is just so the
+  // chips don't jump while the request is in flight.
+  function moveMember(col: Collection, fromId: number, toId: number) {
+    if (fromId === toId) return
+    const ids = col.items.map((i) => i.id)
+    const from = ids.indexOf(fromId)
+    const to = ids.indexOf(toId)
+    if (from < 0 || to < 0) return
+    ids.splice(to, 0, ...ids.splice(from, 1))
+
+    const byId = new Map(col.items.map((i) => [i.id, i]))
+    setCols((cs) =>
+      cs.map((c) => (c.id === col.id ? { ...c, items: ids.map((id) => byId.get(id)!) } : c)),
     )
+    guard(() => api.reorderCollectionItems(col.id, ids))
+  }
+
+  async function addMember(collectionId: number, r: MediaSearchResult) {
+    await guard(() => {
+      switch (r.kind) {
+        case 'show':
+          return api.addCollectionItem(collectionId, { kind: 'show', showTitle: r.showTitle, libraryId: r.libraryId, label: r.showTitle })
+        case 'season':
+          return api.addCollectionItem(collectionId, { kind: 'season', showTitle: r.showTitle, libraryId: r.libraryId, season: r.season, label: `${r.showTitle} — Season ${r.season}` })
+        case 'episode':
+          return api.addCollectionItem(collectionId, { kind: 'episode', mediaItemId: r.mediaItemId, label: programLabel(r) })
+        case 'movie':
+          return api.addCollectionItem(collectionId, { kind: 'movie', mediaItemId: r.mediaItemId, label: r.title })
+      }
+    })
   }
 
   return (
@@ -131,7 +178,10 @@ export default function CollectionManager({
               <div key={c.id} className="rounded-xl border border-edge bg-canvas/50 p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="font-medium flex-1">{c.name}</div>
-                  <span className="text-xs text-ink-faint">{c.itemCount} items</span>
+                  <span className="text-xs text-ink-faint">{c.itemCount} items · {orderLabel(c.defaultOrder)}</span>
+                  <button onClick={() => showPreview(c.id)} className="rounded-lg border border-edge-strong hover:border-indigo-500 hover:text-indigo-300 px-3 py-1 text-sm">
+                    {previewId === c.id ? 'Hide' : 'Preview'}
+                  </button>
                   <button onClick={() => (editId === c.id ? setEditId(null) : startEdit(c))} className="rounded-lg border border-edge-strong hover:border-indigo-500 hover:text-indigo-300 px-3 py-1 text-sm">
                     {editId === c.id ? 'Close' : 'Edit'}
                   </button>
@@ -148,6 +198,17 @@ export default function CollectionManager({
                       <label className="flex flex-col gap-1 text-sm">
                         <span className="text-ink-muted">Logo</span>
                         <LogoPicker value={editForm.logoId} onChange={(id) => setEditForm({ ...editForm, logoId: id })} />
+                      </label>
+                      <label className="flex flex-col gap-1 text-sm">
+                        <span className="text-ink-muted">Plays in this order</span>
+                        <Select value={editForm.defaultOrder} onChange={(e) => setEditForm({ ...editForm, defaultOrder: e.target.value })}>
+                          {PLAYBACK_ORDERS.map((o) => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </Select>
+                        <span className="text-[11px] text-ink-faint">
+                          Used everywhere this collection is scheduled, unless a rotation item or block overrides it.
+                        </span>
                       </label>
                     </div>
                     <details className="text-sm">
@@ -174,18 +235,66 @@ export default function CollectionManager({
                   </div>
                 )}
 
+                {previewId === c.id && (
+                  <div className="rounded-lg border border-edge bg-canvas/60 p-3 mb-3 text-sm">
+                    {!preview ? (
+                      <span className="text-ink-faint">Loading…</span>
+                    ) : preview.count === 0 ? (
+                      <span className="text-ink-faint">
+                        Nothing playable here yet — add members, or check the files still exist.
+                      </span>
+                    ) : (
+                      <>
+                        <div className="text-xs text-ink-faint mb-2">
+                          First {preview.sample.length} of {preview.count}, {orderLabel(preview.order)}
+                        </div>
+                        <ol className="space-y-0.5">
+                          {preview.sample.map((m, i) => (
+                            <li key={m.id} className="flex gap-2">
+                              <span className="text-ink-ghost tabular-nums w-5 text-right">{i + 1}</span>
+                              <span className="truncate">{programLabel(m, { withTitle: true })}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      </>
+                    )}
+                  </div>
+                )}
+
                 {filterSummary && <div className="text-xs text-violet-300/80 mb-2">smart filter: {filterSummary}</div>}
 
                 <div className="flex flex-wrap gap-2 mb-3">
                   {c.items.length === 0 && !filterSummary && <span className="text-ink-faint text-sm">No shows or movies yet — add some below.</span>}
-                  {c.items.map((it) => (
-                    <span key={it.id} className="inline-flex items-center gap-2 rounded-lg bg-surface/70 border border-edge pl-2.5 pr-1.5 py-1 text-sm">
+                  {c.items.map((it, i) => (
+                    <span
+                      key={it.id}
+                      draggable
+                      onDragStart={() => setDragId(it.id)}
+                      onDragEnd={() => setDragId(null)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        if (dragId != null) moveMember(c, dragId, it.id)
+                        setDragId(null)
+                      }}
+                      title="Drag to reorder"
+                      className={
+                        'inline-flex items-center gap-2 rounded-lg bg-surface/70 border pl-2 pr-1.5 py-1 text-sm cursor-grab active:cursor-grabbing ' +
+                        (dragId === it.id ? 'border-indigo-500 opacity-50' : 'border-edge')
+                      }
+                    >
+                      <span className="text-[10px] tabular-nums text-ink-faint w-4 text-right">{i + 1}</span>
                       <Icon name={it.kind === 'show' ? 'show' : 'movie'} size={15} colored />
                       <span className="truncate max-w-48">{it.label ?? it.showTitle}</span>
                       <button onClick={() => guard(() => api.deleteCollectionItem(c.id, it.id))} className="text-ink-faint hover:text-rose-400" aria-label="Remove">×</button>
                     </span>
                   ))}
                 </div>
+                {c.items.length > 1 && (
+                  <div className="text-[11px] text-ink-faint mb-3">
+                    Drag to reorder — this is the sequence the “hand-picked order” playback mode airs.
+                  </div>
+                )}
                 <div className="max-w-md">
                   <MediaSearchInput onAdd={(r) => addMember(c.id, r)} />
                 </div>

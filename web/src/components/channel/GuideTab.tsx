@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, type Playout } from '../../lib/api'
 import { errorMessage } from '../../lib/errors'
+import { programLabel } from '../../lib/format'
 import TimelineView from '../TimelineView'
 import { Button, Card, EmptyState, InfoHint, Skeleton, cx } from '../ui'
 import type { ChannelTabProps } from './types'
@@ -13,17 +14,6 @@ function fmtDur(sec: number | null): string {
   if (!sec) return ''
   const m = Math.round(sec / 60)
   return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`
-}
-
-function label(m: NonNullable<Playout['items'][number]['mediaItem']>): string {
-  if (m.type === 'episode' && m.showTitle) {
-    const se =
-      m.season != null && m.episode != null
-        ? ` S${String(m.season).padStart(2, '0')}E${String(m.episode).padStart(2, '0')}`
-        : ''
-    return `${m.showTitle}${se} — ${m.title}`
-  }
-  return m.title
 }
 
 /** The built schedule: a 24h timeline or a running list, plus the controls that
@@ -185,7 +175,9 @@ export default function GuideTab({
                     !it.mediaItem && 'text-ink-faint italic',
                   )}
                 >
-                  {it.mediaItem ? label(it.mediaItem) : it.title || 'Station ID'}
+                  {it.mediaItem
+                    ? programLabel(it.mediaItem, { withTitle: true })
+                    : it.title || 'Station ID'}
                 </span>
                 <span className="text-xs text-ink-ghost shrink-0 tabular-nums">
                   {fmtDur(

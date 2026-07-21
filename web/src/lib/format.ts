@@ -22,6 +22,29 @@ export function minutesToTime(min: number): string {
   return `${h12}:${String(m).padStart(2, '0')} ${ampm}`
 }
 
+/** "S01E02", or '' when the item isn't a numbered episode. */
+export function episodeCode(m: { season?: number | null; episode?: number | null }): string {
+  if (m.season == null || m.episode == null) return ''
+  return `S${String(m.season).padStart(2, '0')}E${String(m.episode).padStart(2, '0')}`
+}
+
+/**
+ * How a program reads in a listing: "Rugrats S01E02" for an episode, the plain
+ * title for anything else. `withTitle` appends the episode's own title —
+ * "Rugrats S01E02 — Chuckie's Big Day" — for places with room for it.
+ *
+ * Note that a media item has a showTitle if and only if it's an episode (the
+ * scanner sets it nowhere else), so that one check covers both.
+ */
+export function programLabel(
+  m: { title: string; showTitle?: string | null; season?: number | null; episode?: number | null },
+  opts: { withTitle?: boolean } = {},
+): string {
+  if (!m.showTitle) return m.title
+  const code = episodeCode(m)
+  return `${m.showTitle}${code ? ` ${code}` : ''}${opts.withTitle && m.title ? ` — ${m.title}` : ''}`
+}
+
 export function formatDuration(seconds: number | null): string {
   if (!seconds || seconds <= 0) return '—'
   const h = Math.floor(seconds / 3600)

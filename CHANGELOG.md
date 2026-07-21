@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- **Collections play in the order you arrange them.** Members were stored with
+  a position that nothing ever read — the resolver re-sorted everything
+  alphabetically, so adding *Rugrats, Doug, Hey Arnold* always aired Doug first.
+  Members are now draggable and there's a **hand-picked order** playback mode
+  that airs them in your sequence, each show expanded into its own episodes.
+  The other orders are unchanged.
+- **Shuffle actually reshuffles.** It was seeded once per channel+collection, so
+  a collection played through twice repeated the identical running order
+  forever. Each pass now gets its own deal. It stays derived from the playback
+  position rather than stored, so guide rebuilds still reproduce the timeline
+  exactly and your place in a collection survives restarts.
+- **A new "shuffle shows" order** puts the shows in random order while keeping
+  each one's episodes in sequence — a marathon of one show, then a marathon of
+  another, with the running order re-dealt each pass.
+- **Collections carry their own playback order.** Rotation items and time blocks
+  now default to *collection default* instead of making you pick an order at
+  every slot; five day-blocks of "Snick" need it set once. Overriding a single
+  slot still works.
+- **Collections can hold a season or a single episode**, not just whole shows
+  and movies — which is what makes a hand-picked running order worth having (a
+  "best of" marathon). The member search offers all four.
+- **"Rotate shows" no longer starves a show that shares a collection with a pile
+  of movies.** Movies each counted as their own show in the round-robin, so one
+  show plus fifty movies gave the show 1/51 of the airtime instead of half. They
+  now share a single turn.
+- **Collections have a Preview** listing what they resolve to in their own
+  order, so you can check a hand-picked arrangement without building a guide.
+  Listing collections also stopped issuing a query per member show.
+
 - **The navigation is six destinations in three groups.** Two pairs of nav items
   were the same idea under different names: **Browse** showed what was indexed
   and **Libraries** managed the folders it came from, so they merged into

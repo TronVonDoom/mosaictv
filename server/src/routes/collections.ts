@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { prisma } from '../db.js'
-import { collectionCount, resolveCollection } from '../collections.js'
+import { asPlaybackOrder, collectionCount, resolveCollection } from '../collections.js'
 
 export const collectionsRouter = Router()
 
@@ -18,13 +18,14 @@ collectionsRouter.get('/', async (req, res) => {
 })
 
 collectionsRouter.post('/', async (req, res) => {
-  const { name, channelId, logoId, libraryId, filterType, filterShow, filterSearch, filterGenre } = req.body ?? {}
+  const { name, channelId, logoId, libraryId, defaultOrder, filterType, filterShow, filterSearch, filterGenre } = req.body ?? {}
   if (!name || !String(name).trim()) return res.status(400).json({ error: 'name is required' })
   const c = await prisma.collection.create({
     data: {
       name: String(name).trim(),
       channelId: channelId != null ? Number(channelId) : null,
       logoId: logoId != null ? Number(logoId) : null,
+      defaultOrder: asPlaybackOrder(defaultOrder),
       libraryId: libraryId ? Number(libraryId) : null,
       filterType: filterType || null,
       filterShow: filterShow || null,
@@ -36,17 +37,34 @@ collectionsRouter.post('/', async (req, res) => {
   res.status(201).json(c)
 })
 
-// Autocomplete: shows and movies matching a query, for adding as members.
+// Autocomplete for adding members: whole shows, their individual seasons,
+// single episodes, and movies. Seasons and episodes are what make a
+// hand-picked running order worth having (a "best of" marathon).
 collectionsRouter.get('/search', async (req, res) => {
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
   if (!q) return res.json({ results: [] })
 
-  const [shows, movies, libs] = await Promise.all([
+  const [shows, seasons, episodes, movies, libs] = await Promise.all([
     prisma.mediaItem.groupBy({
       by: ['showTitle', 'libraryId'],
       where: { type: 'episode', missing: false, showTitle: { contains: q } },
       _count: { _all: true },
       orderBy: { showTitle: 'asc' },
+      take: 8,
+    }),
+    prisma.mediaItem.groupBy({
+      by: ['showTitle', 'libraryId', 'season'],
+      where: { type: 'episode', missing: false, showTitle: { contains: q } },
+      _count: { _all: true },
+      orderBy: [{ showTitle: 'asc' }, { season: 'asc' }],
+      take: 20,
+    }),
+    // Episodes whose OWN title matches — a show-title match would just repeat
+    // the show entry one line per episode.
+    prisma.mediaItem.findMany({
+      where: { type: 'episode', missing: false, title: { contains: q } },
+      select: { id: true, title: true, showTitle: true, season: true, episode: true },
+      orderBy: [{ showTitle: 'asc' }, { season: 'asc' }, { episode: 'asc' }],
       take: 8,
     }),
     prisma.mediaItem.findMany({
@@ -67,6 +85,24 @@ collectionsRouter.get('/search', async (req, res) => {
       libraryName: libName.get(s.libraryId) ?? '',
       episodeCount: s._count._all,
     })),
+    ...seasons
+      .filter((s) => s.season != null)
+      .map((s) => ({
+        kind: 'season' as const,
+        showTitle: s.showTitle,
+        libraryId: s.libraryId,
+        libraryName: libName.get(s.libraryId) ?? '',
+        season: s.season as number,
+        episodeCount: s._count._all,
+      })),
+    ...episodes.map((e) => ({
+      kind: 'episode' as const,
+      mediaItemId: e.id,
+      title: e.title,
+      showTitle: e.showTitle,
+      season: e.season,
+      episode: e.episode,
+    })),
     ...movies.map((m) => ({
       kind: 'movie' as const,
       mediaItemId: m.id,
@@ -79,11 +115,12 @@ collectionsRouter.get('/search', async (req, res) => {
 
 collectionsRouter.patch('/:id', async (req, res) => {
   const id = Number(req.params.id)
-  const { name, logoId, libraryId, filterType, filterShow, filterSearch, filterGenre } = req.body ?? {}
+  const { name, logoId, libraryId, defaultOrder, filterType, filterShow, filterSearch, filterGenre } = req.body ?? {}
   const data: {
     name?: string
     logoId?: number | null
     libraryId?: number | null
+    defaultOrder?: string
     filterType?: string | null
     filterShow?: string | null
     filterSearch?: string | null
@@ -92,6 +129,7 @@ collectionsRouter.patch('/:id', async (req, res) => {
   if (name !== undefined) data.name = String(name).trim()
   if (logoId !== undefined) data.logoId = logoId ? Number(logoId) : null
   if (libraryId !== undefined) data.libraryId = libraryId ? Number(libraryId) : null
+  if (defaultOrder !== undefined) data.defaultOrder = asPlaybackOrder(defaultOrder)
   if (filterType !== undefined) data.filterType = filterType || null
   if (filterShow !== undefined) data.filterShow = filterShow || null
   if (filterSearch !== undefined) data.filterSearch = filterSearch || null
@@ -101,23 +139,63 @@ collectionsRouter.patch('/:id', async (req, res) => {
   res.json(c)
 })
 
+// Preview what the collection actually airs, in the requested playback order.
 collectionsRouter.get('/:id/preview', async (req, res) => {
   const id = Number(req.params.id)
-  const c = await prisma.collection.findUnique({ where: { id }, include: { items: true } })
+  const c = await prisma.collection.findUnique({
+    where: { id },
+    include: { items: { orderBy: { order: 'asc' } } },
+  })
   if (!c) return res.status(404).json({ error: 'Not found' })
-  const members = await resolveCollection(c, 'chronological')
-  res.json({ count: members.length, sample: members.slice(0, 12) })
+  // No explicit order = show what the collection plays by default.
+  const order = asPlaybackOrder(req.query.order ?? c.defaultOrder)
+  const list = await resolveCollection(c, order, id)
+  const sample = Array.from({ length: Math.min(12, list.length) }, (_, i) => list.at(i))
+  res.json({ count: list.length, order, sample })
 })
 
-// Add a member (a whole show, or a single movie).
+// Reorder hand-picked members. Body: { ids: number[] } — the members in their
+// new order; any member missing from `ids` keeps its place at the end.
+collectionsRouter.patch('/:id/items/reorder', async (req, res) => {
+  const collectionId = Number(req.params.id)
+  const raw: unknown = req.body?.ids
+  if (!Array.isArray(raw)) return res.status(400).json({ error: 'ids must be an array of member ids' })
+  const ids: number[] = raw.map(Number)
+
+  const existing = await prisma.collectionItem.findMany({
+    where: { collectionId },
+    orderBy: { order: 'asc' },
+    select: { id: true },
+  })
+  const known = new Set(existing.map((i) => i.id))
+  // Only ids that belong to this collection, deduped, then anything left over.
+  const ordered: number[] = [...new Set(ids.filter((id) => known.has(id)))]
+  for (const i of existing) if (!ordered.includes(i.id)) ordered.push(i.id)
+
+  await prisma.$transaction(
+    ordered.map((id, order) => prisma.collectionItem.update({ where: { id }, data: { order } })),
+  )
+  const items = await prisma.collectionItem.findMany({
+    where: { collectionId },
+    orderBy: { order: 'asc' },
+  })
+  res.json(items)
+})
+
+// Add a member: a whole show, one season of it, a single episode, or a movie.
+const MEMBER_KINDS = ['show', 'season', 'episode', 'movie']
 collectionsRouter.post('/:id/items', async (req, res) => {
   const collectionId = Number(req.params.id)
-  const { kind, showTitle, libraryId, mediaItemId, label } = req.body ?? {}
-  if (kind !== 'show' && kind !== 'movie') {
-    return res.status(400).json({ error: 'kind must be "show" or "movie"' })
+  const { kind, showTitle, libraryId, season, mediaItemId, label } = req.body ?? {}
+  if (!MEMBER_KINDS.includes(kind)) {
+    return res.status(400).json({ error: `kind must be one of ${MEMBER_KINDS.join(', ')}` })
   }
-  if (kind === 'show' && !showTitle) return res.status(400).json({ error: 'showTitle is required' })
-  if (kind === 'movie' && !mediaItemId) return res.status(400).json({ error: 'mediaItemId is required' })
+  const byShow = kind === 'show' || kind === 'season'
+  if (byShow && !showTitle) return res.status(400).json({ error: 'showTitle is required' })
+  if (kind === 'season' && season == null) {
+    return res.status(400).json({ error: 'season is required' })
+  }
+  if (!byShow && !mediaItemId) return res.status(400).json({ error: 'mediaItemId is required' })
 
   const col = await prisma.collection.findUnique({ where: { id: collectionId } })
   if (!col) return res.status(404).json({ error: 'Collection not found' })
@@ -130,10 +208,11 @@ collectionsRouter.post('/:id/items', async (req, res) => {
     data: {
       collectionId,
       kind,
-      showTitle: kind === 'show' ? String(showTitle) : null,
+      showTitle: byShow ? String(showTitle) : null,
       libraryId: libraryId ? Number(libraryId) : null,
-      mediaItemId: kind === 'movie' ? Number(mediaItemId) : null,
-      label: label ? String(label) : kind === 'show' ? String(showTitle) : null,
+      season: kind === 'season' ? Number(season) : null,
+      mediaItemId: byShow ? null : Number(mediaItemId),
+      label: label ? String(label) : byShow ? String(showTitle) : null,
       order: (max._max.order ?? -1) + 1,
     },
   })

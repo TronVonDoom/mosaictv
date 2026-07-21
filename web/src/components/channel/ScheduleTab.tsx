@@ -7,6 +7,7 @@ import {
   type ComingUpConfig,
 } from '../../lib/api'
 import { formatDays, minutesToTime } from '../../lib/format'
+import { INHERIT, PLAYBACK_ORDERS, orderLabel } from '../../lib/playback'
 import { useDraft } from '../../lib/hooks'
 import ComingUpFields from '../ComingUpFields'
 import LogoPicker from '../LogoPicker'
@@ -16,11 +17,14 @@ import type { ChannelTabProps } from './types'
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-const PLAYBACK_ORDERS = [
-  { value: 'chronological', label: 'in order' },
-  { value: 'rotate', label: 'rotate shows' },
-  { value: 'shuffle', label: 'shuffle' },
-]
+// "collection default" first, and the default for anything newly added: most
+// channels want one order per collection, not one per place it's scheduled.
+const ORDER_OPTIONS = [INHERIT, ...PLAYBACK_ORDERS]
+
+// What a scheduled item actually plays as: "inherit" is resolved so the list
+// reads the same whether the order was set here or on the collection.
+const effectiveLabel = (setting: string, collection: { defaultOrder: string }): string =>
+  setting === 'inherit' ? orderLabel(collection.defaultOrder) : orderLabel(setting)
 
 function timeToMin(t: string): number {
   const [h, m] = t.split(':').map(Number)
@@ -47,7 +51,7 @@ const emptyBlock = (): BlockForm => ({
   days: [1, 2, 3, 4, 5],
   start: '18:00',
   end: '21:00',
-  playbackOrder: 'chronological',
+  playbackOrder: 'inherit',
   logoUrl: '',
   logoId: null,
   startMode: 'soft',
@@ -73,7 +77,7 @@ export default function ScheduleTab({
     collectionId: '',
     mode: 'one',
     count: '1',
-    playbackOrder: 'chronological',
+    playbackOrder: 'inherit',
   }))
   const [blk, setBlk, clearBlkDraft] = useDraft<BlockForm>(drafts, 'schedule.block', emptyBlock)
   const [editingBlock, setEditingBlock, clearEditingDraft] = useDraft<number | null>(
@@ -94,7 +98,7 @@ export default function ScheduleTab({
       }),
     )
     clearRotDraft()
-    setRot({ collectionId: '', mode: 'one', count: '1', playbackOrder: 'chronological' })
+    setRot({ collectionId: '', mode: 'one', count: '1', playbackOrder: 'inherit' })
   }
 
   function resetBlockForm() {
@@ -195,7 +199,8 @@ export default function ScheduleTab({
               <span className="text-ink-ghost w-5 tabular-nums">{i + 1}</span>
               <span className="flex-1 min-w-0 truncate">{r.collection.name}</span>
               <span className="text-xs text-ink-faint">
-                {r.mode === 'multiple' ? `${r.count}×` : '1'} · {r.playbackOrder}
+                {r.mode === 'multiple' ? `${r.count}×` : '1'} ·{' '}
+                {effectiveLabel(r.playbackOrder, r.collection)}
               </span>
               <button
                 onClick={() => guard(() => api.deleteRotation(channelId, r.id))}
@@ -239,7 +244,7 @@ export default function ScheduleTab({
             value={rot.playbackOrder}
             onChange={(e) => setRot({ ...rot, playbackOrder: e.target.value })}
           >
-            {PLAYBACK_ORDERS.map((o) => (
+            {ORDER_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
@@ -284,7 +289,7 @@ export default function ScheduleTab({
                 <div className="truncate">{b.collection.name}</div>
                 <div className="text-xs text-ink-faint">
                   {formatDays(b.days)} · {minutesToTime(b.startMinute)}–{minutesToTime(b.endMinute)} ·{' '}
-                  {b.playbackOrder}
+                  {effectiveLabel(b.playbackOrder, b.collection)}
                   {b.startMode === 'hard' && ' · hard start'}
                   {(b.logoId || b.logoUrl) && ' · logo'}
                   {b.fillerMode && b.fillerMode !== 'none' && ` · filler: ${b.fillerMode}`}
@@ -402,7 +407,7 @@ export default function ScheduleTab({
               value={blk.playbackOrder}
               onChange={(e) => setBlk({ ...blk, playbackOrder: e.target.value })}
             >
-              {PLAYBACK_ORDERS.map((o) => (
+              {ORDER_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>

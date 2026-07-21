@@ -6,7 +6,7 @@ import {
   tmdbImage,
   type MediaItemDetail,
 } from '../lib/api'
-import { formatDuration, formatSize, posterGradient } from '../lib/format'
+import { episodeCode, formatDuration, formatSize, posterGradient } from '../lib/format'
 import { Modal } from './ui'
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -41,10 +41,7 @@ export default function MediaDetailModal({
   }, [onClose])
 
   const isEpisode = item?.type === 'episode'
-  const sxe =
-    item?.season != null && item?.episode != null
-      ? `S${String(item.season).padStart(2, '0')}E${String(item.episode).padStart(2, '0')}`
-      : null
+  const sxe = (item && episodeCode(item)) || null
 
   return (
     <Modal onClose={onClose} panelClassName="max-w-2xl w-full p-6">

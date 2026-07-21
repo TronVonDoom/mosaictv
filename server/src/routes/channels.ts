@@ -3,11 +3,11 @@ import { prisma } from '../db.js'
 import { buildPlayout, prunePlayout, resetPlayout } from '../playout.js'
 import { sanitizeComingUp } from '../streaming/overlays.js'
 import { viewerCount } from '../streaming/channel.js'
+import { asOrderSetting } from '../collections.js'
+import { programLabel } from '../labels.js'
 
 export const channelsRouter = Router()
 
-const ORDERS = ['chronological', 'shuffle', 'rotate']
-const asOrder = (v: unknown) => (ORDERS.includes(String(v)) ? String(v) : 'chronological')
 const FILLERS = ['none', 'between', 'end']
 const asFiller = (v: unknown) => (FILLERS.includes(String(v)) ? String(v) : 'none')
 const asStartMode = (v: unknown) => (String(v) === 'hard' ? 'hard' : 'soft')
@@ -40,13 +40,7 @@ function intervalsOverlap(a: [number, number][], b: [number, number][]): boolean
 
 // Label for the program airing right now (mirrors the EPG naming).
 function nowLabel(it: { title: string | null; mediaItem: { title: string; showTitle: string | null; season: number | null; episode: number | null; type: string } | null }): string {
-  const m = it.mediaItem
-  if (!m) return it.title || 'Station break'
-  if (m.type === 'episode' && m.showTitle) {
-    const se = m.season != null && m.episode != null ? ` S${String(m.season).padStart(2, '0')}E${String(m.episode).padStart(2, '0')}` : ''
-    return `${m.showTitle}${se}`
-  }
-  return m.title
+  return it.mediaItem ? programLabel(it.mediaItem) : it.title || 'Station break'
 }
 
 channelsRouter.get('/', async (_req, res) => {
@@ -150,7 +144,7 @@ channelsRouter.post('/:id/rotation', async (req, res) => {
       channelId,
       collectionId: Number(collectionId),
       order: (max._max.order ?? -1) + 1,
-      playbackOrder: asOrder(playbackOrder),
+      playbackOrder: asOrderSetting(playbackOrder),
       mode: mode === 'multiple' ? 'multiple' : 'one',
       count: count ? Math.max(1, Number(count)) : 1,
     },
@@ -187,7 +181,7 @@ channelsRouter.post('/:id/blocks', async (req, res) => {
       days: String(days),
       startMinute: Number(startMinute),
       endMinute: Number(endMinute),
-      playbackOrder: asOrder(playbackOrder),
+      playbackOrder: asOrderSetting(playbackOrder),
       logoUrl: logoUrl || null,
       logoId: logoId ? Number(logoId) : null,
       fillerMode: asFiller(fillerMode),
@@ -217,7 +211,7 @@ channelsRouter.patch('/:id/blocks/:blockId', async (req, res) => {
   if (days !== undefined) data.days = String(days)
   if (startMinute !== undefined) data.startMinute = Number(startMinute)
   if (endMinute !== undefined) data.endMinute = Number(endMinute)
-  if (playbackOrder !== undefined) data.playbackOrder = asOrder(playbackOrder)
+  if (playbackOrder !== undefined) data.playbackOrder = asOrderSetting(playbackOrder)
   if (logoUrl !== undefined) data.logoUrl = logoUrl || null
   if (logoId !== undefined) data.logoId = logoId ? Number(logoId) : null
   if (fillerMode !== undefined) data.fillerMode = asFiller(fillerMode)

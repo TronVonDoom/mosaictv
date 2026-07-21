@@ -1,11 +1,16 @@
-import type { Collection, MediaItem, TimeBlock } from '@prisma/client'
+import type { TimeBlock } from '@prisma/client'
 import { prisma } from './db.js'
-import { resolveCollection, type PlaybackOrder } from './collections.js'
+import {
+  effectiveOrder,
+  resolveCollection,
+  type CollectionWithItems,
+  type ResolvedList,
+} from './collections.js'
 import { log } from './logs.js'
 
 const MAX_ITERATIONS = 50000
 
-type BlockWithCollection = TimeBlock & { collection: Collection }
+type BlockWithCollection = TimeBlock & { collection: CollectionWithItems }
 type State = { rotationIndex: number; positions: Record<string, number> }
 
 function truncateToMinute(d: Date): Date {
@@ -106,12 +111,17 @@ async function buildPlayoutInner(channelId: number, until: Date): Promise<number
     : { rotationIndex: 0, positions: {} }
 
   // Cache resolved collection lists for this build pass (per collection+order).
-  const cache = new Map<string, MediaItem[]>()
-  const listFor = async (collectionId: number, filter: unknown, order: string): Promise<MediaItem[]> => {
-    const ck = `${collectionId}:${order}`
+  // `setting` may be "inherit", which defers to the collection's own default.
+  const cache = new Map<string, ResolvedList>()
+  const listFor = async (
+    collection: CollectionWithItems,
+    setting: string,
+  ): Promise<ResolvedList> => {
+    const order = effectiveOrder(setting, collection)
+    const ck = `${collection.id}:${order}`
     if (!cache.has(ck)) {
-      const seed = channelId * 100000 + collectionId
-      cache.set(ck, await resolveCollection(filter as never, order as PlaybackOrder, seed))
+      const seed = channelId * 100000 + collection.id
+      cache.set(ck, await resolveCollection(collection, order, seed))
     }
     return cache.get(ck)!
   }
@@ -143,7 +153,7 @@ async function buildPlayoutInner(channelId: number, until: Date): Promise<number
     if (block) {
       const key = 'c' + block.collectionId
       const legacy = 'b' + block.id
-      const items = await listFor(block.collectionId, block.collection, block.playbackOrder)
+      const items = await listFor(block.collection, block.playbackOrder)
       const blockEnd = skipToBlockEnd(cursor, block)
       const fillerMode = block.fillerMode || 'none'
 
@@ -154,7 +164,7 @@ async function buildPlayoutInner(channelId: number, until: Date): Promise<number
       } else if (fillerMode === 'none') {
         // Soft boundary: one program per iteration; may overrun the block end.
         const pos = posOf(key, legacy)
-        const mi = items[pos % items.length]
+        const mi = items.at(pos)
         state.positions[key] = pos + 1
         const dur = mi.durationSec ?? 0
         if (dur > 0) {
@@ -170,7 +180,7 @@ async function buildPlayoutInner(channelId: number, until: Date): Promise<number
         const fit: { id: number; dur: number }[] = []
         let used = 0
         for (let g = 0; g < 20000; g++) {
-          const mi = items[pos % items.length]
+          const mi = items.at(pos)
           const dur = mi.durationSec ?? 0
           if (dur <= 0) {
             pos++
@@ -185,7 +195,7 @@ async function buildPlayoutInner(channelId: number, until: Date): Promise<number
 
         if (fit.length === 0) {
           // A single program is longer than the whole block — play it (overruns).
-          const mi = items[pos % items.length]
+          const mi = items.at(pos)
           state.positions[key] = pos + 1
           const stop = new Date(cursor.getTime() + Math.max(mi.durationSec ?? 0, 1) * 1000)
           pushProgram(mi.id, new Date(cursor), stop)
@@ -218,12 +228,12 @@ async function buildPlayoutInner(channelId: number, until: Date): Promise<number
       state.rotationIndex = state.rotationIndex + 1
       const key = 'c' + ri.collectionId
       const legacy = 'r' + ri.id
-      const items = await listFor(ri.collectionId, ri.collection, ri.playbackOrder)
+      const items = await listFor(ri.collection, ri.playbackOrder)
       if (items.length > 0) {
         const take = ri.mode === 'multiple' ? Math.max(1, ri.count) : 1
         let pos = posOf(key, legacy)
         for (let k = 0; k < take; k++) {
-          const mi = items[pos % items.length]
+          const mi = items.at(pos)
           const dur = mi.durationSec ?? 0
           if (dur <= 0) {
             pos++

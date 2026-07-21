@@ -6,6 +6,7 @@
 import { encoderArgs } from './capabilities.js'
 import { VAAPI_DEVICE, type StreamProfile } from './profile.js'
 import type { ComingUpConfig, WatermarkConfig } from './overlays.js'
+import { episodeCode } from '../labels.js'
 
 export type Segment = {
   filePath: string
@@ -174,10 +175,7 @@ type CaptionItem = { title: string; showTitle: string | null; season: number | n
  * a trailing " — "). Returns '' when nothing meaningful is left.
  */
 export function renderComingUpText(template: string, mi: CaptionItem): string {
-  const se =
-    mi.season != null && mi.episode != null
-      ? `S${String(mi.season).padStart(2, '0')}E${String(mi.episode).padStart(2, '0')}`
-      : ''
+  const se = episodeCode(mi)
   const vars: Record<string, string> = {
     showtitle: mi.showTitle ?? '',
     episodetitle: mi.showTitle ? mi.title : '', // only an "episode title" when it's a show

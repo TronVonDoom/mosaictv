@@ -10,6 +10,7 @@ import type { Request, Response } from 'express'
 import { prisma } from '../db.js'
 import { buildPlayout, prunePlayout } from '../playout.js'
 import { dataDir, logosDir } from '../paths.js'
+import { programLabel } from '../labels.js'
 import { log } from '../logs.js'
 import { markEvent } from '../metrics.js'
 import { hasSubtitleStream, probeSar } from '../ffprobe.js'
@@ -442,9 +443,7 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
     const hwDecode = enc === 'h264_nvenc' && mi.videoCodec ? await canNvdecCodec(mi.videoCodec.toLowerCase()) : false
     const hasSubtitles = profile.burnSubtitles ? await hasSubtitleStream(mi.path) : false
     seg = { filePath: mi.path, offsetSec: offset, loop: false, durationSec: segDur, hasAudio: !!mi.audioCodec, logo, wmEpochSec, mediaWidth: dispW, mediaHeight: mi.height ?? FILLER_H, isFiller: false, fadeInSec, fadeOutSec, hwDecode, hasSubtitles }
-    label = mi.showTitle
-      ? `${mi.showTitle}${mi.season != null && mi.episode != null ? ` S${String(mi.season).padStart(2, '0')}E${String(mi.episode).padStart(2, '0')}` : ''}${mi.title ? ` — ${mi.title}` : ''}`
-      : mi.title
+    label = programLabel(mi, { withTitle: true })
   } else {
     log('warn', 'stream', `Channel ${channelNumber}: media file missing, skipping`, mi.path)
     label = mi.title

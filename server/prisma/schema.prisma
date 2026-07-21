@@ -126,6 +126,10 @@ model Collection {
   // The collection's own on-screen logo (falls back to the channel logo).
   logo         Logo?            @relation(fields: [logoId], references: [id], onDelete: SetNull)
   logoId       Int?
+  // The order this collection plays in when a rotation item or time block asks
+  // for "inherit" (which is the default for new ones), so a collection airing in
+  // several blocks only needs its order set once.
+  defaultOrder String           @default("chronological")
   // Optional smart filter (advanced).
   libraryId    Int?
   filterType   String? // "movie" | "episode" | "other"
@@ -194,15 +198,18 @@ model FillerAssignment {
   @@index([timeBlockId])
 }
 
-// A hand-picked member of a collection: a whole show, or a single movie.
+// A hand-picked member of a collection: a whole show, one season of a show, a
+// single episode, or a movie. `order` is the user's arrangement — what the
+// "custom" playback order airs.
 model CollectionItem {
   id           Int        @id @default(autoincrement())
   collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   collectionId Int
-  kind         String // "show" | "movie"
-  showTitle    String? // for kind "show"
-  libraryId    Int? // for kind "show" (which library the show is in)
-  mediaItemId  Int? // for kind "movie"
+  kind         String // "show" | "season" | "episode" | "movie"
+  showTitle    String? // for kind "show" and "season"
+  libraryId    Int? // for kind "show"/"season" (which library the show is in)
+  season       Int? // for kind "season"
+  mediaItemId  Int? // for kind "movie" and "episode"
   label        String? // denormalized display name
   order        Int        @default(0)
 

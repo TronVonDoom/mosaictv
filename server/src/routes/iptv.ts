@@ -3,6 +3,7 @@ import type { Request } from 'express'
 import { prisma } from '../db.js'
 import { streamChannel } from '../streaming/channel.js'
 import { ensureHls, touchHls, hlsPlaylistFile, hlsSegmentFile } from '../hls.js'
+import { episodeCode } from '../labels.js'
 
 export const iptvRouter = Router()
 
@@ -203,7 +204,7 @@ iptvRouter.get('/xmltv.xml', async (req, res) => {
     const icon = programmeIcon(m)
     if (icon) xml += `    <icon src="${escapeXml(icon)}" />\n`
     if (m && m.type === 'episode' && m.season != null && m.episode != null) {
-      xml += `    <episode-num system="onscreen">S${String(m.season).padStart(2, '0')}E${String(m.episode).padStart(2, '0')}</episode-num>\n`
+      xml += `    <episode-num system="onscreen">${episodeCode(m)}</episode-num>\n`
       xml += `    <episode-num system="xmltv_ns">${m.season - 1}.${m.episode - 1}.0</episode-num>\n`
     }
     xml += '  </programme>\n'
