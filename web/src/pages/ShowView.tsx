@@ -60,12 +60,12 @@ export default function ShowView() {
             {showTitle}
           </button>
         ) : (
-          <span className="text-slate-300">{showTitle}</span>
+          <span className="text-ink-soft">{showTitle}</span>
         )}
         {current && (
           <>
             <span>/</span>
-            <span className="text-slate-300">{seasonLabel(current.season)}</span>
+            <span className="text-ink-soft">{seasonLabel(current.season)}</span>
           </>
         )}
       </div>
@@ -73,10 +73,10 @@ export default function ShowView() {
       <h1 className="text-2xl font-bold mb-6">
         {showTitle}
         {detail?.year && (
-          <span className="text-slate-500 text-base font-normal ml-2">({detail.year})</span>
+          <span className="text-ink-faint text-base font-normal ml-2">({detail.year})</span>
         )}
         {detail && (
-          <span className="text-slate-500 text-base font-normal ml-2">
+          <span className="text-ink-faint text-base font-normal ml-2">
             · {detail.seasons.length} season{detail.seasons.length === 1 ? '' : 's'} ·{' '}
             {detail.episodeCount} episodes
           </span>
@@ -88,15 +88,15 @@ export default function ShowView() {
           {(detail.rating ? detail.rating > 0 : false) && (
             <div className="text-sm text-amber-300">
               ⭐ {detail.rating!.toFixed(1)}
-              {detail.genres && <span className="text-slate-500"> · {detail.genres}</span>}
+              {detail.genres && <span className="text-ink-faint"> · {detail.genres}</span>}
             </div>
           )}
-          {detail.overview && <p className="text-sm text-slate-300">{detail.overview}</p>}
+          {detail.overview && <p className="text-sm text-ink-soft">{detail.overview}</p>}
         </div>
       )}
 
       {!detail ? (
-        <div className="text-slate-500 text-sm">Loading…</div>
+        <div className="text-ink-faint text-sm">Loading…</div>
       ) : current ? (
         // --- Episodes within a chosen season ---
         <div>
@@ -106,26 +106,26 @@ export default function ShowView() {
           >
             ← All seasons
           </button>
-          <div className="rounded-xl border border-slate-800 overflow-hidden divide-y divide-slate-800/60">
+          <div className="rounded-xl border border-edge overflow-hidden divide-y divide-edge/60">
             {current.episodes.map((ep) => (
               <button
                 key={ep.id}
                 onClick={() => setSelectedId(ep.id)}
-                className="w-full flex items-center gap-4 px-4 py-3 hover:bg-slate-900/60 text-left transition-colors"
+                className="w-full flex items-center gap-4 px-4 py-3 hover:bg-surface/60 text-left transition-colors"
               >
-                <div className="w-10 text-center text-slate-500 font-mono text-sm shrink-0">
+                <div className="w-10 text-center text-ink-faint font-mono text-sm shrink-0">
                   {ep.episode != null ? String(ep.episode).padStart(2, '0') : '—'}
                 </div>
                 <div className={'flex-1 min-w-0 ' + (ep.missing ? 'opacity-50' : '')}>
-                  <div className="truncate text-slate-200">{ep.title}</div>
-                  <div className="text-xs text-slate-500">
+                  <div className="truncate text-ink">{ep.title}</div>
+                  <div className="text-xs text-ink-faint">
                     {ep.width && ep.height ? `${ep.width}×${ep.height}` : ''}
                     {ep.videoCodec ? ` · ${ep.videoCodec}` : ''}
                     {ep.sizeBytes ? ` · ${formatSize(ep.sizeBytes)}` : ''}
                     {ep.missing ? ' · missing' : ''}
                   </div>
                 </div>
-                <div className="text-sm text-slate-400 shrink-0">
+                <div className="text-sm text-ink-muted shrink-0">
                   {formatDuration(ep.durationSec)}
                 </div>
               </button>

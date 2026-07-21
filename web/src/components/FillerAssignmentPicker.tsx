@@ -50,16 +50,16 @@ export default function FillerAssignmentPicker({ owner, hint }: { owner: FillerO
   }
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+    <div className="rounded-lg border border-edge bg-canvas/40 p-3">
       <div className="flex items-center justify-between gap-2 mb-2">
         <span className="text-sm font-medium">
-          Assigned fillers {hint && <span className="text-xs text-slate-500 font-normal">({hint})</span>}
+          Assigned fillers {hint && <span className="text-xs text-ink-faint font-normal">({hint})</span>}
         </span>
         <div className="flex items-center gap-3 shrink-0">
           {!creating && (
             <button
               onClick={() => setCreating(true)}
-              className="text-xs rounded border border-slate-700 hover:border-indigo-500 hover:text-indigo-300 px-2 py-0.5"
+              className="text-xs rounded border border-edge-strong hover:border-indigo-500 hover:text-indigo-300 px-2 py-0.5"
             >
               + New filler
             </button>
@@ -69,8 +69,8 @@ export default function FillerAssignmentPicker({ owner, hint }: { owner: FillerO
       </div>
 
       {fillers.length === 0 ? (
-        <p className="text-xs text-slate-600">
-          No fillers in the library yet — make one with <span className="text-slate-400">+ New filler</span>, or
+        <p className="text-xs text-ink-faint">
+          No fillers in the library yet — make one with <span className="text-ink-muted">+ New filler</span>, or
           manage them all under <Link to="/studio#fillers" className="text-indigo-300">Studio → Fillers</Link>. Gaps
           use the default frosted-glass ident until then.
         </p>
@@ -83,20 +83,20 @@ export default function FillerAssignmentPicker({ owner, hint }: { owner: FillerO
                 key={f.id}
                 className={
                   'flex items-center gap-2 text-sm rounded px-2.5 py-1.5 border cursor-pointer ' +
-                  (on ? 'bg-indigo-500/10 border-indigo-500/40' : 'bg-slate-900/60 border-slate-800 hover:border-slate-600')
+                  (on ? 'bg-indigo-500/10 border-indigo-500/40' : 'bg-surface/60 border-edge hover:border-ink-ghost')
                 }
               >
                 <input type="checkbox" checked={on} onChange={(e) => toggle(f.id, e.target.checked)} />
                 <span className="flex-1 min-w-0 truncate">{f.name || fillerStyleLabel(f.style)}</span>
-                <span className="text-[11px] text-slate-500 shrink-0">{fillerSummary(f)}</span>
+                <span className="text-[11px] text-ink-faint shrink-0">{fillerSummary(f)}</span>
               </label>
             )
           })}
           {assigned.size === 0 && (
-            <p className="text-[11px] text-slate-600 mt-1">Nothing assigned — gaps use the default frosted-glass ident.</p>
+            <p className="text-[11px] text-ink-faint mt-1">Nothing assigned — gaps use the default frosted-glass ident.</p>
           )}
           {assigned.size > 1 && (
-            <p className="text-[11px] text-slate-600 mt-1">{assigned.size} assigned — each gap plays one of them, rotating by start time.</p>
+            <p className="text-[11px] text-ink-faint mt-1">{assigned.size} assigned — each gap plays one of them, rotating by start time.</p>
           )}
         </div>
       )}
@@ -104,7 +104,7 @@ export default function FillerAssignmentPicker({ owner, hint }: { owner: FillerO
       {creating && (
         <Modal onClose={() => setCreating(false)} panelClassName="w-full max-w-2xl p-4">
           <h3 className="font-semibold mb-1">New filler</h3>
-          <p className="text-xs text-slate-500 mb-3">
+          <p className="text-xs text-ink-faint mb-3">
             Added to the shared library and assigned to this {owner.channelId != null ? 'channel' : 'block'}.
           </p>
           <FillerEditor onCancel={() => setCreating(false)} onSaved={createdHere} />

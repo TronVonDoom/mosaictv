@@ -64,9 +64,9 @@ export default function LogoPicker({
           ))}
         </Select>
         {value != null && (
-          <img src={logoImageUrl(value)} alt="" className="w-9 h-9 rounded object-contain bg-slate-950 border border-slate-800 shrink-0" />
+          <img src={logoImageUrl(value)} alt="" className="w-9 h-9 rounded object-contain bg-canvas border border-edge shrink-0" />
         )}
-        <label className="rounded-lg border border-slate-700 hover:border-indigo-500 hover:text-indigo-300 px-3 py-2 text-sm cursor-pointer shrink-0 whitespace-nowrap">
+        <label className="rounded-lg border border-edge-strong hover:border-indigo-500 hover:text-indigo-300 px-3 py-2 text-sm cursor-pointer shrink-0 whitespace-nowrap">
           {uploading ? 'Uploading…' : '+ Upload'}
           <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={onFile} disabled={uploading} />
         </label>

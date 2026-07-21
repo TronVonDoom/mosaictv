@@ -57,19 +57,19 @@ export default function MediaSearchInput({
         }}
       />
       {open && results.length > 0 && (
-        <div className="absolute z-20 mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 shadow-xl max-h-64 overflow-y-auto">
+        <div className="absolute z-20 mt-1 w-full rounded-lg border border-edge-strong bg-surface shadow-xl max-h-64 overflow-y-auto">
           {results.map((r, i) => (
             <button
               key={i}
               type="button"
               onClick={() => pick(r)}
-              className="w-full text-left px-3 py-2 text-sm hover:bg-slate-800 flex items-center gap-2"
+              className="w-full text-left px-3 py-2 text-sm hover:bg-raised flex items-center gap-2"
             >
               <Icon name={r.kind === 'show' ? 'show' : 'movie'} size={15} colored />
               <span className="flex-1 min-w-0 truncate">
                 {r.kind === 'show' ? r.showTitle : r.title}
               </span>
-              <span className="text-xs text-slate-500 shrink-0">
+              <span className="text-xs text-ink-faint shrink-0">
                 {r.kind === 'show' ? `${r.episodeCount} eps · ${r.libraryName}` : (r.year ?? '')}
               </span>
             </button>

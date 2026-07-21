@@ -7,6 +7,7 @@ import {
   type ComingUpConfig,
   type EncodingProfile,
 } from '../../lib/api'
+import { useDraft } from '../../lib/hooks'
 import ComingUpFields from '../ComingUpFields'
 import LogoPicker from '../LogoPicker'
 import { Button, Card, Field, InfoHint, Input, Section, Select } from '../ui'
@@ -18,17 +19,19 @@ const offComingUp = (): ComingUpConfig => ({ ...DEFAULT_COMINGUP, enabled: false
 
 /** Identity and output: number, name, group, logo, encoding profile, and the
  *  channel-wide "coming up next" caption. */
-export default function GeneralTab({ channelId, ch, guard }: ChannelTabProps) {
+export default function GeneralTab({ channelId, ch, guard, drafts }: ChannelTabProps) {
   const [profiles, setProfiles] = useState<EncodingProfile[]>([])
-  const [form, setForm] = useState({
+  const [form, setForm, clearFormDraft] = useDraft(drafts, 'general.form', () => ({
     number: ch.number != null ? String(ch.number) : '',
     name: ch.name,
     group: ch.group ?? '',
     logoUrl: ch.logoUrl ?? '',
-    logoId: ch.logoId ?? null as number | null,
-    profileId: ch.profileId ?? null as number | null,
-  })
-  const [cu, setCu] = useState<ComingUpConfig>(parseComingUp(ch.comingUp) ?? offComingUp())
+    logoId: ch.logoId ?? (null as number | null),
+    profileId: ch.profileId ?? (null as number | null),
+  }))
+  const [cu, setCu, clearCuDraft] = useDraft<ComingUpConfig>(drafts, 'general.comingUp', () =>
+    parseComingUp(ch.comingUp) ?? offComingUp(),
+  )
 
   useEffect(() => {
     api.profiles().then((r) => setProfiles(r.profiles)).catch(() => {})
@@ -49,6 +52,10 @@ export default function GeneralTab({ channelId, ch, guard }: ChannelTabProps) {
         }),
       'Channel saved',
     )
+    // Committed — drop the draft so the next visit reflects the server, not a
+    // replay of what we just sent.
+    clearFormDraft()
+    clearCuDraft()
   }
 
   return (

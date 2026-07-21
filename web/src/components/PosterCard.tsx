@@ -54,17 +54,17 @@ export default function PosterCard({
           <Icon name={icon} size={14} colored />
         </span>
         {badge && (
-          <span className="absolute top-2 right-2 text-[10px] font-medium bg-black/50 backdrop-blur px-1.5 py-0.5 rounded text-slate-100">
+          <span className="absolute top-2 right-2 text-[10px] font-medium bg-black/50 backdrop-blur px-1.5 py-0.5 rounded text-ink">
             {badge}
           </span>
         )}
         <div className="absolute inset-0 rounded-lg ring-1 ring-white/10 group-hover:ring-2 group-hover:ring-indigo-400/70 transition-all" />
       </div>
       <div className="mt-1.5">
-        <div className="text-sm text-slate-200 truncate group-hover:text-indigo-300 transition-colors">
+        <div className="text-sm text-ink truncate group-hover:text-indigo-300 transition-colors">
           {title}
         </div>
-        {subtitle && <div className="text-xs text-slate-500 truncate">{subtitle}</div>}
+        {subtitle && <div className="text-xs text-ink-faint truncate">{subtitle}</div>}
       </div>
     </button>
   )

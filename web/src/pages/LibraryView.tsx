@@ -78,15 +78,15 @@ export default function LibraryView() {
           Library
         </Link>
         <span>/</span>
-        <span className="text-slate-300">{library?.name ?? '…'}</span>
+        <span className="text-ink-soft">{library?.name ?? '…'}</span>
       </div>
       <h1 className="text-2xl font-bold mb-6">
         {library?.name ?? 'Library'}
-        <span className="text-slate-500 text-base font-normal ml-2">{kindLabel}</span>
+        <span className="text-ink-faint text-base font-normal ml-2">{kindLabel}</span>
       </h1>
 
       {loading && (shows.length === 0 && items.length === 0) ? (
-        <div className="text-slate-500 text-sm">Loading…</div>
+        <div className="text-ink-faint text-sm">Loading…</div>
       ) : library?.kind === 'tv' ? (
         shows.length === 0 ? (
           <EmptyState />
@@ -141,7 +141,7 @@ export default function LibraryView() {
               <button
                 onClick={() => setPage((p) => p + 1)}
                 disabled={loading}
-                className="rounded-lg border border-slate-700 px-4 py-2 text-sm hover:border-indigo-500 disabled:opacity-50"
+                className="rounded-lg border border-edge-strong px-4 py-2 text-sm hover:border-indigo-500 disabled:opacity-50"
               >
                 {loading ? 'Loading…' : `Load more (${items.length} of ${total})`}
               </button>

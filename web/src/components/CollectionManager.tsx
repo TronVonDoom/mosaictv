@@ -96,7 +96,7 @@ export default function CollectionManager({
   return (
     <Card className="p-5 mb-6">
       <h2 className="font-semibold mb-1">Collections</h2>
-      <p className="text-slate-500 text-xs mb-4">
+      <p className="text-ink-faint text-xs mb-4">
         This channel's programming units — e.g. “Nick Jr.”, “Snick”. Each has its own shows/movies and logo, and
         is used by the rotation and time blocks below.
       </p>
@@ -104,20 +104,20 @@ export default function CollectionManager({
       {error && <Banner className="mb-4">{error}</Banner>}
 
       {/* Create */}
-      <form onSubmit={add} className="flex flex-wrap gap-2 items-end border border-slate-800 rounded-lg p-3 mb-4 bg-slate-950/40">
+      <form onSubmit={add} className="flex flex-wrap gap-2 items-end border border-edge rounded-lg p-3 mb-4 bg-canvas/40">
         <label className="flex flex-col gap-1 text-sm flex-1 min-w-40">
-          <span className="text-slate-400">New collection</span>
+          <span className="text-ink-muted">New collection</span>
           <Input placeholder="Nick Jr." value={name} onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-400">Logo (optional)</span>
+          <span className="text-ink-muted">Logo (optional)</span>
           <LogoPicker value={newLogoId} onChange={setNewLogoId} />
         </label>
         <button type="submit" className="rounded-lg bg-indigo-500 hover:bg-indigo-400 px-4 py-2 text-sm font-medium">Create</button>
       </form>
 
       {cols.length === 0 ? (
-        <div className="text-slate-600 text-sm">No collections yet — create one above.</div>
+        <div className="text-ink-faint text-sm">No collections yet — create one above.</div>
       ) : (
         <div className="space-y-3">
           {cols.map((c) => {
@@ -128,30 +128,30 @@ export default function CollectionManager({
               c.filterGenre && `genre: ${c.filterGenre}`,
             ].filter(Boolean).join(' · ')
             return (
-              <div key={c.id} className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div key={c.id} className="rounded-xl border border-edge bg-canvas/50 p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="font-medium flex-1">{c.name}</div>
-                  <span className="text-xs text-slate-500">{c.itemCount} items</span>
-                  <button onClick={() => (editId === c.id ? setEditId(null) : startEdit(c))} className="rounded-lg border border-slate-700 hover:border-indigo-500 hover:text-indigo-300 px-3 py-1 text-sm">
+                  <span className="text-xs text-ink-faint">{c.itemCount} items</span>
+                  <button onClick={() => (editId === c.id ? setEditId(null) : startEdit(c))} className="rounded-lg border border-edge-strong hover:border-indigo-500 hover:text-indigo-300 px-3 py-1 text-sm">
                     {editId === c.id ? 'Close' : 'Edit'}
                   </button>
-                  <button onClick={() => guard(() => api.deleteCollection(c.id))} className="rounded-lg border border-slate-800 text-slate-500 hover:border-rose-500/50 hover:text-rose-400 px-3 py-1 text-sm">Delete</button>
+                  <button onClick={() => guard(() => api.deleteCollection(c.id))} className="rounded-lg border border-edge text-ink-faint hover:border-rose-500/50 hover:text-rose-400 px-3 py-1 text-sm">Delete</button>
                 </div>
 
                 {editId === c.id && (
                   <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/5 p-3 mb-3 space-y-2">
                     <div className="grid md:grid-cols-2 gap-2">
                       <label className="flex flex-col gap-1 text-sm">
-                        <span className="text-slate-400">Name</span>
+                        <span className="text-ink-muted">Name</span>
                         <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
                       </label>
                       <label className="flex flex-col gap-1 text-sm">
-                        <span className="text-slate-400">Logo</span>
+                        <span className="text-ink-muted">Logo</span>
                         <LogoPicker value={editForm.logoId} onChange={(id) => setEditForm({ ...editForm, logoId: id })} />
                       </label>
                     </div>
                     <details className="text-sm">
-                      <summary className="text-xs text-slate-500 cursor-pointer">Advanced: smart filter (auto-include matching media)</summary>
+                      <summary className="text-xs text-ink-faint cursor-pointer">Advanced: smart filter (auto-include matching media)</summary>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
                         <Select value={editForm.libraryId} onChange={(e) => setEditForm({ ...editForm, libraryId: e.target.value })}>
                           <option value="">Any library</option>
@@ -168,7 +168,7 @@ export default function CollectionManager({
                       </div>
                     </details>
                     <div className="flex gap-2 justify-end">
-                      <button onClick={() => setEditId(null)} className="rounded-lg border border-slate-700 hover:border-slate-500 px-3 py-1.5 text-sm">Cancel</button>
+                      <button onClick={() => setEditId(null)} className="rounded-lg border border-edge-strong hover:border-ink-faint px-3 py-1.5 text-sm">Cancel</button>
                       <button onClick={saveEdit} className="rounded-lg bg-indigo-500 hover:bg-indigo-400 px-4 py-1.5 text-sm font-medium">Save</button>
                     </div>
                   </div>
@@ -177,12 +177,12 @@ export default function CollectionManager({
                 {filterSummary && <div className="text-xs text-violet-300/80 mb-2">smart filter: {filterSummary}</div>}
 
                 <div className="flex flex-wrap gap-2 mb-3">
-                  {c.items.length === 0 && !filterSummary && <span className="text-slate-600 text-sm">No shows or movies yet — add some below.</span>}
+                  {c.items.length === 0 && !filterSummary && <span className="text-ink-faint text-sm">No shows or movies yet — add some below.</span>}
                   {c.items.map((it) => (
-                    <span key={it.id} className="inline-flex items-center gap-2 rounded-lg bg-slate-900/70 border border-slate-800 pl-2.5 pr-1.5 py-1 text-sm">
+                    <span key={it.id} className="inline-flex items-center gap-2 rounded-lg bg-surface/70 border border-edge pl-2.5 pr-1.5 py-1 text-sm">
                       <Icon name={it.kind === 'show' ? 'show' : 'movie'} size={15} colored />
                       <span className="truncate max-w-48">{it.label ?? it.showTitle}</span>
-                      <button onClick={() => guard(() => api.deleteCollectionItem(c.id, it.id))} className="text-slate-600 hover:text-rose-400" aria-label="Remove">×</button>
+                      <button onClick={() => guard(() => api.deleteCollectionItem(c.id, it.id))} className="text-ink-faint hover:text-rose-400" aria-label="Remove">×</button>
                     </span>
                   ))}
                 </div>

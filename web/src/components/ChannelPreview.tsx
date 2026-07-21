@@ -80,15 +80,15 @@ export default function ChannelPreview({ number, name, nowPlaying, onClose }: Pr
 
   return (
     <Modal onClose={onClose} panelClassName="w-full max-w-3xl overflow-hidden">
-        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-800">
+        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-edge">
           <span className="text-xs font-mono text-indigo-300 shrink-0">{number}</span>
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium truncate">{name}</div>
-            {nowPlaying && <div className="text-xs text-slate-500 truncate">▶ {nowPlaying}</div>}
+            {nowPlaying && <div className="text-xs text-ink-faint truncate">▶ {nowPlaying}</div>}
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg border border-slate-700 hover:border-slate-500 px-2.5 py-1 text-xs shrink-0"
+            className="rounded-lg border border-edge-strong hover:border-ink-faint px-2.5 py-1 text-xs shrink-0"
           >
             Close
           </button>
@@ -98,14 +98,14 @@ export default function ChannelPreview({ number, name, nowPlaying, onClose }: Pr
           {error ? (
             <div className="text-center p-6">
               <div className="text-sm text-rose-300 mb-2">{error}</div>
-              <code className="text-xs text-slate-500 break-all">{url}</code>
+              <code className="text-xs text-ink-faint break-all">{url}</code>
             </div>
           ) : (
             <video ref={videoRef} controls playsInline className="w-full h-full" />
           )}
         </div>
 
-        <div className="px-4 py-2 text-xs text-slate-500 border-t border-slate-800">
+        <div className="px-4 py-2 text-xs text-ink-faint border-t border-edge">
           {mutedFallback
             ? 'Started muted — the browser blocked autoplay with sound. Unmute on the player.'
             : 'Live preview. This tunes in as a real viewer until you close it.'}

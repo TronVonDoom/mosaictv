@@ -16,7 +16,7 @@ export default function FillersTab({
   ch,
   guard,
   onGoToSchedule,
-}: ChannelTabProps & { onGoToSchedule: () => void }) {
+}: Omit<ChannelTabProps, 'drafts'> & { onGoToSchedule: () => void }) {
   const makesFillerSlots = ch.timeBlocks.some(
     (b) => (b.fillerMode || 'none') !== 'none' || b.startMode === 'hard',
   )

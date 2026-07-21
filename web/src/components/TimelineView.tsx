@@ -39,11 +39,11 @@ export default function TimelineView({ playout, logo }: { playout: Playout; logo
   }, [playout.now])
 
   return (
-    <div ref={scrollRef} className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/40">
+    <div ref={scrollRef} className="overflow-x-auto rounded-lg border border-edge bg-canvas/40">
       <div className="flex" style={{ width: (logo ? LOGO_W : 0) + totalMin * PX, height: 92 }}>
         {logo && (
           <div
-            className="sticky left-0 z-20 shrink-0 flex items-center justify-center bg-slate-950 border-r border-slate-800"
+            className="sticky left-0 z-20 shrink-0 flex items-center justify-center bg-canvas border-r border-edge"
             style={{ width: LOGO_W, height: 92 }}
           >
             <img src={logo} alt="" className="max-w-[68%] max-h-[68%] object-contain" />
@@ -54,8 +54,8 @@ export default function TimelineView({ playout, logo }: { playout: Playout; logo
           {Array.from({ length: HOURS + 1 }, (_, h) => {
             const t = new Date(windowStart.getTime() + h * 3600_000)
             return (
-              <div key={h} className="absolute top-0 bottom-0 border-l border-slate-800/70" style={{ left: h * 60 * PX }}>
-                <span className="absolute top-1 left-1 text-[10px] text-slate-500 whitespace-nowrap">
+              <div key={h} className="absolute top-0 bottom-0 border-l border-edge/70" style={{ left: h * 60 * PX }}>
+                <span className="absolute top-1 left-1 text-[10px] text-ink-faint whitespace-nowrap">
                   {t.toLocaleTimeString([], { hour: 'numeric' })}
                 </span>
               </div>
@@ -77,16 +77,16 @@ export default function TimelineView({ playout, logo }: { playout: Playout; logo
                 className={
                   'absolute rounded-md border px-2 py-1 overflow-hidden ' +
                   (filler
-                    ? 'bg-slate-900/70 border-slate-800 text-slate-500 italic'
+                    ? 'bg-surface/70 border-edge text-ink-faint italic'
                     : isNow
                       ? 'bg-indigo-500/25 border-indigo-400 text-indigo-100'
-                      : 'bg-slate-800/70 border-slate-700 text-slate-200')
+                      : 'bg-raised/70 border-edge-strong text-ink')
                 }
                 style={{ left: s * PX + 1, width: w - 2, top: 30, height: 54 }}
               >
                 <div className="text-xs font-medium truncate leading-tight">{progLabel(it)}</div>
                 {w > 60 && (
-                  <div className="text-[10px] text-slate-400 truncate">
+                  <div className="text-[10px] text-ink-muted truncate">
                     {new Date(it.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 )}

@@ -27,21 +27,21 @@ export default function WatermarkFields({
   return (
     <div className="space-y-3">
       <div>
-        <div className="inline-flex rounded-lg border border-slate-700 overflow-hidden">
+        <div className="inline-flex rounded-lg border border-edge-strong overflow-hidden">
           {MODES.map((m) => (
             <button
               key={m.value}
               type="button"
               onClick={() => set('mode', m.value)}
               className={`px-3.5 py-1.5 text-sm transition-colors ${
-                wm.mode === m.value ? 'bg-indigo-500 text-white' : 'bg-slate-900 text-slate-400 hover:text-slate-200'
+                wm.mode === m.value ? 'bg-indigo-500 text-white' : 'bg-surface text-ink-muted hover:text-ink'
               }`}
             >
               {m.label}
             </button>
           ))}
         </div>
-        <p className="text-xs text-slate-500 mt-1.5">{activeMode.hint}</p>
+        <p className="text-xs text-ink-faint mt-1.5">{activeMode.hint}</p>
       </div>
 
       {wm.mode !== 'none' && (
@@ -49,9 +49,9 @@ export default function WatermarkFields({
           <Section title="Placement">
             <div className="flex flex-wrap gap-4">
               <div>
-                <div className="text-sm text-slate-400 mb-1">Corner</div>
+                <div className="text-sm text-ink-muted mb-1">Corner</div>
                 {/* Mini frame — click a corner to place the logo there. */}
-                <div className="grid grid-cols-2 gap-1 w-24 h-[54px] rounded border border-slate-700 bg-slate-950 p-1">
+                <div className="grid grid-cols-2 gap-1 w-24 h-[54px] rounded border border-edge-strong bg-canvas p-1">
                   {CORNERS.map((c) => (
                     <button
                       key={c}
@@ -59,7 +59,7 @@ export default function WatermarkFields({
                       title={c.replace('-', ' ')}
                       onClick={() => set('position', c)}
                       className={`rounded-sm transition-colors ${
-                        wm.position === c ? 'bg-indigo-500' : 'bg-slate-800 hover:bg-slate-700'
+                        wm.position === c ? 'bg-indigo-500' : 'bg-raised hover:bg-edge-strong'
                       }`}
                     />
                   ))}
@@ -81,9 +81,9 @@ export default function WatermarkFields({
                 checked={wm.constrainToMedia}
                 onChange={(e) => set('constrainToMedia', e.target.checked)}
               />
-              <span className="text-slate-300">
+              <span className="text-ink-soft">
                 Keep the logo on the picture
-                <span className="block text-xs text-slate-500">
+                <span className="block text-xs text-ink-faint">
                   Size and place it against the visible image rather than the full frame, so it never drifts onto the
                   black bars of 4:3 or letterboxed content.
                 </span>
@@ -110,9 +110,9 @@ export default function WatermarkFields({
                 checked={wm.showOnFiller}
                 onChange={(e) => set('showOnFiller', e.target.checked)}
               />
-              <span className="text-slate-300">
+              <span className="text-ink-soft">
                 Show on filler
-                <span className="block text-xs text-slate-500">
+                <span className="block text-xs text-ink-faint">
                   Filler is usually built from this logo already, so the corner bug is a second copy of it. Left off,
                   the logo fades out as a program hands over to filler and fades back in afterwards.
                 </span>
@@ -130,7 +130,7 @@ export default function WatermarkFields({
                   <Input type="number" min={1} className="w-full" value={wm.durationSeconds} onChange={(e) => set('durationSeconds', Number(e.target.value))} />
                 </Field>
               </div>
-              <p className="text-xs text-slate-500 mt-2">
+              <p className="text-xs text-ink-faint mt-2">
                 Shows for {wm.durationSeconds}s every {wm.frequencyMinutes} min
                 {wm.fadeSeconds > 0
                   ? `, fading over ${Math.min(wm.fadeSeconds, fadeMax)}s${wm.fadeSeconds > fadeMax ? ` (capped at half the window)` : ''}.`

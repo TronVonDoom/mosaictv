@@ -24,7 +24,7 @@ export default function ToastContainer() {
               ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'
               : t.type === 'error'
                 ? 'border-rose-500/40 bg-rose-500/15 text-rose-300'
-                : 'border-slate-700 bg-slate-800/90 text-slate-200')
+                : 'border-edge-strong bg-raised/90 text-ink')
           }
         >
           {t.text}

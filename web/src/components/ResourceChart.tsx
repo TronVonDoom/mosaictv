@@ -10,7 +10,7 @@ import { api, type MetricMarker, type MetricsResponse, type MetricSample } from 
 import { usePolling } from '../lib/hooks'
 import { Card, Select, cx } from './ui'
 
-// Validated against the slate-900 card surface (CVD separation lands in the
+// Validated against the `surface` card colour (CVD separation lands in the
 // 6–8 floor band, so every marker kind also carries a distinct glyph and a
 // legend label — identity is never colour alone).
 const KIND_COLOR: Record<MetricMarker['kind'], string> = {
@@ -24,8 +24,8 @@ const KIND_LABEL: Record<MetricMarker['kind'], string> = {
   song: 'Music video',
 }
 const LINE = '#3987e5'
-const GRID = 'rgba(148, 163, 184, 0.14)' // slate-400, recessive
-const AXIS_TEXT = '#94a3b8' // slate-400
+const GRID = 'rgba(148, 163, 184, 0.14)' // matches `ink-muted`, recessive
+const AXIS_TEXT = '#94a3b8' // `ink-muted` — canvas needs a literal
 
 const RANGES = [
   { value: 5, label: 'Last 5 min' },
@@ -146,8 +146,8 @@ export default function ResourceChart() {
     <Card className="p-5">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-200">Container load</h2>
-          <p className="text-xs text-slate-500">
+          <h2 className="text-sm font-semibold text-ink">Container load</h2>
+          <p className="text-xs text-ink-faint">
             CPU is percent of one core ({cores} available). Vertical rules mark playout changes.
           </p>
         </div>
@@ -167,7 +167,7 @@ export default function ResourceChart() {
 
       <div ref={wrapRef} className="w-full">
         {noData ? (
-          <p className="py-10 text-center text-sm text-slate-500">
+          <p className="py-10 text-center text-sm text-ink-faint">
             Collecting samples… the first points appear a few seconds after start-up.
           </p>
         ) : (
@@ -237,7 +237,7 @@ export default function ResourceChart() {
       </div>
 
       {/* --- legend (identity never by colour alone) --- */}
-      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-muted">
         {(Object.keys(KIND_LABEL) as MetricMarker['kind'][]).map((k) => (
           <span key={k} className="inline-flex items-center gap-1.5">
             <svg width={12} height={12} aria-hidden="true"><KindGlyph kind={k} x={6} y={6} /></svg>
@@ -247,17 +247,17 @@ export default function ResourceChart() {
       </div>
 
       {/* --- readout for the hovered moment --- */}
-      <div className={cx('mt-3 min-h-[3.25rem] rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs', !hs && 'text-slate-500')}>
+      <div className={cx('mt-3 min-h-[3.25rem] rounded-lg border border-edge bg-canvas/40 px-3 py-2 text-xs', !hs && 'text-ink-faint')}>
         {hs ? (
           <>
-            <div className="flex flex-wrap gap-x-4 text-slate-300">
+            <div className="flex flex-wrap gap-x-4 text-ink-soft">
               <span className="tabular-nums">{fmtClock(hs.ts)}</span>
-              <span>CPU <strong className="font-semibold tabular-nums text-slate-100">{hs.cpuPct < 0 ? '—' : `${hs.cpuPct}%`}</strong></span>
-              <span>Memory <strong className="font-semibold tabular-nums text-slate-100">{fmtMB(hs.memBytes)}</strong></span>
-              <span>ffmpeg <strong className="font-semibold tabular-nums text-slate-100">{hs.ffmpegCount < 0 ? '—' : hs.ffmpegCount}</strong></span>
+              <span>CPU <strong className="font-semibold tabular-nums text-ink">{hs.cpuPct < 0 ? '—' : `${hs.cpuPct}%`}</strong></span>
+              <span>Memory <strong className="font-semibold tabular-nums text-ink">{fmtMB(hs.memBytes)}</strong></span>
+              <span>ffmpeg <strong className="font-semibold tabular-nums text-ink">{hs.ffmpegCount < 0 ? '—' : hs.ffmpegCount}</strong></span>
             </div>
             {hoveredMarker && (
-              <div className="mt-1 truncate text-slate-400">
+              <div className="mt-1 truncate text-ink-muted">
                 Playing since {fmtClock(hoveredMarker.ts)}: ch {hoveredMarker.channel} · {KIND_LABEL[hoveredMarker.kind]} · {hoveredMarker.label}
               </div>
             )}

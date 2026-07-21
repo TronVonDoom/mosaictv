@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api, type ChannelDetail, type Collection } from '../lib/api'
 import { errorMessage } from '../lib/errors'
 import { toast } from '../lib/toast'
-import { useHashTab } from '../lib/hooks'
+import { useHashTab, type DraftCache } from '../lib/hooks'
 import CollectionManager from '../components/CollectionManager'
 import GeneralTab from '../components/channel/GeneralTab'
 import ScheduleTab from '../components/channel/ScheduleTab'
@@ -29,6 +29,10 @@ export default function ChannelEditor() {
   const [cols, setCols] = useState<Collection[]>([])
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useHashTab<Tab>(TAB_IDS, 'general')
+
+  // In-progress form values for the tabs, held here so they survive a tab
+  // unmounting — and die when you leave the channel. See useDraft.
+  const drafts = useRef<DraftCache>(new Map()).current
 
   const load = useCallback(() => api.channel(channelId).then(setCh).catch(() => {}), [channelId])
   const loadCols = useCallback(
@@ -105,12 +109,12 @@ export default function ChannelEditor() {
 
       {error && <Banner className="mb-5">{error}</Banner>}
 
-      {tab === 'general' && <GeneralTab channelId={channelId} ch={ch} guard={guard} />}
+      {tab === 'general' && <GeneralTab channelId={channelId} ch={ch} guard={guard} drafts={drafts} />}
 
       {tab === 'collections' && <CollectionManager channelId={channelId} onChange={loadCols} />}
 
       {tab === 'schedule' && (
-        <ScheduleTab channelId={channelId} ch={ch} guard={guard} cols={cols} onError={setError} />
+        <ScheduleTab channelId={channelId} ch={ch} guard={guard} drafts={drafts} cols={cols} onError={setError} />
       )}
 
       {tab === 'fillers' && (

@@ -34,6 +34,52 @@ export function useHashTab<T extends string>(
 }
 
 /**
+ * A cache of in-progress form values, keyed by form. Owned by whichever
+ * component should bound the drafts' lifetime — create one with
+ * `useRef(new Map()).current` and pass it down.
+ */
+export type DraftCache = Map<string, unknown>
+
+/**
+ * Form state that survives its component unmounting.
+ *
+ * Splitting the channel editor into per-tab components made each tab unmount
+ * when you leave it, which silently discarded a half-filled form on the way to
+ * check something on another tab. Lifting the state back into the page would
+ * undo the split, so the draft lives in a cache the page owns instead: the tab
+ * keeps its own state, and the cache just outlives the component.
+ *
+ * Because the page owns the cache, drafts die when you leave the channel —
+ * surviving a tab switch is the point, being ambushed by yesterday's half-edit
+ * is not. Call `clear` after a successful save so the next mount re-seeds from
+ * the server rather than replaying what you already committed.
+ */
+export function useDraft<T>(
+  cache: DraftCache,
+  key: string,
+  makeInitial: () => T,
+): [T, (value: T | ((prev: T) => T)) => void, () => void] {
+  const [state, setState] = useState<T>(() =>
+    cache.has(key) ? (cache.get(key) as T) : makeInitial(),
+  )
+
+  const set = useCallback(
+    (value: T | ((prev: T) => T)) => {
+      setState((prev) => {
+        const next = typeof value === 'function' ? (value as (p: T) => T)(prev) : value
+        cache.set(key, next)
+        return next
+      })
+    },
+    [cache, key],
+  )
+
+  const clear = useCallback(() => cache.delete(key), [cache, key])
+
+  return [state, set, clear]
+}
+
+/**
  * Run `fn` every `intervalMs` while `enabled`. Pure interval semantics — it
  * does NOT fire immediately, so callers keep whatever initial load they
  * already do (which is usually driven by different dependencies than the

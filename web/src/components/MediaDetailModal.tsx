@@ -11,11 +11,11 @@ import { Modal } from './ui'
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex gap-3 py-1.5 border-b border-slate-800/60 last:border-0">
-      <span className="text-slate-500 text-xs uppercase tracking-wide w-24 shrink-0 pt-0.5">
+    <div className="flex gap-3 py-1.5 border-b border-edge/60 last:border-0">
+      <span className="text-ink-faint text-xs uppercase tracking-wide w-24 shrink-0 pt-0.5">
         {label}
       </span>
-      <span className="text-sm text-slate-200 break-words min-w-0">{value}</span>
+      <span className="text-sm text-ink break-words min-w-0">{value}</span>
     </div>
   )
 }
@@ -49,7 +49,7 @@ export default function MediaDetailModal({
   return (
     <Modal onClose={onClose} panelClassName="max-w-2xl w-full p-6">
         {!item ? (
-          <div className="text-slate-400 text-sm py-10 text-center">Loading…</div>
+          <div className="text-ink-muted text-sm py-10 text-center">Loading…</div>
         ) : (
           <div className="flex flex-col sm:flex-row gap-5">
             <div
@@ -74,19 +74,19 @@ export default function MediaDetailModal({
               <div className="flex items-start justify-between gap-3">
                 <div>
                   {isEpisode && item.showTitle && (
-                    <div className="text-slate-400 text-sm">{item.showTitle}</div>
+                    <div className="text-ink-muted text-sm">{item.showTitle}</div>
                   )}
                   <h2 className="text-xl font-semibold">
-                    {sxe && <span className="text-slate-500 mr-2">{sxe}</span>}
+                    {sxe && <span className="text-ink-faint mr-2">{sxe}</span>}
                     {item.title}
                     {item.year && !isEpisode && (
-                      <span className="text-slate-500 font-normal"> ({item.year})</span>
+                      <span className="text-ink-faint font-normal"> ({item.year})</span>
                     )}
                   </h2>
                 </div>
                 <button
                   onClick={onClose}
-                  className="text-slate-500 hover:text-slate-200 text-xl leading-none"
+                  className="text-ink-faint hover:text-ink text-xl leading-none"
                   aria-label="Close"
                 >
                   ×
@@ -101,7 +101,7 @@ export default function MediaDetailModal({
                 <div className="mt-2 text-sm">
                   {item.rating ? <span className="text-amber-300">⭐ {item.rating.toFixed(1)}</span> : null}
                   {item.genres && (
-                    <span className="text-slate-500">
+                    <span className="text-ink-faint">
                       {item.rating ? ' · ' : ''}
                       {item.genres}
                     </span>
@@ -109,7 +109,7 @@ export default function MediaDetailModal({
                 </div>
               )}
               {item.overview && (
-                <p className="mt-3 text-sm text-slate-300 leading-relaxed">{item.overview}</p>
+                <p className="mt-3 text-sm text-ink-soft leading-relaxed">{item.overview}</p>
               )}
               <div className="mt-4">
                 <Row label="Library" value={item.library.name} />

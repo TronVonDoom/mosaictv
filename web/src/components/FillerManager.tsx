@@ -193,12 +193,12 @@ export default function FillerManager() {
   const unused = fillerAssets.filter((a) => !a.generated && !fillers.some((f) => f.assetId === a.id))
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+    <div className="rounded-lg border border-edge bg-canvas/40 p-3">
       <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
         <span className="text-sm font-medium">Filler library</span>
         <div className="flex items-center gap-2 shrink-0">
           {channels.length > 0 && (
-            <label className="flex items-center gap-1.5 text-[11px] text-slate-500">
+            <label className="flex items-center gap-1.5 text-[11px] text-ink-faint">
               Preview as
               <Select
                 className="px-2 py-0.5 text-xs"
@@ -216,7 +216,7 @@ export default function FillerManager() {
           <button
             onClick={() => uploadRef.current?.click()}
             disabled={uploading}
-            className="text-xs rounded border border-slate-700 hover:border-indigo-500 hover:text-indigo-300 disabled:opacity-50 px-2 py-0.5"
+            className="text-xs rounded border border-edge-strong hover:border-indigo-500 hover:text-indigo-300 disabled:opacity-50 px-2 py-0.5"
             title="Upload your own bumper or ident — it becomes a filler you can assign straight away"
           >
             {uploading ? 'Uploading…' : '⤒ Upload clip'}
@@ -231,7 +231,7 @@ export default function FillerManager() {
               if (f) uploadClip(f)
             }}
           />
-          {!open && <button onClick={startNew} className="text-xs rounded border border-slate-700 hover:border-indigo-500 hover:text-indigo-300 px-2 py-0.5">+ Add filler</button>}
+          {!open && <button onClick={startNew} className="text-xs rounded border border-edge-strong hover:border-indigo-500 hover:text-indigo-300 px-2 py-0.5">+ Add filler</button>}
         </div>
       </div>
       {genError && <Banner tone="error" className="mb-2 text-xs">{genError}</Banner>}
@@ -244,11 +244,11 @@ export default function FillerManager() {
             const src = f.style === 'custom' ? clipOf(f.assetId) : undefined
             return (
               <div key={f.id}>
-                <div className="flex items-center gap-2 text-sm rounded bg-slate-900/60 border border-slate-800 px-2.5 py-1.5">
+                <div className="flex items-center gap-2 text-sm rounded bg-surface/60 border border-edge px-2.5 py-1.5">
                   <span className="flex-1 min-w-0 truncate">
                     {f.name || (f.style === 'custom' ? src?.name ?? 'Custom clip' : styleLabel(f.style))}
                   </span>
-                  <span className="text-[11px] text-slate-500 shrink-0">
+                  <span className="text-[11px] text-ink-faint shrink-0">
                     {styleLabel(f.style)} · {f.durationMode === 'audio' ? 'match audio' : `${f.durationSec}s`}
                     {src && ` · ${fmtSize(src.sizeBytes)}`}
                     {f.audioAssetId != null && ` · ♪ ${audioName(f.audioAssetId) ?? 'audio'}`}
@@ -257,11 +257,11 @@ export default function FillerManager() {
                     <span className="text-xs text-indigo-300 shrink-0 tabular-nums">Building…</span>
                   ) : f.generatedAssetId != null ? (
                     <>
-                      <button onClick={() => setPreviewId(previewId === f.id ? null : f.id)} className="text-xs text-slate-400 hover:text-indigo-300">{previewId === f.id ? 'Hide' : 'Preview'}</button>
-                      <button onClick={() => generate(f.id)} className="text-xs text-slate-400 hover:text-indigo-300" title="Rebuild — e.g. for a different channel's logo">Regenerate</button>
+                      <button onClick={() => setPreviewId(previewId === f.id ? null : f.id)} className="text-xs text-ink-muted hover:text-indigo-300">{previewId === f.id ? 'Hide' : 'Preview'}</button>
+                      <button onClick={() => generate(f.id)} className="text-xs text-ink-muted hover:text-indigo-300" title="Rebuild — e.g. for a different channel's logo">Regenerate</button>
                     </>
                   ) : f.style === 'custom' && src ? (
-                    <button onClick={() => setPreviewId(previewId === f.id ? null : f.id)} className="text-xs text-slate-400 hover:text-indigo-300">{previewId === f.id ? 'Hide' : 'Preview'}</button>
+                    <button onClick={() => setPreviewId(previewId === f.id ? null : f.id)} className="text-xs text-ink-muted hover:text-indigo-300">{previewId === f.id ? 'Hide' : 'Preview'}</button>
                   ) : (
                     <button
                       onClick={() => generate(f.id)}
@@ -271,19 +271,19 @@ export default function FillerManager() {
                       Generate preview
                     </button>
                   )}
-                  <button onClick={() => startEdit(f)} className="text-xs text-slate-400 hover:text-indigo-300">Edit</button>
-                  <button onClick={() => del(f)} className="text-slate-600 hover:text-rose-400" aria-label="Delete">×</button>
+                  <button onClick={() => startEdit(f)} className="text-xs text-ink-muted hover:text-indigo-300">Edit</button>
+                  <button onClick={() => del(f)} className="text-ink-faint hover:text-rose-400" aria-label="Delete">×</button>
                 </div>
 
                 {generating && (
                   <div className="mt-1.5 px-1">
                     <div className="flex items-center gap-2">
-                      <div className="h-2 flex-1 rounded-full bg-slate-800 overflow-hidden">
+                      <div className="h-2 flex-1 rounded-full bg-raised overflow-hidden">
                         <div className="h-full bg-indigo-500 transition-[width] duration-500" style={{ width: `${pct}%` }} />
                       </div>
                       <span className="text-[11px] text-indigo-300 tabular-nums w-9 text-right">{pct}%</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-1">
+                    <p className="text-[11px] text-ink-faint mt-1">
                       Building the clip{pct === 0 ? ' (starting…)' : ''} — this runs on the server, so you can leave
                       this page and come back.
                     </p>
@@ -291,9 +291,9 @@ export default function FillerManager() {
                 )}
 
                 {previewId === f.id && (f.generatedAssetId ?? src?.id) != null && (
-                  <div className="mt-1.5 rounded border border-slate-800 bg-black p-2">
+                  <div className="mt-1.5 rounded border border-edge bg-black p-2">
                     <video key={f.generatedAssetId ?? src?.id} controls src={assetFileUrl((f.generatedAssetId ?? src?.id) as number)} className="w-full max-h-64 rounded" />
-                    <p className="text-[11px] text-slate-500 mt-1">
+                    <p className="text-[11px] text-ink-faint mt-1">
                       {f.style === 'custom'
                         ? 'Your uploaded clip, with the chosen audio mixed over it at playback.'
                         : `Built for ${previewChannelName ?? "the channel it's assigned to"} — the same filler is rebuilt with each channel's own logo when it airs. Saved on the Studio page as a generated filler asset.`}
@@ -309,25 +309,25 @@ export default function FillerManager() {
       {open && <FillerEditor key={editId ?? 'new'} editId={editId} initial={draft} onCancel={closeEditor} onSaved={saved} />}
 
       {fillers.length === 0 && !open && (
-        <p className="text-xs text-slate-600">
-          No fillers yet. <span className="text-slate-400">Upload clip</span> to use your own bumper, or
-          <span className="text-slate-400"> + Add filler</span> to have one generated from a channel's logo. Assign
+        <p className="text-xs text-ink-faint">
+          No fillers yet. <span className="text-ink-muted">Upload clip</span> to use your own bumper, or
+          <span className="text-ink-muted"> + Add filler</span> to have one generated from a channel's logo. Assign
           them to channels or blocks from a channel's Fillers tab.
         </p>
       )}
 
       {unused.length > 0 && (
-        <div className="mt-3 border-t border-slate-800 pt-2">
-          <button onClick={() => setShowUnused(!showUnused)} className="text-[11px] text-slate-500 hover:text-slate-300">
+        <div className="mt-3 border-t border-edge pt-2">
+          <button onClick={() => setShowUnused(!showUnused)} className="text-[11px] text-ink-faint hover:text-ink-soft">
             {showUnused ? '▾' : '▸'} Unused clips ({unused.length}) — uploaded but no filler uses them
           </button>
           {showUnused && (
             <div className="space-y-1 mt-1.5">
               {unused.map((a) => (
-                <div key={a.id} className="flex items-center gap-2 text-xs rounded bg-slate-900/40 border border-slate-800 px-2.5 py-1.5">
-                  <span className="flex-1 min-w-0 truncate text-slate-400">{a.name}</span>
-                  <span className="text-[11px] text-slate-600 shrink-0">{fmtSize(a.sizeBytes)}</span>
-                  <button onClick={() => delUnused(a.id)} className="text-slate-600 hover:text-rose-400" aria-label="Delete">×</button>
+                <div key={a.id} className="flex items-center gap-2 text-xs rounded bg-surface/40 border border-edge px-2.5 py-1.5">
+                  <span className="flex-1 min-w-0 truncate text-ink-muted">{a.name}</span>
+                  <span className="text-[11px] text-ink-faint shrink-0">{fmtSize(a.sizeBytes)}</span>
+                  <button onClick={() => delUnused(a.id)} className="text-ink-faint hover:text-rose-400" aria-label="Delete">×</button>
                 </div>
               ))}
             </div>

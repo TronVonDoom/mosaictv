@@ -40,18 +40,18 @@ export default function DirectoryPicker({
 
   return (
     <Modal onClose={onClose} panelClassName="max-w-lg w-full flex flex-col max-h-[80vh]">
-        <div className="p-4 border-b border-slate-800">
+        <div className="p-4 border-b border-edge">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">Choose a folder</h2>
             <button
               onClick={onClose}
-              className="text-slate-500 hover:text-slate-200 text-xl leading-none"
+              className="text-ink-faint hover:text-ink text-xl leading-none"
               aria-label="Close"
             >
               ×
             </button>
           </div>
-          <div className="mt-2 text-xs font-mono text-slate-400 bg-slate-950 rounded px-2 py-1.5 truncate">
+          <div className="mt-2 text-xs font-mono text-ink-muted bg-canvas rounded px-2 py-1.5 truncate">
             {listing?.path ?? '…'}
           </div>
         </div>
@@ -60,27 +60,27 @@ export default function DirectoryPicker({
           {error ? (
             <div className="text-rose-300 text-sm p-3">{error}</div>
           ) : loading ? (
-            <div className="text-slate-500 text-sm p-3">Loading…</div>
+            <div className="text-ink-faint text-sm p-3">Loading…</div>
           ) : (
             <div className="space-y-0.5">
               {listing?.parent && (
                 <button
                   onClick={() => load(listing.parent!)}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-800/60 text-left text-sm text-slate-400"
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-raised/60 text-left text-sm text-ink-muted"
                 >
                   <span>↩</span> ..
                 </button>
               )}
               {listing?.dirs.length === 0 && (
-                <div className="text-slate-600 text-sm px-3 py-2">No subfolders here.</div>
+                <div className="text-ink-faint text-sm px-3 py-2">No subfolders here.</div>
               )}
               {listing?.dirs.map((d) => (
                 <button
                   key={d.path}
                   onClick={() => load(d.path)}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-800/60 text-left text-sm"
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-raised/60 text-left text-sm"
                 >
-                  <Icon name="folder" size={16} className="text-slate-400 shrink-0" />
+                  <Icon name="folder" size={16} className="text-ink-muted shrink-0" />
                   <span className="truncate">{d.name}</span>
                 </button>
               ))}
@@ -88,8 +88,8 @@ export default function DirectoryPicker({
           )}
         </div>
 
-        <div className="p-4 border-t border-slate-800 flex items-center justify-between gap-3">
-          <span className="text-xs text-slate-500">
+        <div className="p-4 border-t border-edge flex items-center justify-between gap-3">
+          <span className="text-xs text-ink-faint">
             Navigate into the folder you want, then select it.
           </span>
           <Button onClick={() => listing && onSelect(listing.path)} disabled={!listing} className="shrink-0">

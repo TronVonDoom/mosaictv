@@ -37,9 +37,9 @@ function Check({ checked, onChange, label, hint }: { checked: boolean; onChange:
   return (
     <label className="flex items-start gap-2 text-sm select-none">
       <input type="checkbox" className="mt-0.5" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-      <span className="text-slate-300">
+      <span className="text-ink-soft">
         {label}
-        <span className="block text-xs text-slate-500">{hint}</span>
+        <span className="block text-xs text-ink-faint">{hint}</span>
       </span>
     </label>
   )
@@ -102,7 +102,7 @@ export default function EncodingProfilesCard() {
   return (
     <Card className="p-5 mt-6">
       <h2 className="font-semibold mb-1">Encoding profiles</h2>
-      <p className="text-slate-400 text-sm mb-4">
+      <p className="text-ink-muted text-sm mb-4">
         Reusable output settings you can assign per channel. Channels with no profile use the built-in
         default{defaults ? ` (${resLabel(defaults.width, defaults.height)}, ${defaults.fps}fps, ${defaults.quality}, ${HW[defaults.hwaccel]})` : ''}.
       </p>
@@ -112,24 +112,24 @@ export default function EncodingProfilesCard() {
       {profiles.length > 0 && (
         <div className="space-y-2 mb-4">
           {profiles.map((p) => (
-            <div key={p.id} className="flex items-center gap-3 text-sm rounded-lg bg-slate-950/50 border border-slate-800 px-3 py-2">
+            <div key={p.id} className="flex items-center gap-3 text-sm rounded-lg bg-canvas/50 border border-edge px-3 py-2">
               <span className="font-medium flex-1 min-w-0 truncate">{p.name}</span>
-              <span className="text-xs text-slate-500 shrink-0">
+              <span className="text-xs text-ink-faint shrink-0">
                 {resLabel(p.width, p.height)} · {p.fps}fps · {p.videoBitrateK > 0 ? `${p.videoBitrateK}k` : p.quality} ·{' '}
                 {HW[p.hwaccel]} · {p.audioChannels === 6 ? '5.1' : 'stereo'} {p.audioBitrate}k
                 {p.deinterlace && ' · deint'}
                 {p.normalizeLoudness && ' · loudnorm'}
                 {p.burnSubtitles && ' · subs'}
               </span>
-              <button onClick={() => startEdit(p)} className="text-xs text-slate-400 hover:text-indigo-300">Edit</button>
-              <button onClick={() => del(p.id)} className="text-slate-600 hover:text-rose-400" aria-label="Delete">×</button>
+              <button onClick={() => startEdit(p)} className="text-xs text-ink-muted hover:text-indigo-300">Edit</button>
+              <button onClick={() => del(p.id)} className="text-ink-faint hover:text-rose-400" aria-label="Delete">×</button>
             </div>
           ))}
         </div>
       )}
 
       {form && (
-        <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
+        <div className="rounded-lg border border-edge bg-canvas/40 p-4">
           <div className="text-sm font-medium mb-3">{editingId ? 'Edit profile' : 'New profile'}</div>
           <div className="space-y-3">
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -256,7 +256,7 @@ export default function EncodingProfilesCard() {
             </Section>
           </div>
           <div className="flex justify-end gap-2 mt-3">
-            {editingId && <button onClick={startNew} className="rounded-lg border border-slate-700 hover:border-slate-500 px-3 py-1.5 text-sm">New instead</button>}
+            {editingId && <button onClick={startNew} className="rounded-lg border border-edge-strong hover:border-ink-faint px-3 py-1.5 text-sm">New instead</button>}
             <button onClick={save} className="rounded-lg bg-indigo-500 hover:bg-indigo-400 px-5 py-1.5 text-sm font-medium">{editingId ? 'Save' : 'Create profile'}</button>
           </div>
         </div>

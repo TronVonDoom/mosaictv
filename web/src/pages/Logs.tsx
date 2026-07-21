@@ -23,7 +23,7 @@ const levelStyle: Record<LogLevel, string> = {
   error: 'text-rose-300 border-rose-500/40 bg-rose-500/10',
   warn: 'text-amber-300 border-amber-500/40 bg-amber-500/10',
   info: 'text-sky-300 border-sky-500/30 bg-sky-500/10',
-  debug: 'text-slate-400 border-slate-600/40 bg-slate-600/10',
+  debug: 'text-ink-muted border-ink-ghost/40 bg-ink-ghost/10',
 }
 
 export default function Logs() {

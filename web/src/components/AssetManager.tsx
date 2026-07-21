@@ -67,7 +67,7 @@ export default function AssetManager({
 
   return (
     <div>
-      {hint && <p className="text-xs text-slate-500 mb-3">{hint}</p>}
+      {hint && <p className="text-xs text-ink-faint mb-3">{hint}</p>}
 
       <Card className="p-5 mb-6">
         <form onSubmit={upload} className="flex flex-wrap gap-3 items-end">
@@ -83,7 +83,7 @@ export default function AssetManager({
               ref={fileRef}
               type="file"
               accept={accept}
-              className="text-sm text-slate-400 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-slate-200 file:text-sm"
+              className="text-sm text-ink-muted file:mr-3 file:rounded-lg file:border-0 file:bg-raised file:px-3 file:py-2 file:text-ink file:text-sm"
             />
           </Field>
           <Button type="submit" size="lg" disabled={busy}>
@@ -93,21 +93,21 @@ export default function AssetManager({
       </Card>
 
       {assets.length === 0 ? (
-        <div className="text-slate-500 text-sm">{emptyText}</div>
+        <div className="text-ink-faint text-sm">{emptyText}</div>
       ) : (
         <div className="space-y-2">
           {assets.map((a) => (
             <Card key={a.id} className="p-3 flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium truncate" title={a.name}>{a.name}</div>
-                <div className="text-xs text-slate-500">{a.mime}{a.sizeBytes ? ` · ${fmtSize(a.sizeBytes)}` : ''}</div>
+                <div className="text-xs text-ink-faint">{a.mime}{a.sizeBytes ? ` · ${fmtSize(a.sizeBytes)}` : ''}</div>
               </div>
               {kind === 'audio' ? (
                 <audio controls preload="none" src={assetFileUrl(a.id)} className="h-8 max-w-[240px]" />
               ) : (
                 <video controls preload="none" src={assetFileUrl(a.id)} className="h-16 rounded bg-black" />
               )}
-              <button onClick={() => del(a.id)} className="text-slate-600 hover:text-rose-400 text-lg px-1" aria-label="Delete">
+              <button onClick={() => del(a.id)} className="text-ink-faint hover:text-rose-400 text-lg px-1" aria-label="Delete">
                 ×
               </button>
             </Card>

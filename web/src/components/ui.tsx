@@ -252,15 +252,15 @@ export function ProgressPanel({
     <div className={cx('rounded-xl border p-4', tones.edge, className)}>
       <div className="flex justify-between text-sm mb-2">
         <span className={cx('font-medium', tones.text)}>{title}</span>
-        <span className="text-slate-400">
+        <span className="text-ink-muted">
           {processed} / {total} ({pct}%)
         </span>
       </div>
-      <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+      <div className="h-2 rounded-full bg-raised overflow-hidden">
         <div className={cx('h-full transition-all duration-300', tones.bar)} style={{ width: `${pct}%` }} />
       </div>
-      {stats && <div className="flex gap-4 text-xs text-slate-400 mt-2">{stats}</div>}
-      {detail && <div className="text-xs text-slate-600 mt-1 truncate">{detail}</div>}
+      {stats && <div className="flex gap-4 text-xs text-ink-muted mt-2">{stats}</div>}
+      {detail && <div className="text-xs text-ink-faint mt-1 truncate">{detail}</div>}
     </div>
   )
 }

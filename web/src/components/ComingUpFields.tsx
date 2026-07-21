@@ -34,7 +34,7 @@ export default function ComingUpFields({
     <div className="space-y-3">
       <label className="flex items-center gap-2 text-sm select-none">
         <input type="checkbox" checked={cfg.enabled} onChange={(e) => set('enabled', e.target.checked)} />
-        <span className="text-slate-200 font-medium">Show a “coming up next” caption over programs</span>
+        <span className="text-ink font-medium">Show a “coming up next” caption over programs</span>
       </label>
 
       {cfg.enabled && (
@@ -43,31 +43,31 @@ export default function ComingUpFields({
             <Field label="Template" hint="Empty tokens (and the dashes around them) are dropped automatically.">
               <Input className="w-full font-mono" value={cfg.template} onChange={(e) => set('template', e.target.value)} />
             </Field>
-            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-faint">
               {TOKENS.map(([tok, desc]) => (
                 <span key={tok}>
-                  <code className="text-slate-400">{tok}</code> {desc}
+                  <code className="text-ink-muted">{tok}</code> {desc}
                 </span>
               ))}
             </div>
           </Section>
 
           <Section title="Timing">
-            <div className="inline-flex rounded-lg border border-slate-700 overflow-hidden">
+            <div className="inline-flex rounded-lg border border-edge-strong overflow-hidden">
               {TIMINGS.map((t) => (
                 <button
                   key={t.value}
                   type="button"
                   onClick={() => set('timing', t.value)}
                   className={`px-3.5 py-1.5 text-sm transition-colors ${
-                    cfg.timing === t.value ? 'bg-indigo-500 text-white' : 'bg-slate-900 text-slate-400 hover:text-slate-200'
+                    cfg.timing === t.value ? 'bg-indigo-500 text-white' : 'bg-surface text-ink-muted hover:text-ink'
                   }`}
                 >
                   {t.label}
                 </button>
               ))}
             </div>
-            <p className="text-xs text-slate-500 mt-1.5">{TIMINGS.find((t) => t.value === cfg.timing)?.hint}</p>
+            <p className="text-xs text-ink-faint mt-1.5">{TIMINGS.find((t) => t.value === cfg.timing)?.hint}</p>
             <div className="grid grid-cols-3 gap-3 mt-3">
               {cfg.timing !== 'middle' && (
                 <Field label="Before end (sec)" hint="300 = 5 min.">

@@ -68,7 +68,7 @@ export default function WeeklyBlockGrid({
         <div className="shrink-0 w-10 pt-6">
           <div className="relative" style={{ height: DAY_H }}>
             {Array.from({ length: 24 }, (_, h) => (
-              <div key={h} className="absolute right-1 text-[9px] text-slate-500 -translate-y-1/2" style={{ top: h * PX_H }}>
+              <div key={h} className="absolute right-1 text-[9px] text-ink-faint -translate-y-1/2" style={{ top: h * PX_H }}>
                 {h === 0 ? '' : fmt(h * 60)}
               </div>
             ))}
@@ -78,15 +78,15 @@ export default function WeeklyBlockGrid({
         {/* day columns */}
         {DAYS.map((label, day) => (
           <div key={day} className="flex-1 min-w-16">
-            <div className="text-center text-xs text-slate-400 h-6 leading-6">{label}</div>
+            <div className="text-center text-xs text-ink-muted h-6 leading-6">{label}</div>
             <div
-              className="relative border-l border-slate-800 cursor-copy"
+              className="relative border-l border-edge cursor-copy"
               style={{ height: DAY_H }}
               onClick={(e) => clickColumn(e, day)}
             >
               {/* hour gridlines */}
               {Array.from({ length: 24 }, (_, h) => (
-                <div key={h} className="absolute left-0 right-0 border-t border-slate-800/50" style={{ top: h * PX_H }} />
+                <div key={h} className="absolute left-0 right-0 border-t border-edge/50" style={{ top: h * PX_H }} />
               ))}
               {/* block spans for this day */}
               {segs
@@ -107,8 +107,8 @@ export default function WeeklyBlockGrid({
                       className="absolute left-0.5 right-0.5 rounded border px-1 py-0.5 text-left overflow-hidden hover:brightness-125"
                       style={{ top, height, background: c.bg, borderColor: c.border }}
                     >
-                      <div data-block="1" className="text-[10px] font-medium text-slate-100 truncate leading-tight">{s.block.collection.name}</div>
-                      {height > 26 && <div data-block="1" className="text-[9px] text-slate-300/80 truncate">{fmt(s.block.startMinute)}</div>}
+                      <div data-block="1" className="text-[10px] font-medium text-ink truncate leading-tight">{s.block.collection.name}</div>
+                      {height > 26 && <div data-block="1" className="text-[9px] text-ink-soft/80 truncate">{fmt(s.block.startMinute)}</div>}
                     </button>
                   )
                 })}
@@ -116,7 +116,7 @@ export default function WeeklyBlockGrid({
           </div>
         ))}
       </div>
-      <p className="text-[11px] text-slate-500 mt-2">Click a block to edit it, or click an empty slot to add one there.</p>
+      <p className="text-[11px] text-ink-faint mt-2">Click a block to edit it, or click an empty slot to add one there.</p>
     </div>
   )
 }

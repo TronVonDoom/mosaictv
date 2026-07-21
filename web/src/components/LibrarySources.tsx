@@ -287,7 +287,7 @@ export default function LibrarySources({ focusAddForm }: { focusAddForm?: number
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{lib.name}</span>
                     <Badge>{KIND_LABELS[lib.kind]}</Badge>
-                    <span className="text-xs text-slate-500">{lib.itemCount} items</span>
+                    <span className="text-xs text-ink-faint">{lib.itemCount} items</span>
                   </div>
                 </div>
                 <Button variant="secondary" size="sm" onClick={() => handleScan(lib.id)} disabled={busy}>
@@ -325,16 +325,16 @@ export default function LibrarySources({ focusAddForm }: { focusAddForm?: number
               </div>
 
               {/* Folders */}
-              <div className="mt-3 pt-3 border-t border-slate-800/60 space-y-1.5">
+              <div className="mt-3 pt-3 border-t border-edge/60 space-y-1.5">
                 {lib.folders.map((f) => (
                   <div key={f.id} className="flex items-center gap-2 text-xs">
-                    <Icon name="folder" size={13} className="text-slate-600 shrink-0" />
-                    <span className="font-mono text-slate-400 truncate flex-1">{f.path}</span>
+                    <Icon name="folder" size={13} className="text-ink-faint shrink-0" />
+                    <span className="font-mono text-ink-muted truncate flex-1">{f.path}</span>
                     {lib.folders.length > 1 && (
                       <button
                         onClick={() => handleRemoveFolder(lib.id, f.id)}
                         disabled={busy}
-                        className="text-slate-600 hover:text-rose-400 disabled:opacity-40 px-1"
+                        className="text-ink-faint hover:text-rose-400 disabled:opacity-40 px-1"
                         aria-label="Remove folder"
                         title="Remove folder (and its indexed media)"
                       >

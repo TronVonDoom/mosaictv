@@ -62,7 +62,7 @@ export default function LogoManager() {
             <Input placeholder="Nick @ Night" value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
           <Field label="Image (PNG/JPG/WEBP)">
-            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="text-sm text-slate-400 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-slate-200 file:text-sm" />
+            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="text-sm text-ink-muted file:mr-3 file:rounded-lg file:border-0 file:bg-raised file:px-3 file:py-2 file:text-ink file:text-sm" />
           </Field>
           <Button type="submit" size="lg" disabled={busy}>
             {busy ? 'Uploading…' : 'Upload'}
@@ -71,7 +71,7 @@ export default function LogoManager() {
       </Card>
 
       {logos.length === 0 ? (
-        <div className="text-slate-500 text-sm">No logos yet.</div>
+        <div className="text-ink-faint text-sm">No logos yet.</div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {logos.map((l) => (
@@ -81,10 +81,10 @@ export default function LogoManager() {
               </div>
               <div className="flex items-center gap-2 px-3 py-2">
                 <span className="text-sm truncate flex-1" title={l.name}>{l.name}</span>
-                <button onClick={() => del(l.id)} className="text-slate-600 hover:text-rose-400 text-sm" aria-label="Delete">×</button>
+                <button onClick={() => del(l.id)} className="text-ink-faint hover:text-rose-400 text-sm" aria-label="Delete">×</button>
               </div>
               <div className="px-3 pb-2 flex items-center justify-between">
-                <span className="text-[11px] text-slate-500">
+                <span className="text-[11px] text-ink-faint">
                   {l.watermark.mode === 'none'
                     ? 'watermark off'
                     : `${l.watermark.mode} · ${l.watermark.position}${l.watermark.constrainToMedia ? ' · media-fit' : ''}`}
@@ -149,7 +149,7 @@ function WatermarkEditor({
           </div>
           <div className="min-w-0">
             <h2 className="font-semibold truncate">{logo.name}</h2>
-            <p className="text-xs text-slate-500">Watermark settings for this logo</p>
+            <p className="text-xs text-ink-faint">Watermark settings for this logo</p>
           </div>
         </div>
 

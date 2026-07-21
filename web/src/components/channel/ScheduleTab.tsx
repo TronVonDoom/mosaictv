@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import {
   api,
   parseComingUp,
@@ -8,6 +7,7 @@ import {
   type ComingUpConfig,
 } from '../../lib/api'
 import { formatDays, minutesToTime } from '../../lib/format'
+import { useDraft } from '../../lib/hooks'
 import ComingUpFields from '../ComingUpFields'
 import LogoPicker from '../LogoPicker'
 import WeeklyBlockGrid from '../WeeklyBlockGrid'
@@ -65,17 +65,22 @@ export default function ScheduleTab({
   channelId,
   ch,
   guard,
+  drafts,
   cols,
   onError,
 }: ChannelTabProps & { cols: Collection[]; onError: (msg: string) => void }) {
-  const [rot, setRot] = useState({
+  const [rot, setRot, clearRotDraft] = useDraft(drafts, 'schedule.rotation', () => ({
     collectionId: '',
     mode: 'one',
     count: '1',
     playbackOrder: 'chronological',
-  })
-  const [blk, setBlk] = useState<BlockForm>(emptyBlock())
-  const [editingBlock, setEditingBlock] = useState<number | null>(null)
+  }))
+  const [blk, setBlk, clearBlkDraft] = useDraft<BlockForm>(drafts, 'schedule.block', emptyBlock)
+  const [editingBlock, setEditingBlock, clearEditingDraft] = useDraft<number | null>(
+    drafts,
+    'schedule.editingBlock',
+    () => null,
+  )
 
   async function addRotation(e: React.FormEvent) {
     e.preventDefault()
@@ -88,10 +93,13 @@ export default function ScheduleTab({
         playbackOrder: rot.playbackOrder,
       }),
     )
+    clearRotDraft()
     setRot({ collectionId: '', mode: 'one', count: '1', playbackOrder: 'chronological' })
   }
 
   function resetBlockForm() {
+    clearBlkDraft()
+    clearEditingDraft()
     setEditingBlock(null)
     setBlk(emptyBlock())
   }

@@ -33,7 +33,10 @@ export default function GuideTab({
   ch,
   onReload,
   onError,
-}: Omit<ChannelTabProps, 'guard'> & { onReload: () => void; onError: (msg: string | null) => void }) {
+}: Omit<ChannelTabProps, 'guard' | 'drafts'> & {
+  onReload: () => void
+  onError: (msg: string | null) => void
+}) {
   const [playout, setPlayout] = useState<Playout | null>(null)
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'timeline' | 'list'>('timeline')
