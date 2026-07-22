@@ -15,7 +15,7 @@ import { log } from '../logs.js'
 import { markEvent } from '../metrics.js'
 import { clientIp, clientName, closeSession, openSession, sessionTag } from '../sessions.js'
 import { hasSubtitleStream, probeSar } from '../ffprobe.js'
-import { detectReadrateBurst, detectTextOverlay, nvdecIfReady, resolveEncoder } from './capabilities.js'
+import { detectTextOverlay, nvdecIfReady, readrateBurstArgs, resolveEncoder } from './capabilities.js'
 import { resolveProfile, type StreamProfile } from './profile.js'
 import { loadWatermark, parseComingUp, parseWatermark, type WatermarkConfig } from './overlays.js'
 import {
@@ -281,12 +281,11 @@ export async function streamChannel(channelNumber: number, res: Response, req?: 
 
   // Send the first few seconds unmetered so the player starts with a buffer
   // cushion, and re-earn that cushion (at 1.5x) after per-item startup stalls.
-  // Only on ffmpeg new enough to know these options — on 5.1 they'd abort the
-  // process. The item picker compensates for boundaries arriving early (and is
-  // harmless when they don't) — see TAIL_SKIP_SEC in streamChannelItem.
-  const burst = (await detectReadrateBurst())
-    ? ['-readrate_initial_burst', String(READ_BURST_SEC), '-readrate_catchup', '1.5']
-    : []
+  // Only whichever of these options the running ffmpeg knows — on 5.1 they'd
+  // abort the process, and not every 7.x build ships the catch-up rate. The
+  // item picker compensates for boundaries arriving early (and is harmless when
+  // they don't) — see TAIL_SKIP_SEC in streamChannelItem.
+  const burst = await readrateBurstArgs(READ_BURST_SEC)
   const args = [
     '-hide_banner', '-loglevel', 'error', '-nostdin',
     '-f', 'concat',

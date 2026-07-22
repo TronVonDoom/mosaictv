@@ -71,37 +71,67 @@ export async function resolveEncoder(hwaccel: HwAccel): Promise<string> {
 }
 
 // The outer concat process gets a connect-time buffer cushion from
-// -readrate_initial_burst (ffmpeg 6.1+) and -readrate_catchup (7.0+). These
-// don't exist on older ffmpeg (Debian bookworm ships 5.1), where passing an
-// unknown option makes ffmpeg exit immediately — which would kill every
-// stream. Probe once at first use; if unsupported, omit them and fall back to
-// plain -readrate (supported since 5.1), i.e. the previous behaviour.
-let readrateBurstCache: boolean | undefined
-export function detectReadrateBurst(): Promise<boolean> {
-  if (readrateBurstCache !== undefined) return Promise.resolve(readrateBurstCache)
+// -readrate_initial_burst (ffmpeg 6.1+) and, where present, a post-stall
+// catch-up rate from -readrate_catchup. Both only qualify an existing
+// -readrate, and older ffmpeg (Debian bookworm's 5.1) rejects them outright,
+// which would abort every stream. They also land on different schedules —
+// trixie's 7.1 has the burst but not the catch-up — so probe each on its own,
+// with -readrate set the way the stream path sets it, and use whichever the
+// running ffmpeg actually knows. A missing option just means a smaller
+// cushion, never a broken stream.
+function probeReadrateOption(flag: string, value: string): Promise<boolean> {
   return new Promise((resolve) => {
+    let stderr = ''
     const p = spawn('ffmpeg', [
       '-hide_banner',
-      // Both flags only qualify an existing -readrate. ffmpeg 6.1+ ignored them
-      // when it wasn't set, but 7.x rejects that combination outright (EINVAL,
-      // non-zero exit) — so a probe without -readrate false-negatives on the
-      // very versions that support the feature. Mirror how the stream path
-      // actually invokes them (see channel.ts / hls.ts).
-      '-readrate', '1.0',
-      '-readrate_initial_burst', '1',
-      '-readrate_catchup', '1.5',
+      '-readrate', '1.0', flag, value,
       '-f', 'lavfi', '-i', 'color=c=black:s=32x32:d=0.1',
       '-f', 'null', '-',
     ])
-    p.stderr?.on('data', () => {})
-    p.on('error', () => resolve((readrateBurstCache = false)))
+    p.stderr?.on('data', (d: Buffer) => { stderr += d.toString() })
+    p.on('error', () => resolve(false))
     p.on('close', (code) => {
-      const ok = code === 0
-      if (ok) log('info', 'ffmpeg', 'readrate burst/catchup supported — streams get a connect-time cushion')
-      else log('warn', 'ffmpeg', 'ffmpeg lacks -readrate_initial_burst/-readrate_catchup (needs 6.1/7.0+) — streaming with plain readrate')
-      resolve((readrateBurstCache = ok))
+      if (code !== 0) log('debug', 'ffmpeg', `ffmpeg rejected ${flag}`, stderr.trim().slice(-300))
+      resolve(code === 0)
     })
   })
+}
+
+let readrateBurstProbe: Promise<boolean> | undefined
+export function detectReadrateBurst(): Promise<boolean> {
+  if (!readrateBurstProbe) {
+    readrateBurstProbe = probeReadrateOption('-readrate_initial_burst', '1').then((ok) => {
+      log(ok ? 'info' : 'warn', 'ffmpeg', ok
+        ? 'readrate initial-burst supported — streams get a connect-time cushion'
+        : 'ffmpeg lacks -readrate_initial_burst (needs 6.1+) — streaming with plain readrate')
+      return ok
+    })
+  }
+  return readrateBurstProbe
+}
+
+let readrateCatchupProbe: Promise<boolean> | undefined
+export function detectReadrateCatchup(): Promise<boolean> {
+  if (!readrateCatchupProbe) {
+    readrateCatchupProbe = probeReadrateOption('-readrate_catchup', '1.5').then((ok) => {
+      if (!ok) log('info', 'ffmpeg', 'ffmpeg lacks -readrate_catchup — streams keep the initial burst, just no post-stall catch-up rate')
+      return ok
+    })
+  }
+  return readrateCatchupProbe
+}
+
+/**
+ * The readrate cushion flags this ffmpeg supports, for the given initial-burst
+ * length in seconds. The burst and the catch-up rate are probed independently,
+ * so a build that has one but not the other uses the one it has instead of
+ * dropping both.
+ */
+export async function readrateBurstArgs(burstSec: number): Promise<string[]> {
+  const args: string[] = []
+  if (await detectReadrateBurst()) args.push('-readrate_initial_burst', String(burstSec))
+  if (await detectReadrateCatchup()) args.push('-readrate_catchup', '1.5')
+  return args
 }
 
 // ---- GPU decode (NVDEC) -----------------------------------------------------

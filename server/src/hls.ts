@@ -5,7 +5,7 @@ import { hlsDir } from './paths.js'
 import { log } from './logs.js'
 import { closeSession, openSession, type Session } from './sessions.js'
 import { internalConcatUrl, ensureChannelReady } from './streaming/channel.js'
-import { detectReadrateBurst } from './streaming/capabilities.js'
+import { readrateBurstArgs } from './streaming/capabilities.js'
 
 // ── Shared HLS output ────────────────────────────────────────────────────────
 // One long-lived ffmpeg per channel muxes the channel's normalized item stream
@@ -66,7 +66,7 @@ async function startEncoder(n: number, st: ChannelState): Promise<HlsStatus> {
     st.session = session
     const tag = session.tag
 
-    const burst = (await detectReadrateBurst()) ? ['-readrate_initial_burst', '4', '-readrate_catchup', '1.5'] : []
+    const burst = await readrateBurstArgs(4)
     const args = [
       '-hide_banner', '-loglevel', 'error', '-nostdin',
       '-f', 'concat', '-safe', '0', '-protocol_whitelist', 'file,http,tcp',

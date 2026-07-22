@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.2 — Read-rate cushion detection (2026-07-21)
+
+- **The read-rate cushion is detected per option, so ffmpeg 7.1 actually gets
+  it.** 0.7.1 added the missing `-readrate` but still probed
+  `-readrate_initial_burst` and `-readrate_catchup` as a pair — and Debian
+  trixie's ffmpeg 7.1 doesn't ship `-readrate_catchup` at all, so the combined
+  probe failed on the option that isn't there and the burst was dropped along
+  with it. The two are now probed independently: this ffmpeg has the initial
+  burst, so streams get their connect-time cushion, and it simply skips the
+  catch-up rate it lacks. The probe also logs ffmpeg's own error when it
+  rejects an option, so the next mismatch says *why* instead of a bare "lacks"
+  line.
+
 ## 0.7.1 — Plex-direct tuner (2026-07-21)
 
 - **ffmpeg 7.x is recognized as supporting the connect-time read-rate burst.**
@@ -8,7 +21,8 @@
   combination; 7.x rejects it outright, so the probe exited non-zero and every
   stream fell back to plain read-rate — the very trixie image built to *gain*
   the burst cushion was detected as lacking it. The probe now sets `-readrate`
-  exactly as the streaming path does, so the feature is picked up.
+  the way the streaming path does — necessary, but as it turned out not
+  sufficient on its own (see 0.7.2).
 - **The log says which stream each line belongs to.** With two people watching,
   every ffmpeg exit and stall warning read as though it came from the same
   place. Each viewer connection now gets a tag — `V3 Plex`, `V4 Jellyfin`,
