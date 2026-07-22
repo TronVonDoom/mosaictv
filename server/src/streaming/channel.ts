@@ -154,6 +154,18 @@ export function viewerCount(channelNumber: number | null): number {
   return channelNumber != null ? viewers.get(channelNumber) ?? 0 : 0
 }
 
+// The last program (per channel number) whose encoder ran to a clean finish.
+// The item picker is stateless and re-derives "what's on air now" from the wall
+// clock on every concat reopen. That self-syncs a viewer to the schedule, but
+// it has one failure mode: if a per-item encoder briefly outruns the real-time
+// meter and finishes its program before the slot's wall-clock end, the very
+// next reopen lands back inside the SAME slot and re-serves the program's tail —
+// the "episode played twice" bug. Recording the finish lets the picker spot that
+// loop-back and hold the slot instead of replaying. Keyed by channel; the entry
+// is only meaningful until the slot's stopTime, after which the picker naturally
+// advances to the next item.
+const lastFinishedItem = new Map<number, { itemId: number; stopTimeMs: number }>()
+
 /** Stream black for `durSec` so the concat session survives a gap. */
 async function streamBlack(res: Response, p: StreamProfile, enc: string, durSec: number, why: string, channelNumber: number, session?: string): Promise<void> {
   log('warn', 'stream', `Channel ${channelNumber}: filling ${durSec.toFixed(1)}s with black — ${why}`, undefined, session)
@@ -161,6 +173,36 @@ async function streamBlack(res: Response, p: StreamProfile, enc: string, durSec:
   const proc = spawn('ffmpeg', blackArgs(p, enc, durSec))
   res.on('close', () => proc.kill('SIGKILL'))
   await pipeSegment(proc, res)
+  if (!res.writableEnded) res.end()
+}
+
+/**
+ * Hold the concat session for `durSec` with the channel's frosted station ident
+ * (built from the active logo), looped — a branded stand-in for a slot that has
+ * to be filled with no program to play (the replay guard). `wm` should be a
+ * none-mode config: the ident already carries the logo, so no overlay is added.
+ * Falls back to plain black if the ident can't be built.
+ */
+async function streamHold(res: Response, p: StreamProfile, enc: string, wm: WatermarkConfig, logo: string | undefined, durSec: number, why: string, channelNumber: number, session?: string): Promise<void> {
+  const clip =
+    (logo ? await ensureFrostedFiller(logo).catch(() => undefined) : undefined) ??
+    (await ensureAnimatedFiller().catch(() => undefined))
+  if (!clip || durSec < 0.5) {
+    await streamBlack(res, p, enc, durSec, why, channelNumber, session)
+    return
+  }
+  log('warn', 'stream', `Channel ${channelNumber}: holding ${durSec.toFixed(1)}s with station ident — ${why}`, undefined, session)
+  // Only our own generated H.264 idents are safe to hand the GPU decoder.
+  const hwDecode = enc === 'h264_nvenc' && path.basename(clip).startsWith('filler-') ? await nvdecIfReady('h264') : false
+  const seg: Segment = {
+    filePath: clip, offsetSec: 0, loop: true, durationSec: durSec, hasAudio: true,
+    logo, wmEpochSec: Date.now() / 1000, mediaWidth: FILLER_W, mediaHeight: FILLER_H,
+    isFiller: true, fadeInSec: 0, fadeOutSec: 0, hwDecode,
+  }
+  if (!res.headersSent) res.writeHead(200, { 'Content-Type': 'video/mp2t', 'Cache-Control': 'no-cache, no-store' })
+  const proc = spawn('ffmpeg', ffmpegArgs(seg, enc, wm, p))
+  res.on('close', () => proc.kill('SIGKILL'))
+  await pipeSegment(proc, res, `Ch ${channelNumber} hold`, session)
   if (!res.writableEnded) res.end()
 }
 
@@ -431,6 +473,21 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
     await streamBlack(res, profile, enc, 2, 'nothing on air (playout exhausted)', channelNumber, tag)
     return
   }
+  // Replay guard (see lastFinishedItem). If the program we just picked is the
+  // one that most recently ran to a clean finish and its slot hasn't elapsed,
+  // the encoder outran the wall clock and the concat has looped back onto the
+  // same slot. Re-serving it would replay the program's tail; instead hold black
+  // to the slot's end, capped so each reopen re-checks the clock — the schedule
+  // stays put and the next program still starts on time. Also covers a file that
+  // is simply shorter than its slot (finishes early at true EOF).
+  const finished = lastFinishedItem.get(channelNumber)
+  if (finished && finished.itemId === item.id && now.getTime() < finished.stopTimeMs) {
+    const remainingSec = Math.min((finished.stopTimeMs - now.getTime()) / 1000, 30)
+    const why = `${item.mediaItem?.title ?? 'program'} already finished this slot — holding to stay on schedule (encoder outran the clock)`
+    const holdLogo = await localLogo(activeLogo(channel, channel.timeBlocks, logoPath, item.startTime).raw)
+    await streamHold(res, profile, enc, { ...defaultWm, mode: 'none' as const }, holdLogo, remainingSec, why, channelNumber, tag)
+    return
+  }
   // Not on air yet (dead air between blocks on a blocks-only channel): hold
   // with black rather than airing the next program early. Capped so each
   // refetch re-evaluates against the clock.
@@ -671,6 +728,13 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
     log('warn', 'ffmpeg', `Channel ${channelNumber}: encoder slower than real-time (${wallS}s for a ${Math.round(segDur)}s segment, ${enc}) — likely cause of freezing`, detail, tag)
   } else {
     log('debug', 'ffmpeg', `Channel ${channelNumber}: segment done — ${label}`, `${detail}${result.stderr ? '\n' + result.stderr : ''}`, tag)
+  }
+  // A real program that reached its own end (clean exit, some output) while the
+  // consumer was still attached: record it so the replay guard can recognise the
+  // concat looping back onto this slot. A client that walked away leaves res
+  // destroyed / a non-zero code — that isn't the program finishing, so skip it.
+  if (!res.destroyed && result.code === 0 && result.bytes > 0 && item.kind !== 'filler' && mi) {
+    lastFinishedItem.set(channelNumber, { itemId: item.id, stopTimeMs: item.stopTime.getTime() })
   }
   // A segment that produced nothing would hand the concat demuxer an empty
   // entry, which it treats as fatal — the whole viewer session dies.

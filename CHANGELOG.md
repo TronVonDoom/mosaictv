@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.4 — No replayed episode endings (2026-07-22)
+
+- **A program no longer re-airs its own ending when its encoder briefly outruns
+  the clock.** Each program is encoded on demand and paced to real time by the
+  channel's outer stream; if a program happened to finish a little ahead of its
+  scheduled slot, the stream looped back onto that same slot and re-served the
+  program's tail — so a viewer saw the show reach its credits, cut to black, then
+  resume near the end and play through the credits a second time before the next
+  program began. (Seen on a 10-bit HEVC Rugrats double-episode that ran ~5
+  minutes ahead on the shared HLS stream; the source file was intact — the
+  encoder had simply raced the meter.) The stream now remembers when a program
+  runs to a clean finish and, if it's asked to air that same slot again before
+  the wall clock has reached its end, holds the remainder instead of replaying —
+  so the schedule stays put and the next program still starts on time. The same
+  guard also covers a file that is genuinely shorter than the slot it was given.
+- **A slot held that way plays the channel's station ident, not black** — the
+  frosted-glass logo card, looped for the remainder of the slot, falling back to
+  black only if the ident can't be built.
+
 ## 0.7.3 — Broadcast episodes (2026-07-22)
 
 - **Segments that aired as one program can be grouped into a single broadcast
