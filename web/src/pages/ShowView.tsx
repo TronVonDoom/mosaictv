@@ -5,6 +5,8 @@ import {
   artworkUrl,
   tmdbImage,
   type Airing,
+  type AiringAppearance,
+  type AiringSegmentInfo,
   type SeasonGroup,
   type ShowDetail,
 } from '../lib/api'
@@ -12,7 +14,7 @@ import { formatDuration, formatSize } from '../lib/format'
 import MediaDetailModal from '../components/MediaDetailModal'
 import PosterCard from '../components/PosterCard'
 import AiringsEditor from '../components/AiringsEditor'
-import { Badge, Button, cx } from '../components/ui'
+import { Badge, Banner, Button, cx } from '../components/ui'
 
 function seasonLabel(season: number | null): string {
   return season == null ? 'Unsorted' : `Season ${season}`
@@ -32,6 +34,8 @@ export default function ShowView() {
   const [editorDirty, setEditorDirty] = useState(false)
   // The show's defined broadcast episodes, for the "grouped" markers.
   const [airings, setAirings] = useState<Airing[]>([])
+  // Places episodes of THIS show are woven into OTHER shows' broadcast episodes.
+  const [appearances, setAppearances] = useState<AiringAppearance[]>([])
   // Only for the breadcrumb — the show payload doesn't carry its library's name.
   const [libraryName, setLibraryName] = useState<string | null>(null)
 
@@ -46,6 +50,10 @@ export default function ShowView() {
     setOpenSeason(undefined)
     api.showDetail(id, showTitle).then(setDetail).catch(() => {})
     reloadAirings()
+    api
+      .airingAppearances(id, showTitle)
+      .then((r) => setAppearances(r.appearances))
+      .catch(() => setAppearances([]))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, showTitle])
 
@@ -70,6 +78,52 @@ export default function ShowView() {
     return map
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [airings, current?.season])
+
+  // This show's episodes that air inside other shows, keyed by episode id (an
+  // episode borrowed into two hosts has two entries).
+  const borrowedInfo = useMemo(() => {
+    const map = new Map<number, AiringAppearance[]>()
+    for (const a of appearances) {
+      const arr = map.get(a.mediaItemId)
+      if (arr) arr.push(a)
+      else map.set(a.mediaItemId, [a])
+    }
+    return map
+  }, [appearances])
+
+  // Distinct host shows, for the show-level banner.
+  const borrowHosts = useMemo(
+    () => [...new Set(appearances.map((a) => a.host.showTitle))].sort(),
+    [appearances],
+  )
+
+  // Borrowed (foreign) segments woven into this season's broadcast episodes, hung
+  // under the owned episode they follow so the read list shows the full running
+  // order. `groupNo` matches the badge on the anchoring episode.
+  const foreignSegs = useMemo(() => {
+    const ownedIds = new Set(current?.episodes.map((e) => e.id) ?? [])
+    const map = new Map<number, { seg: AiringSegmentInfo; groupNo: number }[]>()
+    airings
+      .filter((a) => (a.season ?? null) === (current?.season ?? null))
+      .forEach((a, gi) => {
+        const firstOwned = a.segments.find((s) => ownedIds.has(s.mediaItemId))?.mediaItemId
+        let anchor: number | undefined
+        for (const s of a.segments) {
+          if (ownedIds.has(s.mediaItemId)) {
+            anchor = s.mediaItemId
+            continue
+          }
+          const key = anchor ?? firstOwned
+          if (key == null) continue // no owned episode to hang this segment on
+          const entry = { seg: s, groupNo: gi + 1 }
+          const arr = map.get(key)
+          if (arr) arr.push(entry)
+          else map.set(key, [entry])
+        }
+      })
+    return map
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [airings, current?.season, current?.episodes])
 
   const leaveGrouping = () => {
     if (editorDirty && !window.confirm('You have unsaved groupings. Leave without saving?')) return
@@ -135,6 +189,14 @@ export default function ShowView() {
         </div>
       )}
 
+      {appearances.length > 0 && (
+        <Banner tone="accent" className="mb-6 max-w-3xl">
+          {borrowedInfo.size} episode{borrowedInfo.size === 1 ? '' : 's'} of this show{' '}
+          {borrowedInfo.size === 1 ? 'airs' : 'air'} as segments inside other broadcasts:{' '}
+          <span className="text-ink">{borrowHosts.join(', ')}</span>.
+        </Banner>
+      )}
+
       {!detail ? (
         <div className="text-ink-faint text-sm">Loading…</div>
       ) : current ? (
@@ -176,9 +238,11 @@ export default function ShowView() {
           <div className="rounded-xl border border-edge overflow-hidden divide-y divide-edge/60">
             {current.episodes.map((ep) => {
               const g = groupInfo.get(ep.id)
+              const woven = foreignSegs.get(ep.id)
+              const airsIn = borrowedInfo.get(ep.id)
               return (
+              <div key={ep.id}>
               <button
-                key={ep.id}
                 onClick={() => setSelectedId(ep.id)}
                 className={cx(
                   'w-full flex items-center gap-4 px-4 py-3 hover:bg-surface/60 text-left transition-colors',
@@ -196,6 +260,11 @@ export default function ShowView() {
                         Broadcast ep {g.groupNo} · {g.index}/{g.size}
                       </Badge>
                     )}
+                    {airsIn && (
+                      <Badge tone="good" className="shrink-0">
+                        Airs in {[...new Set(airsIn.map((x) => x.host.showTitle))].join(', ')}
+                      </Badge>
+                    )}
                   </div>
                   <div className="text-xs text-ink-faint">
                     {ep.width && ep.height ? `${ep.width}×${ep.height}` : ''}
@@ -208,6 +277,28 @@ export default function ShowView() {
                   {formatDuration(ep.durationSec)}
                 </div>
               </button>
+              {woven?.map(({ seg, groupNo }) => (
+                <button
+                  key={'seg' + seg.mediaItemId}
+                  onClick={() => setSelectedId(seg.mediaItemId)}
+                  className="w-full flex items-center gap-3 pl-12 pr-4 py-2 hover:bg-surface/60 text-left transition-colors bg-indigo-500/5 border-l-2 border-indigo-500"
+                >
+                  <span className="text-ink-faint shrink-0">↳</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate text-sm text-ink-soft flex items-center gap-2">
+                      <span className="truncate">{seg.title}</span>
+                      <Badge tone="accent" className="shrink-0">
+                        {seg.showTitle ?? 'Other show'}
+                      </Badge>
+                    </div>
+                    <div className="text-xs text-ink-faint">Woven into broadcast ep {groupNo}</div>
+                  </div>
+                  <span className="text-sm text-ink-muted shrink-0">
+                    {formatDuration(seg.durationSec)}
+                  </span>
+                </button>
+              ))}
+              </div>
               )
             })}
           </div>

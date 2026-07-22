@@ -127,6 +127,17 @@ export type Airing = {
   segments: AiringSegmentInfo[]
 }
 
+// The reverse view of an airing: one of THIS show's episodes airing as a segment
+// inside another show's broadcast episode (Secret Squirrel borrowed into 2 Stupid
+// Dogs). `mediaItemId` is this show's episode; `host` is the borrowing airing.
+export type AiringAppearance = {
+  mediaItemId: number
+  season: number | null
+  episode: number | null
+  title: string
+  host: { showTitle: string; airingId: number; number: number; season: number | null }
+}
+
 export type WatermarkConfig = {
   mode: 'permanent' | 'intermittent' | 'none'
   position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
@@ -516,6 +527,11 @@ export const api = {
   airings: (libraryId: number, show: string) =>
     request<{ airings: Airing[] }>(
       `/api/airings?libraryId=${libraryId}&show=${encodeURIComponent(show)}`,
+    ),
+  // Other shows' broadcast episodes that borrow one of THIS show's episodes.
+  airingAppearances: (libraryId: number, show: string) =>
+    request<{ appearances: AiringAppearance[] }>(
+      `/api/airings/appearances?libraryId=${libraryId}&show=${encodeURIComponent(show)}`,
     ),
   // Episodes across the whole library, for inserting a segment from another show.
   searchAiringEpisodes: (libraryId: number, q: string) =>

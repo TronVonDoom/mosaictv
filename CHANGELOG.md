@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.7.3 — Broadcast episodes (2026-07-22)
+
+- **Segments that aired as one program can be grouped into a single broadcast
+  episode.** Shorts-based cartoons — Dexter's Laboratory's three segments, 2
+  Stupid Dogs — were scanned as separate files and played, shuffled and listed
+  as separate programs. On a show's season you can now open **Group broadcast
+  episodes** and fold the parts that aired together into one unit: they play
+  back-to-back, count as a single program to block-packing, shuffle and the
+  guide, and show as one entry. Grouping is metadata only — your files keep
+  their real S/E numbering and nothing on disk is touched — and a **Suggest
+  groupings** pass packs consecutive episodes toward an 11/22/30-minute slot to
+  start from.
+- **A broadcast episode can borrow a segment from another show.** Some blocks
+  wove a short from a different series in — a Secret Squirrel short inside 2
+  Stupid Dogs. **Add segment from another show** searches the whole library and
+  drops the chosen short into the running order, where you reorder it against
+  the rest. It then plays inside that broadcast episode wherever the host show
+  airs.
+- **You can see what's grouped without re-opening the editor.** A season's
+  episode list now marks each grouped file — *Broadcast ep 3 · 1/2* — and a
+  borrowed short renders inline, indented beneath the episode it followed, so
+  the full running order reads at a glance instead of only inside the editor.
+- **A show tells you when its episodes air inside other shows.** Viewing Secret
+  Squirrel, a banner and a per-episode **Airs in 2 Stupid Dogs** badge now flag
+  the shorts that only air woven into another series' broadcast — the reverse of
+  the borrowing you set up on the host, so a borrowed short is visible from both
+  sides.
+- **A short borrowed into more than one show airs inside each.** Reusing the
+  same segment across two hosts — Secret Squirrel in 2 Stupid Dogs *and* a
+  custom block built around Dexter's Laboratory — now plays it in both, rather
+  than the schedule silently dropping it from the second. An episode a broadcast
+  episode has already claimed still won't also air loose on its own, so a
+  grouped multi-part episode never re-airs as its separate parts; and a borrowed
+  short now wins over its standalone copy deterministically instead of the
+  outcome depending on rotation order.
+
 ## 0.7.2 — Read-rate cushion detection (2026-07-21)
 
 - **The read-rate cushion is detected per option, so ffmpeg 7.1 actually gets

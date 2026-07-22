@@ -84,6 +84,43 @@ airingsRouter.get('/', async (req, res) => {
   res.json({ airings: airings.map(airingDto) })
 })
 
+// GET /api/airings/appearances?libraryId=&show=
+// The reverse of the owned-airings query: every place an episode of THIS show is
+// borrowed as a segment inside ANOTHER show's broadcast episode (Secret Squirrel
+// woven into 2 Stupid Dogs). One row per (my episode, host airing) — an episode
+// borrowed into two hosts yields two rows. Cheap: AiringSegment is indexed by
+// mediaItemId. Lets the show's own page flag which of its episodes air elsewhere.
+airingsRouter.get('/appearances', async (req, res) => {
+  const libraryId = Number(req.query.libraryId)
+  const show = typeof req.query.show === 'string' ? req.query.show : ''
+  if (!Number.isFinite(libraryId) || !show) {
+    return res.status(400).json({ error: 'libraryId and show are required' })
+  }
+  const segs = await prisma.airingSegment.findMany({
+    where: {
+      mediaItem: { libraryId, showTitle: show },
+      airing: { libraryId, showTitle: { not: show } },
+    },
+    include: {
+      mediaItem: { select: SEGMENT_SELECT },
+      airing: { select: { id: true, showTitle: true, number: true, season: true } },
+    },
+  })
+  const appearances = segs.map((s) => ({
+    mediaItemId: s.mediaItemId,
+    season: s.mediaItem.season,
+    episode: s.mediaItem.episode,
+    title: s.mediaItem.title,
+    host: {
+      showTitle: s.airing.showTitle,
+      airingId: s.airing.id,
+      number: s.airing.number,
+      season: s.airing.season,
+    },
+  }))
+  res.json({ appearances })
+})
+
 // GET /api/airings/search-episodes?libraryId=&q=&limit=
 // Episodes across every show in the library, for inserting a segment from
 // another show into an airing (the 2 Stupid Dogs / Secret Squirrel case).

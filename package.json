@@ -1,6 +1,6 @@
 {
   "name": "mosaictv",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "private": true,
   "description": "Turn your media library into scheduled 24/7 live TV channels with bumpers, filler, overlays, and M3U/XMLTV output.",
   "scripts": {

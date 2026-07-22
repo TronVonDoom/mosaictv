@@ -105,22 +105,29 @@ function hasFilter(c: CollectionFilter): boolean {
  * claimed by an airing stays a unit of one. Units come back in broadcast order
  * (by the first segment's season/episode). A segment whose file is missing or
  * has no duration is skipped.
+ *
+ * A file may legitimately appear in more than one airing (a short borrowed into
+ * two different hosts airs inside each), so airings are NOT deduped against each
+ * other — reuse is intentional. `claimed` only suppresses an episode from ALSO
+ * airing standalone once an airing has consumed it (that's what keeps a grouped
+ * multi-part episode from re-airing as its loose parts). Because airings are
+ * folded before the standalone pass, a borrowed short always wins over its own
+ * standalone copy rather than the outcome depending on member order.
  */
-function groupIntoAirings(memberEpisodes: MediaItem[], airings: AiringWithSegments[]): ProgramUnit[] {
-  const used = new Set<number>()
+export function groupIntoAirings(memberEpisodes: MediaItem[], airings: AiringWithSegments[]): ProgramUnit[] {
+  const claimed = new Set<number>()
   const units: ProgramUnit[] = []
   for (const a of airings) {
     const items: MediaItem[] = []
     for (const s of [...a.segments].sort((x, y) => x.order - y.order)) {
       const m = s.mediaItem
       if (!m || m.missing || !(m.durationSec && m.durationSec > 0)) continue
-      if (used.has(m.id)) continue // a file belongs to at most one airing
       items.push(m)
-      used.add(m.id)
+      claimed.add(m.id)
     }
     if (items.length > 0) units.push(items)
   }
-  for (const e of memberEpisodes) if (!used.has(e.id)) units.push([e])
+  for (const e of memberEpisodes) if (!claimed.has(e.id)) units.push([e])
   return units.sort(byUnit)
 }
 
