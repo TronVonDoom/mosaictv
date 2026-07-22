@@ -22,7 +22,6 @@ function episodeWhere(libraryId: number, show: string, season: number | null | u
   return {
     type: 'episode',
     missing: false,
-    durationSec: { gt: 0 },
     libraryId,
     showTitle: show,
     ...(season === undefined ? {} : { season }),
@@ -65,7 +64,8 @@ airingsRouter.get('/suggest', async (req, res) => {
     return res.status(400).json({ error: 'libraryId and show are required' })
   }
   const eps = await prisma.mediaItem.findMany({
-    where: episodeWhere(libraryId, show, season),
+    // Only packable episodes (the suggester needs real durations).
+    where: { ...episodeWhere(libraryId, show, season), durationSec: { gt: 0 } },
     orderBy: [{ season: 'asc' }, { episode: 'asc' }],
     select: { id: true, durationSec: true },
   })

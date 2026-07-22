@@ -4,6 +4,7 @@ import {
   api,
   artworkUrl,
   tmdbImage,
+  type Airing,
   type SeasonGroup,
   type ShowDetail,
 } from '../lib/api'
@@ -11,7 +12,7 @@ import { formatDuration, formatSize } from '../lib/format'
 import MediaDetailModal from '../components/MediaDetailModal'
 import PosterCard from '../components/PosterCard'
 import AiringsEditor from '../components/AiringsEditor'
-import { Button } from '../components/ui'
+import { Badge, Button, cx } from '../components/ui'
 
 function seasonLabel(season: number | null): string {
   return season == null ? 'Unsorted' : `Season ${season}`
@@ -27,17 +28,54 @@ export default function ShowView() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   // Toggles the season view between the episode list and the airings editor.
   const [grouping, setGrouping] = useState(false)
+  // True while the editor has unsaved groupings — guards leaving grouping mode.
+  const [editorDirty, setEditorDirty] = useState(false)
+  // The show's defined broadcast episodes, for the "grouped" markers.
+  const [airings, setAirings] = useState<Airing[]>([])
   // Only for the breadcrumb — the show payload doesn't carry its library's name.
   const [libraryName, setLibraryName] = useState<string | null>(null)
+
+  const reloadAirings = () =>
+    api
+      .airings(id, showTitle)
+      .then((r) => setAirings(r.airings))
+      .catch(() => setAirings([]))
 
   useEffect(() => {
     if (!showTitle) return
     setOpenSeason(undefined)
     api.showDetail(id, showTitle).then(setDetail).catch(() => {})
+    reloadAirings()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, showTitle])
 
   // Leave grouping mode whenever the chosen season changes.
   useEffect(() => setGrouping(false), [openSeason])
+
+  const current: SeasonGroup | undefined = useMemo(
+    () => detail?.seasons.find((s) => s.season === openSeason),
+    [detail, openSeason],
+  )
+
+  // Which broadcast episode each grouped file belongs to, for the current season.
+  const groupInfo = useMemo(() => {
+    const map = new Map<number, { groupNo: number; index: number; size: number }>()
+    airings
+      .filter((a) => (a.season ?? null) === (current?.season ?? null))
+      .forEach((a, gi) =>
+        a.segmentIds.forEach((mid, idx) =>
+          map.set(mid, { groupNo: gi + 1, index: idx + 1, size: a.segmentIds.length }),
+        ),
+      )
+    return map
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [airings, current?.season])
+
+  const leaveGrouping = () => {
+    if (editorDirty && !window.confirm('You have unsaved groupings. Leave without saving?')) return
+    setGrouping(false)
+    setEditorDirty(false)
+  }
 
   useEffect(() => {
     api
@@ -45,11 +83,6 @@ export default function ShowView() {
       .then((ls) => setLibraryName(ls.find((l) => l.id === id)?.name ?? null))
       .catch(() => {})
   }, [id])
-
-  const current: SeasonGroup | undefined = useMemo(
-    () => detail?.seasons.find((s) => s.season === openSeason),
-    [detail, openSeason],
-  )
 
   return (
     <div>
@@ -114,13 +147,21 @@ export default function ShowView() {
             >
               ← All seasons
             </button>
-            <Button
-              size="sm"
-              variant={grouping ? 'primary' : 'secondary'}
-              onClick={() => setGrouping((g) => !g)}
-            >
-              {grouping ? 'Done grouping' : 'Group broadcast episodes'}
-            </Button>
+            <div className="flex items-center gap-2">
+              {!grouping && groupInfo.size > 0 && (
+                <Badge tone="accent">
+                  {new Set([...groupInfo.values()].map((g) => g.groupNo)).size} broadcast episode
+                  {new Set([...groupInfo.values()].map((g) => g.groupNo)).size === 1 ? '' : 's'}
+                </Badge>
+              )}
+              <Button
+                size="sm"
+                variant={grouping ? 'primary' : 'secondary'}
+                onClick={() => (grouping ? leaveGrouping() : setGrouping(true))}
+              >
+                {grouping ? 'Done grouping' : 'Group broadcast episodes'}
+              </Button>
+            </div>
           </div>
           {grouping ? (
             <AiringsEditor
@@ -128,20 +169,34 @@ export default function ShowView() {
               show={showTitle}
               season={current.season}
               episodes={current.episodes}
+              onSaved={reloadAirings}
+              onDirtyChange={setEditorDirty}
             />
           ) : (
           <div className="rounded-xl border border-edge overflow-hidden divide-y divide-edge/60">
-            {current.episodes.map((ep) => (
+            {current.episodes.map((ep) => {
+              const g = groupInfo.get(ep.id)
+              return (
               <button
                 key={ep.id}
                 onClick={() => setSelectedId(ep.id)}
-                className="w-full flex items-center gap-4 px-4 py-3 hover:bg-surface/60 text-left transition-colors"
+                className={cx(
+                  'w-full flex items-center gap-4 px-4 py-3 hover:bg-surface/60 text-left transition-colors',
+                  g && 'border-l-2 border-indigo-500 bg-indigo-500/5',
+                )}
               >
                 <div className="w-10 text-center text-ink-faint font-mono text-sm shrink-0">
                   {ep.episode != null ? String(ep.episode).padStart(2, '0') : '—'}
                 </div>
                 <div className={'flex-1 min-w-0 ' + (ep.missing ? 'opacity-50' : '')}>
-                  <div className="truncate text-ink">{ep.title}</div>
+                  <div className="truncate text-ink flex items-center gap-2">
+                    <span className="truncate">{ep.title}</span>
+                    {g && (
+                      <Badge tone="accent" className="shrink-0">
+                        Broadcast ep {g.groupNo} · {g.index}/{g.size}
+                      </Badge>
+                    )}
+                  </div>
                   <div className="text-xs text-ink-faint">
                     {ep.width && ep.height ? `${ep.width}×${ep.height}` : ''}
                     {ep.videoCodec ? ` · ${ep.videoCodec}` : ''}
@@ -153,7 +208,8 @@ export default function ShowView() {
                   {formatDuration(ep.durationSec)}
                 </div>
               </button>
-            ))}
+              )
+            })}
           </div>
           )}
         </div>

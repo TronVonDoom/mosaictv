@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api, type Airing, type MediaItem } from '../lib/api'
 import { episodeCode, formatDuration } from '../lib/format'
 import { toast } from '../lib/toast'
-import { Button } from './ui'
+import { Badge, Button, cx, Input } from './ui'
 
 const TARGET_PRESETS = [
   { label: '11 min', sec: 11 * 60 },
@@ -16,6 +16,10 @@ type Props = {
   season: number | null
   /** This season's episodes, already in episode order. */
   episodes: MediaItem[]
+  /** Called after a successful save, so the parent can refresh its markers. */
+  onSaved?: () => void
+  /** Reports whether there are unsaved groupings, to guard leaving the editor. */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 /**
@@ -24,7 +28,14 @@ type Props = {
  * until Save; a block of one is just a normal episode and isn't stored. Grouping
  * is metadata only: the underlying files keep their real S/E numbering.
  */
-export default function AiringsEditor({ libraryId, show, season, episodes }: Props) {
+export default function AiringsEditor({
+  libraryId,
+  show,
+  season,
+  episodes,
+  onSaved,
+  onDirtyChange,
+}: Props) {
   const epById = useMemo(() => new Map(episodes.map((e) => [e.id, e])), [episodes])
   const orderIndex = useMemo(() => new Map(episodes.map((e, i) => [e.id, i])), [episodes])
 
@@ -32,6 +43,8 @@ export default function AiringsEditor({ libraryId, show, season, episodes }: Pro
   const [savedGroups, setSavedGroups] = useState<number[][]>([])
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [targetSec, setTargetSec] = useState(22 * 60)
+  // Custom target in minutes as typed; '' means "use a preset".
+  const [customMin, setCustomMin] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -90,6 +103,8 @@ export default function AiringsEditor({ libraryId, show, season, episodes }: Pro
     return JSON.stringify(cur) !== JSON.stringify(sav)
   }, [blocks, savedGroups])
 
+  useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange])
+
   const toggleSel = (id: number) =>
     setSelected((s) => {
       const n = new Set(s)
@@ -146,6 +161,7 @@ export default function AiringsEditor({ libraryId, show, season, episodes }: Pro
       .then(() => {
         toast.success('Broadcast episodes saved')
         setSavedGroups(groups)
+        onSaved?.()
       })
       .catch(() => toast.error('Could not save'))
       .finally(() => setSaving(false))
@@ -166,22 +182,47 @@ export default function AiringsEditor({ libraryId, show, season, episodes }: Pro
         builds its schedule.</span>
       </p>
 
-      <div className="flex flex-wrap items-center gap-2 mb-4">
+      <div className="flex flex-wrap items-center gap-2 mb-3">
         <span className="text-sm text-ink-muted">Target length</span>
         {TARGET_PRESETS.map((p) => (
           <Button
             key={p.sec}
             size="sm"
-            variant={targetSec === p.sec ? 'primary' : 'secondary'}
-            onClick={() => setTargetSec(p.sec)}
+            variant={customMin === '' && targetSec === p.sec ? 'primary' : 'secondary'}
+            onClick={() => {
+              setCustomMin('')
+              setTargetSec(p.sec)
+            }}
           >
             {p.label}
           </Button>
         ))}
+        <span className="text-sm text-ink-muted ml-1">Custom</span>
+        <Input
+          type="number"
+          min={1}
+          placeholder="min"
+          value={customMin}
+          onChange={(e) => {
+            const v = e.target.value
+            setCustomMin(v)
+            const n = Number(v)
+            if (n > 0) setTargetSec(Math.round(n * 60))
+          }}
+          className={cx('w-20', customMin !== '' && 'border-indigo-500')}
+        />
         <Button size="sm" variant="secondary" onClick={suggest}>
           Suggest groupings
         </Button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <span className="text-xs text-ink-faint">
+          {blocks.length} program{blocks.length === 1 ? '' : 's'} · {groupCount} broadcast episode
+          {groupCount === 1 ? '' : 's'}
+        </span>
         <span className="flex-1" />
+        {dirty && <Badge tone="warn">Unsaved changes</Badge>}
         <Button size="sm" variant="secondary" disabled={selected.size < 2} onClick={groupSelected}>
           Group selected{selected.size > 0 ? ` (${selected.size})` : ''}
         </Button>
@@ -191,11 +232,6 @@ export default function AiringsEditor({ libraryId, show, season, episodes }: Pro
         <Button size="sm" variant="primary" disabled={!dirty || saving} onClick={save}>
           {saving ? 'Saving…' : 'Save'}
         </Button>
-      </div>
-
-      <div className="text-xs text-ink-faint mb-2">
-        {blocks.length} program{blocks.length === 1 ? '' : 's'} · {groupCount} broadcast episode
-        {groupCount === 1 ? '' : 's'}
       </div>
 
       <div className="space-y-2">
