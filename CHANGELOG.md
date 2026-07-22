@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.1 — Plex-direct tuner (2026-07-21)
 
 - **ffmpeg 7.x is recognized as supporting the connect-time read-rate burst.**
   The capability probe tested `-readrate_initial_burst` / `-readrate_catchup`
