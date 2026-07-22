@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **ffmpeg 7.x is recognized as supporting the connect-time read-rate burst.**
+  The capability probe tested `-readrate_initial_burst` / `-readrate_catchup`
+  without the `-readrate` they qualify. ffmpeg 6.1 quietly ignored that
+  combination; 7.x rejects it outright, so the probe exited non-zero and every
+  stream fell back to plain read-rate — the very trixie image built to *gain*
+  the burst cushion was detected as lacking it. The probe now sets `-readrate`
+  exactly as the streaming path does, so the feature is picked up.
 - **The log says which stream each line belongs to.** With two people watching,
   every ffmpeg exit and stall warning read as though it came from the same
   place. Each viewer connection now gets a tag — `V3 Plex`, `V4 Jellyfin`,

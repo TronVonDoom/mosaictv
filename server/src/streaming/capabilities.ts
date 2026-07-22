@@ -82,6 +82,12 @@ export function detectReadrateBurst(): Promise<boolean> {
   return new Promise((resolve) => {
     const p = spawn('ffmpeg', [
       '-hide_banner',
+      // Both flags only qualify an existing -readrate. ffmpeg 6.1+ ignored them
+      // when it wasn't set, but 7.x rejects that combination outright (EINVAL,
+      // non-zero exit) — so a probe without -readrate false-negatives on the
+      // very versions that support the feature. Mirror how the stream path
+      // actually invokes them (see channel.ts / hls.ts).
+      '-readrate', '1.0',
       '-readrate_initial_burst', '1',
       '-readrate_catchup', '1.5',
       '-f', 'lavfi', '-i', 'color=c=black:s=32x32:d=0.1',
