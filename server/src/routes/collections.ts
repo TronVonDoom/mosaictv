@@ -150,7 +150,8 @@ collectionsRouter.get('/:id/preview', async (req, res) => {
   // No explicit order = show what the collection plays by default.
   const order = asPlaybackOrder(req.query.order ?? c.defaultOrder)
   const list = await resolveCollection(c, order, id)
-  const sample = Array.from({ length: Math.min(12, list.length) }, (_, i) => list.at(i))
+  // `count` is programs (units); each sample row is a unit's first segment.
+  const sample = Array.from({ length: Math.min(12, list.length) }, (_, i) => list.at(i)[0])
   res.json({ count: list.length, order, sample })
 })
 

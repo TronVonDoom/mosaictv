@@ -1,5 +1,7 @@
-import type { Prisma, MediaItem } from '@prisma/client'
+import type { Prisma, MediaItem, Airing, AiringSegment } from '@prisma/client'
 import { prisma } from './db.js'
+
+type AiringWithSegments = Airing & { segments: AiringSegment[] }
 
 export type CollectionFilter = {
   libraryId?: number | null
@@ -51,7 +53,17 @@ export function effectiveOrder(
 }
 
 /**
- * A collection resolved into an ordered program list that repeats forever.
+ * One program on the timeline: an ordered list of one or more media files that
+ * always air back-to-back as a single unit. A normal episode or movie is a unit
+ * of length 1; a multi-part airing (Dexter's three segments) is longer. Nothing
+ * downstream of the resolver treats the segments individually — block packing,
+ * filler, shuffle and the guide all reason about the whole unit.
+ */
+export type ProgramUnit = MediaItem[]
+
+/**
+ * A collection resolved into an ordered list of program UNITS that repeats
+ * forever.
  *
  * Playout stores only a numeric position per collection, so `at(pos)` must be a
  * pure function of that position: an incremental rebuild re-derives the exact
@@ -60,7 +72,7 @@ export function effectiveOrder(
  */
 export type ResolvedList = {
   length: number
-  at(pos: number): MediaItem
+  at(pos: number): ProgramUnit
 }
 
 // Only playable items: present on disk and with a known duration.
@@ -84,14 +96,51 @@ function hasFilter(c: CollectionFilter): boolean {
 }
 
 /**
- * The collection's members expanded into per-member blocks, in the order the
- * user arranged them: a "show" or "season" member becomes its episodes in
- * season/episode order, a "movie"/"episode" member a single item. The smart
- * filter (which has no user-defined position) contributes one chronological
- * block at the end.
+ * Fold a show's episodes into program units using the airings that reference
+ * them: each airing becomes one ordered multi-segment unit, and every episode
+ * not claimed by an airing stays a unit of one. The result is in broadcast
+ * order (by the first segment's season/episode). Airings are matched by the
+ * episode ids they contain, so this works no matter how the show/season was
+ * selected, and a segment whose file is missing is simply dropped.
  */
-async function resolveGroups(c: CollectionWithItems): Promise<MediaItem[][]> {
-  const groups: MediaItem[][] = []
+function groupIntoAirings(episodes: MediaItem[], airings: AiringWithSegments[]): ProgramUnit[] {
+  const byId = new Map(episodes.map((e) => [e.id, e]))
+  const used = new Set<number>()
+  const units: ProgramUnit[] = []
+  for (const a of airings) {
+    const items: MediaItem[] = []
+    for (const s of [...a.segments].sort((x, y) => x.order - y.order)) {
+      if (used.has(s.mediaItemId)) continue // an episode belongs to at most one airing
+      const m = byId.get(s.mediaItemId)
+      if (m) {
+        items.push(m)
+        used.add(m.id)
+      }
+    }
+    if (items.length > 0) units.push(items)
+  }
+  for (const e of episodes) if (!used.has(e.id)) units.push([e])
+  return units.sort(byUnit)
+}
+
+/** The airings that group any of the given episodes, with their segments. */
+async function airingsForEpisodes(episodeIds: number[]): Promise<AiringWithSegments[]> {
+  if (episodeIds.length === 0) return []
+  return prisma.airing.findMany({
+    where: { segments: { some: { mediaItemId: { in: episodeIds } } } },
+    include: { segments: { orderBy: { order: 'asc' } } },
+  })
+}
+
+/**
+ * The collection's members expanded into program units, in the order the user
+ * arranged them: a "show"/"season" member becomes its episodes folded into
+ * airings (multi-part episodes as one unit, the rest as units of one), a
+ * "movie"/"episode" member a single unit. The smart filter (which has no
+ * user-defined position) contributes its units at the end.
+ */
+async function resolveUnitGroups(c: CollectionWithItems): Promise<ProgramUnit[]> {
+  const out: ProgramUnit[] = []
   // Sort defensively: not every caller's `include` sets an orderBy.
   const members = [...c.items].sort((a, b) => a.order - b.order || a.id - b.id)
 
@@ -119,30 +168,43 @@ async function resolveGroups(c: CollectionWithItems): Promise<MediaItem[][]> {
           ...(it.kind === 'season' && it.season != null ? { season: it.season } : {}),
         },
       })
-      if (eps.length > 0) groups.push(eps.sort(byEpisode))
+      if (eps.length === 0) continue
+      const airings = await airingsForEpisodes(eps.map((e) => e.id))
+      for (const u of groupIntoAirings(eps, airings)) out.push(u)
     } else if ((it.kind === 'movie' || it.kind === 'episode') && it.mediaItemId != null) {
       const m = singleById.get(it.mediaItemId)
-      if (m) groups.push([m])
+      if (m) out.push([m])
     }
   }
 
   if (hasFilter(c)) {
-    groups.push(chronological(await prisma.mediaItem.findMany({ where: collectionWhere(c) })))
+    const filtered = await prisma.mediaItem.findMany({ where: collectionWhere(c) })
+    const eps = filtered.filter((m) => m.type === 'episode' && m.showTitle)
+    const others = filtered.filter((m) => !(m.type === 'episode' && m.showTitle))
+    const airings = await airingsForEpisodes(eps.map((e) => e.id))
+    for (const u of groupIntoAirings(eps, airings)) out.push(u)
+    for (const m of others.sort((a, b) => a.title.localeCompare(b.title))) out.push([m])
   }
-  return groups
+  return out
 }
 
 /**
- * Union of all hand-picked members and the smart filter (if any), deduped —
- * in hand-picked order, which is what the "custom" playback order airs. The
- * other orders re-sort this list.
+ * Union of all hand-picked members and the smart filter (if any) as program
+ * units, deduped in hand-picked order — what the "custom" playback order airs.
+ * The other orders re-sort this list. First occurrence of a file wins, so an
+ * item pulled in twice (member + filter) stays where the user first put it; a
+ * unit reduced to nothing by dedup is dropped.
  */
-export async function resolveMembers(c: CollectionWithItems): Promise<MediaItem[]> {
-  const map = new Map<number, MediaItem>()
-  // First occurrence wins: a Map keeps the original insertion position, so an
-  // item pulled in twice (member + filter) stays where the user put it.
-  for (const g of await resolveGroups(c)) for (const m of g) map.set(m.id, m)
-  return [...map.values()]
+export async function resolveUnits(c: CollectionWithItems): Promise<ProgramUnit[]> {
+  const seen = new Set<number>()
+  const out: ProgramUnit[] = []
+  for (const u of await resolveUnitGroups(c)) {
+    const items = u.filter((m) => !seen.has(m.id))
+    if (items.length === 0) continue
+    for (const m of items) seen.add(m.id)
+    out.push(items)
+  }
+  return out
 }
 
 /**
@@ -194,13 +256,13 @@ function seededShuffle<T extends { id: number }>(arr: T[], seed: number): T[] {
     .map((o) => o.x)
 }
 
-/** A fixed order, looped: position 0 and position `length` are the same item. */
-function looped(items: MediaItem[]): ResolvedList {
+/** A fixed order, looped: position 0 and position `length` are the same unit. */
+function looped(units: ProgramUnit[]): ResolvedList {
   return {
-    length: items.length,
+    length: units.length,
     at(pos) {
-      if (items.length === 0) throw new Error('empty collection')
-      return items[pos % items.length]
+      if (units.length === 0) throw new Error('empty collection')
+      return units[pos % units.length]
     },
   }
 }
@@ -211,9 +273,9 @@ function looped(items: MediaItem[]): ResolvedList {
  * rebuilds — but a viewer who watches the collection twice through does not get
  * the same running order twice, which a single fixed seed would give.
  */
-function redealt(length: number, deal: (cycle: number) => MediaItem[]): ResolvedList {
-  const cache = new Map<number, MediaItem[]>()
-  const cycle = (n: number): MediaItem[] => {
+function redealt(length: number, deal: (cycle: number) => ProgramUnit[]): ResolvedList {
+  const cache = new Map<number, ProgramUnit[]>()
+  const cycle = (n: number): ProgramUnit[] => {
     let perm = cache.get(n)
     if (!perm) {
       perm = deal(n)
@@ -232,9 +294,17 @@ function redealt(length: number, deal: (cycle: number) => MediaItem[]): Resolved
   }
 }
 
-/** Every item in random order, re-dealt each pass. */
-function shuffled(items: MediaItem[], seed: number): ResolvedList {
-  return redealt(items.length, (cycle) => seededShuffle(items, (seed ^ hash(cycle)) >>> 0))
+// A unit's identity for hashing/sorting is its first segment.
+function seededShuffleUnits(units: ProgramUnit[], seed: number): ProgramUnit[] {
+  return [...units]
+    .map((u) => ({ u, k: hash(u[0].id ^ seed) }))
+    .sort((a, b) => a.k - b.k)
+    .map((o) => o.u)
+}
+
+/** Every unit in random order, re-dealt each pass. */
+function shuffled(units: ProgramUnit[], seed: number): ResolvedList {
+  return redealt(units.length, (cycle) => seededShuffleUnits(units, (seed ^ hash(cycle)) >>> 0))
 }
 
 /**
@@ -242,11 +312,11 @@ function shuffled(items: MediaItem[], seed: number): ResolvedList {
  * marathon of one show, then a marathon of another. Which show is up next is
  * re-dealt each pass; the episodes never jump around.
  */
-function shuffledShows(items: MediaItem[], seed: number): ResolvedList {
-  const groups = showGroups(items)
-  return redealt(items.length, (cycle) =>
+function shuffledShows(units: ProgramUnit[], seed: number): ResolvedList {
+  const groups = showGroups(units)
+  return redealt(units.length, (cycle) =>
     seededShuffle(
-      groups.map((g) => ({ id: g[0].id, g })),
+      groups.map((g) => ({ id: g[0][0].id, g })),
       (seed ^ hash(cycle)) >>> 0,
     ).flatMap((o) => o.g),
   )
@@ -262,39 +332,45 @@ function byEpisode(a: MediaItem, b: MediaItem): number {
   )
 }
 
-function chronological(items: MediaItem[]): MediaItem[] {
-  return [...items].sort(
-    (a, b) => (a.showTitle ?? '').localeCompare(b.showTitle ?? '') || byEpisode(a, b),
+// Order units by their first segment's episode key.
+function byUnit(a: ProgramUnit, b: ProgramUnit): number {
+  return byEpisode(a[0], b[0])
+}
+
+function chronological(units: ProgramUnit[]): ProgramUnit[] {
+  return [...units].sort(
+    (a, b) => (a[0].showTitle ?? '').localeCompare(b[0].showTitle ?? '') || byEpisode(a[0], b[0]),
   )
 }
 
 /**
- * Split into per-show groups, each internally in episode order. Everything
- * without a show (movies, one-offs) forms ONE group rather than a group each:
+ * Split units into per-show groups, each internally in episode order. Units
+ * without a show (movies, one-offs) form ONE group rather than a group each:
  * as separate groups they'd swamp a round-robin, so a collection of one show
  * plus fifty movies would give the show 1/51 of its airtime instead of half.
- * Groups come back in a stable, name-sorted order for callers to use or reorder.
+ * A multi-part airing is keyed by its first segment's show. Groups come back in
+ * a stable, name-sorted order for callers to use or reorder.
  */
-function showGroups(items: MediaItem[]): MediaItem[][] {
-  const groups = new Map<string, MediaItem[]>()
-  for (const m of items) {
-    const key = m.showTitle ? 'show:' + m.showTitle : 'movies'
+function showGroups(units: ProgramUnit[]): ProgramUnit[][] {
+  const groups = new Map<string, ProgramUnit[]>()
+  for (const u of units) {
+    const key = u[0].showTitle ? 'show:' + u[0].showTitle : 'movies'
     const g = groups.get(key)
-    if (g) g.push(m)
-    else groups.set(key, [m])
+    if (g) g.push(u)
+    else groups.set(key, [u])
   }
   return [...groups.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([, arr]) => arr.sort(byEpisode))
+    .map(([, arr]) => arr.sort(byUnit))
 }
 
-// Round-robin across shows: one episode from each show in turn, each show
-// advancing in episode order, looping until every item is placed.
-function rotateShows(items: MediaItem[]): MediaItem[] {
-  const lists = showGroups(items)
+// Round-robin across shows: one unit from each show in turn, each show
+// advancing in episode order, looping until every unit is placed.
+function rotateShows(units: ProgramUnit[]): ProgramUnit[] {
+  const lists = showGroups(units)
   const pointers = new Array(lists.length).fill(0)
-  const result: MediaItem[] = []
-  let remaining = items.length
+  const result: ProgramUnit[] = []
+  let remaining = units.length
   while (remaining > 0) {
     for (let g = 0; g < lists.length; g++) {
       if (pointers[g] < lists[g].length) {
@@ -307,17 +383,17 @@ function rotateShows(items: MediaItem[]): MediaItem[] {
   return result
 }
 
-/** Resolve a collection to an ordered, endlessly repeating playable list. */
+/** Resolve a collection to an ordered, endlessly repeating list of units. */
 export async function resolveCollection(
   c: CollectionWithItems,
   order: PlaybackOrder,
   seed = 0,
 ): Promise<ResolvedList> {
-  // `resolveMembers` already returns the hand-picked order.
-  const items = await resolveMembers(c)
-  if (order === 'custom') return looped(items)
-  if (order === 'shuffle') return shuffled(items, seed)
-  if (order === 'shuffleShows') return shuffledShows(items, seed)
-  if (order === 'rotate') return looped(rotateShows(items))
-  return looped(chronological(items))
+  // `resolveUnits` already returns the hand-picked order.
+  const units = await resolveUnits(c)
+  if (order === 'custom') return looped(units)
+  if (order === 'shuffle') return shuffled(units, seed)
+  if (order === 'shuffleShows') return shuffledShows(units, seed)
+  if (order === 'rotate') return looped(rotateShows(units))
+  return looped(chronological(units))
 }

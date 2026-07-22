@@ -4,6 +4,7 @@ import {
   effectiveOrder,
   resolveCollection,
   type CollectionWithItems,
+  type ProgramUnit,
   type ResolvedList,
 } from './collections.js'
 import { log } from './logs.js'
@@ -136,11 +137,32 @@ async function buildPlayoutInner(channelId: number, until: Date): Promise<number
     title: string | null
     startTime: Date
     stopTime: Date
+    groupKey: string | null
   }[] = []
-  const pushProgram = (id: number, start: Date, stop: Date) =>
-    created.push({ mediaItemId: id, kind: 'program', title: null, startTime: start, stopTime: stop })
+  const pushProgram = (id: number, start: Date, stop: Date, groupKey: string | null = null) =>
+    created.push({ mediaItemId: id, kind: 'program', title: null, startTime: start, stopTime: stop, groupKey })
   const pushFiller = (start: Date, stop: Date) =>
-    created.push({ mediaItemId: null, kind: 'filler', title: 'Filler', startTime: start, stopTime: stop })
+    created.push({ mediaItemId: null, kind: 'filler', title: 'Filler', startTime: start, stopTime: stop, groupKey: null })
+
+  // Total on-air seconds of a program unit (a multi-part airing sums its
+  // segments). Used everywhere a single item's duration used to be.
+  const unitDuration = (u: ProgramUnit) => u.reduce((a, m) => a + (m.durationSec ?? 0), 0)
+  // Schedule one unit's segments back-to-back starting at startMs, returning the
+  // end time in ms. A multi-segment unit tags every segment with one groupKey
+  // ("channelId:startMs" — unique per airing on this channel) so the guide can
+  // collapse them into a single programme; a unit of one stays untagged.
+  const pushUnit = (u: ProgramUnit, startMs: number): number => {
+    const groupKey = u.length > 1 ? `${channelId}:${startMs}` : null
+    let c = startMs
+    for (const seg of u) {
+      const sdur = seg.durationSec ?? 0
+      if (sdur <= 0) continue
+      const stop = c + sdur * 1000
+      pushProgram(seg.id, new Date(c), new Date(stop), groupKey)
+      c = stop
+    }
+    return c
+  }
   let iterations = 0
   let stall = 0
   const stallLimit = channel.rotationItems.length + channel.timeBlocks.length + 3
@@ -162,52 +184,46 @@ async function buildPlayoutInner(channelId: number, until: Date): Promise<number
         if (fillerMode !== 'none' && blockEnd > cursor) pushFiller(new Date(cursor), new Date(blockEnd))
         cursor = blockEnd
       } else if (fillerMode === 'none') {
-        // Soft boundary: one program per iteration; may overrun the block end.
+        // Soft boundary: one program (unit) per iteration; may overrun the end.
         const pos = posOf(key, legacy)
-        const mi = items.at(pos)
+        const u = items.at(pos)
         state.positions[key] = pos + 1
-        const dur = mi.durationSec ?? 0
-        if (dur > 0) {
-          const stop = new Date(cursor.getTime() + dur * 1000)
-          pushProgram(mi.id, new Date(cursor), stop)
-          cursor = stop
-        }
+        const end = pushUnit(u, cursor.getTime())
+        if (end > cursor.getTime()) cursor = new Date(end)
       } else {
-        // Pack as many programs as fit, then filler to land exactly on blockEnd.
+        // Pack as many program units as fit, then filler to land on blockEnd. A
+        // multi-part airing counts as one unit — it never straddles the end.
         const availSec = (blockEnd.getTime() - cursor.getTime()) / 1000
         let pos = posOf(key, legacy)
         const startPos = pos
-        const fit: { id: number; dur: number }[] = []
+        const fit: ProgramUnit[] = []
         let used = 0
         for (let g = 0; g < 20000; g++) {
-          const mi = items.at(pos)
-          const dur = mi.durationSec ?? 0
+          const u = items.at(pos)
+          const dur = unitDuration(u)
           if (dur <= 0) {
             pos++
             continue
           }
           if (used + dur > availSec) break
-          fit.push({ id: mi.id, dur })
+          fit.push(u)
           used += dur
           pos++
         }
         state.positions[key] = pos
 
         if (fit.length === 0) {
-          // A single program is longer than the whole block — play it (overruns).
-          const mi = items.at(pos)
+          // A single unit is longer than the whole block — play it (overruns).
+          const u = items.at(pos)
           state.positions[key] = pos + 1
-          const stop = new Date(cursor.getTime() + Math.max(mi.durationSec ?? 0, 1) * 1000)
-          pushProgram(mi.id, new Date(cursor), stop)
-          cursor = stop
+          const end = pushUnit(u, cursor.getTime())
+          cursor = new Date(Math.max(end, cursor.getTime() + 1000))
         } else {
           const gapSec = Math.max(0, availSec - used)
           let c = cursor.getTime()
           const perGap = fillerMode === 'between' ? gapSec / fit.length : 0
-          for (const p of fit) {
-            const stop = c + p.dur * 1000
-            pushProgram(p.id, new Date(c), new Date(stop))
-            c = stop
+          for (const u of fit) {
+            c = pushUnit(u, c)
             if (perGap > 0.5) {
               const fEnd = c + perGap * 1000
               pushFiller(new Date(c), new Date(fEnd))
@@ -230,18 +246,20 @@ async function buildPlayoutInner(channelId: number, until: Date): Promise<number
       const legacy = 'r' + ri.id
       const items = await listFor(ri.collection, ri.playbackOrder)
       if (items.length > 0) {
+        // "play N" counts units, so a multi-part airing is one of the N.
         const take = ri.mode === 'multiple' ? Math.max(1, ri.count) : 1
         let pos = posOf(key, legacy)
         for (let k = 0; k < take; k++) {
-          const mi = items.at(pos)
-          const dur = mi.durationSec ?? 0
+          const u = items.at(pos)
+          const dur = unitDuration(u)
           if (dur <= 0) {
             pos++
             continue
           }
-          // Hard block ahead? If this program would overrun a "hard" block's
-          // start, fill the gap so the block begins exactly on time and defer
-          // this program (don't advance pos) rather than cutting it short.
+          // Hard block ahead? If this unit would overrun a "hard" block's start,
+          // fill the gap so the block begins exactly on time and defer this unit
+          // (don't advance pos) rather than cutting it short. The whole airing's
+          // duration is weighed, so a group is never split across the boundary.
           const boundary = nextBlockBoundary(channel.timeBlocks, cursor, until)
           if (boundary && boundary.block.startMode === 'hard') {
             const gapMs = boundary.start.getTime() - cursor.getTime()
@@ -252,9 +270,7 @@ async function buildPlayoutInner(channelId: number, until: Date): Promise<number
             }
           }
           pos++
-          const stop = new Date(cursor.getTime() + dur * 1000)
-          pushProgram(mi.id, new Date(cursor), stop)
-          cursor = stop
+          cursor = new Date(pushUnit(u, cursor.getTime()))
           if (cursor >= until) break
           if (activeBlock(channel.timeBlocks, cursor)) break // enter the block promptly
         }

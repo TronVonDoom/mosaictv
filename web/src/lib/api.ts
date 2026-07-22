@@ -103,6 +103,17 @@ export type ShowDetail = {
   seasons: SeasonGroup[]
 }
 
+// A broadcast episode: the ordered episode files that aired together as one
+// program. `segmentIds` are MediaItem ids in play order. Stored per show; the
+// files themselves keep their canonical S/E numbering.
+export type Airing = {
+  id: number
+  season: number | null
+  number: number
+  title: string | null
+  segmentIds: number[]
+}
+
 export type WatermarkConfig = {
   mode: 'permanent' | 'intermittent' | 'none'
   position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
@@ -487,6 +498,31 @@ export const api = {
     request<ShowDetail>(
       `/api/shows/detail?libraryId=${libraryId}&show=${encodeURIComponent(show)}`,
     ),
+
+  // --- airings (broadcast episodes / multi-part grouping) ---
+  airings: (libraryId: number, show: string) =>
+    request<{ airings: Airing[] }>(
+      `/api/airings?libraryId=${libraryId}&show=${encodeURIComponent(show)}`,
+    ),
+  // Propose groupings for one season by packing episodes up to targetSec. null
+  // season = the "unsorted" bucket (sent as -1).
+  suggestAirings: (libraryId: number, show: string, season: number | null, targetSec: number) =>
+    request<{ blocks: number[][] }>(
+      `/api/airings/suggest?libraryId=${libraryId}&show=${encodeURIComponent(show)}` +
+        `&season=${season ?? -1}&targetSec=${targetSec}`,
+    ),
+  // Replace one season's airings. `groups` are ordered id lists; only 2+ are kept.
+  saveAirings: (data: {
+    libraryId: number
+    showTitle: string
+    season: number | null
+    groups: number[][]
+  }) =>
+    request<{ airings: Airing[] }>('/api/airings', {
+      method: 'PUT',
+      body: JSON.stringify({ ...data, season: data.season ?? -1 }),
+    }),
+  deleteAiring: (id: number) => request<void>(`/api/airings/${id}`, { method: 'DELETE' }),
   browse: (path?: string) =>
     request<FsListing>(`/api/fs${path ? `?path=${encodeURIComponent(path)}` : ''}`),
   settings: () => request<SettingsInfo>('/api/settings'),

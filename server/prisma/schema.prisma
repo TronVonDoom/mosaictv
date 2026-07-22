@@ -20,6 +20,7 @@ model Library {
   folders   LibraryFolder[]
   items     MediaItem[]
   shows     Show[]
+  airings   Airing[]
 }
 
 // Simple key/value store (e.g. the TMDB API key).
@@ -111,6 +112,41 @@ model Season {
   overview       String?
 
   @@unique([showId, number])
+}
+
+// A "broadcast episode": an ordered list of one or more canonical episodes that
+// aired together as a single program — how multi-segment cartoons ran on TV
+// (Dexter's Laboratory's three shorts, 2 Stupid Dogs interleaving Secret
+// Squirrel). Defined per show and stored ONLY here: the underlying files keep
+// their real S/E numbering so scrapers (Plex/Jellyfin/TMDB) still match them.
+// Segments reference episodes by mediaItemId; a missing/removed file is simply
+// skipped when the airing is resolved. A normal episode has no Airing — it is an
+// implicit airing of one.
+model Airing {
+  id        Int             @id @default(autoincrement())
+  library   Library         @relation(fields: [libraryId], references: [id], onDelete: Cascade)
+  libraryId Int
+  showTitle String // the show this airing belongs to (its guide title)
+  season    Int? // primary season, for scoping/ordering within the show
+  number    Int             @default(0) // running order of airings within the show
+  title     String? // optional label override (defaults to the show name)
+  createdAt DateTime        @default(now())
+  segments  AiringSegment[]
+
+  @@index([libraryId, showTitle])
+}
+
+// One segment (a canonical episode file) within an Airing, in play order.
+model AiringSegment {
+  id          Int       @id @default(autoincrement())
+  airing      Airing    @relation(fields: [airingId], references: [id], onDelete: Cascade)
+  airingId    Int
+  mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  mediaItemId Int
+  order       Int       @default(0)
+
+  @@index([airingId])
+  @@index([mediaItemId])
 }
 
 // A named set of media used to program channels — the "branded unit" (e.g. a
@@ -301,6 +337,10 @@ model PlayoutItem {
   title       String? // label for filler / EPG
   startTime   DateTime
   stopTime    DateTime
+  // Ties together the consecutive segments of one multi-part airing so the guide
+  // can collapse them into a single programme. Unique per scheduled airing
+  // ("channelId:startMs"); null for a normal single-file program or filler.
+  groupKey    String?
 
   @@index([channelId, startTime])
 }
@@ -355,6 +395,7 @@ model MediaItem {
   addedAt     DateTime @default(now())
   updatedAt   DateTime @updatedAt
   playouts    PlayoutItem[]
+  airingSegments AiringSegment[]
 
   @@index([libraryId])
   @@index([type])

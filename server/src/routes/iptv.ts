@@ -176,9 +176,58 @@ iptvRouter.get('/xmltv.xml', async (req, res) => {
     xml += `    <icon src="${escapeXml(c.logoId ? `${base}/api/logos/${c.logoId}/image` : c.logoUrl || `${base}/mosaictv-icon.png`)}" />\n`
     xml += '  </channel>\n'
   }
-  for (const it of items) {
+  let i = 0
+  while (i < items.length) {
+    const it = items[i]
     const chno = numById.get(it.channelId)
-    if (chno == null) continue
+    if (chno == null) {
+      i++
+      continue
+    }
+
+    // A multi-part airing is scheduled as consecutive items sharing a groupKey.
+    // Collapse the run into ONE programme spanning the whole block, with each
+    // segment listed in the description — matching how it aired.
+    let run = 1
+    if (it.groupKey) {
+      while (
+        i + run < items.length &&
+        items[i + run].channelId === it.channelId &&
+        items[i + run].groupKey === it.groupKey
+      )
+        run++
+    }
+
+    if (run > 1) {
+      const segments = items.slice(i, i + run)
+      const last = segments[run - 1]
+      const m = it.mediaItem // the first segment stands in for the airing (show, art)
+      const showName = m?.showTitle || it.title || 'Program'
+      const lines = segments
+        .map((s) => {
+          const sm = s.mediaItem
+          if (!sm) return ''
+          const code = sm.season != null && sm.episode != null ? episodeCode(sm) : ''
+          return `${code ? `${code} — ` : ''}${sm.title}`
+        })
+        .filter(Boolean)
+      xml += `  <programme start="${xmltvTime(it.startTime)}" stop="${xmltvTime(last.stopTime)}" channel="${chno}">\n`
+      xml += `    <title>${escapeXml(showName)}</title>\n`
+      if (lines.length) {
+        xml += `    <sub-title>${escapeXml(lines.join(' • '))}</sub-title>\n`
+        xml += `    <desc>${escapeXml(`Aired as ${lines.length} segments:\n${lines.join('\n')}`)}</desc>\n`
+      }
+      const icon = programmeIcon(m)
+      if (icon) xml += `    <icon src="${escapeXml(icon)}" />\n`
+      if (m && m.season != null && m.episode != null) {
+        xml += `    <episode-num system="onscreen">${episodeCode(m)}</episode-num>\n`
+        xml += `    <episode-num system="xmltv_ns">${m.season - 1}.${m.episode - 1}.0</episode-num>\n`
+      }
+      xml += '  </programme>\n'
+      i += run
+      continue
+    }
+
     const m = it.mediaItem
     const isEp = !!m && m.type === 'episode' && !!m.showTitle
     const isMusic = !!m && m.type === 'music'
@@ -204,6 +253,7 @@ iptvRouter.get('/xmltv.xml', async (req, res) => {
       xml += `    <episode-num system="xmltv_ns">${m.season - 1}.${m.episode - 1}.0</episode-num>\n`
     }
     xml += '  </programme>\n'
+    i++
   }
   xml += '</tv>\n'
   res.setHeader('Content-Type', 'application/xml')

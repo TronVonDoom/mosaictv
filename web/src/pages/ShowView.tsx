@@ -10,6 +10,8 @@ import {
 import { formatDuration, formatSize } from '../lib/format'
 import MediaDetailModal from '../components/MediaDetailModal'
 import PosterCard from '../components/PosterCard'
+import AiringsEditor from '../components/AiringsEditor'
+import { Button } from '../components/ui'
 
 function seasonLabel(season: number | null): string {
   return season == null ? 'Unsorted' : `Season ${season}`
@@ -23,6 +25,8 @@ export default function ShowView() {
   const [detail, setDetail] = useState<ShowDetail | null>(null)
   const [openSeason, setOpenSeason] = useState<number | null | undefined>(undefined)
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  // Toggles the season view between the episode list and the airings editor.
+  const [grouping, setGrouping] = useState(false)
   // Only for the breadcrumb — the show payload doesn't carry its library's name.
   const [libraryName, setLibraryName] = useState<string | null>(null)
 
@@ -31,6 +35,9 @@ export default function ShowView() {
     setOpenSeason(undefined)
     api.showDetail(id, showTitle).then(setDetail).catch(() => {})
   }, [id, showTitle])
+
+  // Leave grouping mode whenever the chosen season changes.
+  useEffect(() => setGrouping(false), [openSeason])
 
   useEffect(() => {
     api
@@ -100,12 +107,29 @@ export default function ShowView() {
       ) : current ? (
         // --- Episodes within a chosen season ---
         <div>
-          <button
-            onClick={() => setOpenSeason(undefined)}
-            className="text-sm text-indigo-300 hover:text-indigo-200 mb-4 inline-flex items-center gap-1"
-          >
-            ← All seasons
-          </button>
+          <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+            <button
+              onClick={() => setOpenSeason(undefined)}
+              className="text-sm text-indigo-300 hover:text-indigo-200 inline-flex items-center gap-1"
+            >
+              ← All seasons
+            </button>
+            <Button
+              size="sm"
+              variant={grouping ? 'primary' : 'secondary'}
+              onClick={() => setGrouping((g) => !g)}
+            >
+              {grouping ? 'Done grouping' : 'Group broadcast episodes'}
+            </Button>
+          </div>
+          {grouping ? (
+            <AiringsEditor
+              libraryId={id}
+              show={showTitle}
+              season={current.season}
+              episodes={current.episodes}
+            />
+          ) : (
           <div className="rounded-xl border border-edge overflow-hidden divide-y divide-edge/60">
             {current.episodes.map((ep) => (
               <button
@@ -131,6 +155,7 @@ export default function ShowView() {
               </button>
             ))}
           </div>
+          )}
         </div>
       ) : (
         // --- Season tiles ---
