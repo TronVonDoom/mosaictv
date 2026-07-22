@@ -63,8 +63,8 @@ export default function ShowView() {
     airings
       .filter((a) => (a.season ?? null) === (current?.season ?? null))
       .forEach((a, gi) =>
-        a.segmentIds.forEach((mid, idx) =>
-          map.set(mid, { groupNo: gi + 1, index: idx + 1, size: a.segmentIds.length }),
+        a.segments.forEach((s, idx) =>
+          map.set(s.mediaItemId, { groupNo: gi + 1, index: idx + 1, size: a.segments.length }),
         ),
       )
     return map

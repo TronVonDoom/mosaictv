@@ -8,6 +8,47 @@ export const airingsRouter = Router()
 // slot). Multi-segment cartoons pack ~three 7-minute shorts into one of these.
 const DEFAULT_TARGET_SEC = 22 * 60
 
+// Fields the editor needs to render any segment — including one borrowed from
+// another show, which the current season's episode list wouldn't carry.
+const SEGMENT_SELECT = {
+  id: true,
+  showTitle: true,
+  season: true,
+  episode: true,
+  title: true,
+  durationSec: true,
+  missing: true,
+} satisfies Prisma.MediaItemSelect
+
+type SegmentRow = Prisma.MediaItemGetPayload<{ select: typeof SEGMENT_SELECT }>
+function segmentDto(m: SegmentRow) {
+  return {
+    mediaItemId: m.id,
+    showTitle: m.showTitle,
+    season: m.season,
+    episode: m.episode,
+    title: m.title,
+    durationSec: m.durationSec,
+    missing: m.missing,
+  }
+}
+
+type AiringRow = Prisma.AiringGetPayload<{
+  include: { segments: { include: { mediaItem: { select: typeof SEGMENT_SELECT } } } }
+}>
+function airingDto(a: AiringRow) {
+  return {
+    id: a.id,
+    season: a.season,
+    number: a.number,
+    title: a.title,
+    segments: a.segments.map((s) => segmentDto(s.mediaItem)),
+  }
+}
+const airingInclude = {
+  segments: { orderBy: { order: 'asc' as const }, include: { mediaItem: { select: SEGMENT_SELECT } } },
+}
+
 // The season a request is scoped to: a number, or null for the "unsorted"
 // (no season) bucket. `?season=` absent means "any"; an explicit empty/-1 means
 // null.
@@ -28,7 +69,7 @@ function episodeWhere(libraryId: number, show: string, season: number | null | u
   }
 }
 
-// GET /api/airings?libraryId=&show=  -> the show's defined airings + segments.
+// GET /api/airings?libraryId=&show=  -> the show's airings with full segment info.
 airingsRouter.get('/', async (req, res) => {
   const libraryId = Number(req.query.libraryId)
   const show = typeof req.query.show === 'string' ? req.query.show : ''
@@ -37,18 +78,37 @@ airingsRouter.get('/', async (req, res) => {
   }
   const airings = await prisma.airing.findMany({
     where: { libraryId, showTitle: show },
-    include: { segments: { orderBy: { order: 'asc' }, select: { mediaItemId: true, order: true } } },
+    include: airingInclude,
     orderBy: [{ season: 'asc' }, { number: 'asc' }],
   })
-  res.json({
-    airings: airings.map((a) => ({
-      id: a.id,
-      season: a.season,
-      number: a.number,
-      title: a.title,
-      segmentIds: a.segments.map((s) => s.mediaItemId),
-    })),
+  res.json({ airings: airings.map(airingDto) })
+})
+
+// GET /api/airings/search-episodes?libraryId=&q=&limit=
+// Episodes across every show in the library, for inserting a segment from
+// another show into an airing (the 2 Stupid Dogs / Secret Squirrel case).
+airingsRouter.get('/search-episodes', async (req, res) => {
+  const libraryId = Number(req.query.libraryId)
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+  const limit = Math.min(Number(req.query.limit) || 40, 100)
+  if (!Number.isFinite(libraryId)) {
+    return res.status(400).json({ error: 'libraryId is required' })
+  }
+  const rows = await prisma.mediaItem.findMany({
+    where: {
+      libraryId,
+      type: 'episode',
+      missing: false,
+      durationSec: { gt: 0 },
+      ...(q
+        ? { OR: [{ title: { contains: q } }, { showTitle: { contains: q } }] }
+        : {}),
+    },
+    orderBy: [{ showTitle: 'asc' }, { season: 'asc' }, { episode: 'asc' }],
+    take: limit,
+    select: SEGMENT_SELECT,
   })
+  res.json({ episodes: rows.map(segmentDto) })
 })
 
 // GET /api/airings/suggest?libraryId=&show=&season=&targetSec=
@@ -95,10 +155,10 @@ airingsRouter.get('/suggest', async (req, res) => {
 })
 
 // PUT /api/airings  { libraryId, showTitle, season, groups: number[][] }
-// Replace the airings for one (show, season): existing airings for that scope
-// are deleted and one is created per group of 2+ segments (singletons are just
-// normal episodes and are not stored). Segment ids outside the season are
-// ignored. Returns the show's full airing list afterwards.
+// Replace the airings filed under one (show, season). Each group of 2+ segments
+// becomes an airing; singletons are plain episodes and aren't stored. Segment
+// ids may reference episodes of OTHER shows (a borrowed segment); order within a
+// group is preserved. Returns the show's full airing list afterwards.
 airingsRouter.put('/', async (req, res) => {
   const body = req.body ?? {}
   const libraryId = Number(body.libraryId)
@@ -112,20 +172,21 @@ airingsRouter.put('/', async (req, res) => {
     return res.status(400).json({ error: 'groups must be an array of id arrays' })
   }
 
-  // Only ids that are real episodes in this scope may be grouped, and each may
-  // appear in at most one airing.
-  const eps = await prisma.mediaItem.findMany({
-    where: episodeWhere(libraryId, showTitle, season),
-    select: { id: true },
-  })
-  const valid = new Set(eps.map((e) => e.id))
+  // A segment id is valid if it's a playable episode in this library (any show —
+  // that's what allows cross-show blocks). Each file appears in one airing.
+  const allIds = [...new Set(groups.flatMap((g) => (Array.isArray(g) ? g.map(Number) : [])))]
+  const playable = allIds.length
+    ? await prisma.mediaItem.findMany({
+        where: { id: { in: allIds }, libraryId, type: 'episode', missing: false, durationSec: { gt: 0 } },
+        select: { id: true },
+      })
+    : []
+  const valid = new Set(playable.map((e) => e.id))
   const used = new Set<number>()
   const clean: number[][] = []
   for (const g of groups) {
     if (!Array.isArray(g)) continue
-    const ids = g
-      .map(Number)
-      .filter((id) => valid.has(id) && !used.has(id))
+    const ids = g.map(Number).filter((id) => valid.has(id) && !used.has(id))
     if (ids.length >= 2) {
       ids.forEach((id) => used.add(id))
       clean.push(ids)
@@ -149,18 +210,10 @@ airingsRouter.put('/', async (req, res) => {
 
   const saved = await prisma.airing.findMany({
     where: { libraryId, showTitle },
-    include: { segments: { orderBy: { order: 'asc' }, select: { mediaItemId: true } } },
+    include: airingInclude,
     orderBy: [{ season: 'asc' }, { number: 'asc' }],
   })
-  res.json({
-    airings: saved.map((a) => ({
-      id: a.id,
-      season: a.season,
-      number: a.number,
-      title: a.title,
-      segmentIds: a.segments.map((s) => s.mediaItemId),
-    })),
-  })
+  res.json({ airings: saved.map(airingDto) })
 })
 
 // DELETE /api/airings/:id  -> ungroup a single airing.

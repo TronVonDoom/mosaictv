@@ -103,15 +103,28 @@ export type ShowDetail = {
   seasons: SeasonGroup[]
 }
 
+// One segment of a broadcast episode — enough to render it even when it's
+// borrowed from another show (so the current season's episode list wouldn't
+// carry it).
+export type AiringSegmentInfo = {
+  mediaItemId: number
+  showTitle: string | null
+  season: number | null
+  episode: number | null
+  title: string
+  durationSec: number | null
+  missing: boolean
+}
+
 // A broadcast episode: the ordered episode files that aired together as one
-// program. `segmentIds` are MediaItem ids in play order. Stored per show; the
-// files themselves keep their canonical S/E numbering.
+// program. Stored per show; the files keep their canonical S/E numbering, and a
+// segment may come from another show (2 Stupid Dogs pulling in Secret Squirrel).
 export type Airing = {
   id: number
   season: number | null
   number: number
   title: string | null
-  segmentIds: number[]
+  segments: AiringSegmentInfo[]
 }
 
 export type WatermarkConfig = {
@@ -503,6 +516,11 @@ export const api = {
   airings: (libraryId: number, show: string) =>
     request<{ airings: Airing[] }>(
       `/api/airings?libraryId=${libraryId}&show=${encodeURIComponent(show)}`,
+    ),
+  // Episodes across the whole library, for inserting a segment from another show.
+  searchAiringEpisodes: (libraryId: number, q: string) =>
+    request<{ episodes: AiringSegmentInfo[] }>(
+      `/api/airings/search-episodes?libraryId=${libraryId}&q=${encodeURIComponent(q)}`,
     ),
   // Propose groupings for one season by packing episodes up to targetSec. null
   // season = the "unsorted" bucket (sent as -1).

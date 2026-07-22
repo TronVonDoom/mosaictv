@@ -1,7 +1,9 @@
 import type { Prisma, MediaItem, Airing, AiringSegment } from '@prisma/client'
 import { prisma } from './db.js'
 
-type AiringWithSegments = Airing & { segments: AiringSegment[] }
+type AiringWithSegments = Airing & {
+  segments: (AiringSegment & { mediaItem: MediaItem })[]
+}
 
 export type CollectionFilter = {
   libraryId?: number | null
@@ -96,39 +98,52 @@ function hasFilter(c: CollectionFilter): boolean {
 }
 
 /**
- * Fold a show's episodes into program units using the airings that reference
- * them: each airing becomes one ordered multi-segment unit, and every episode
- * not claimed by an airing stays a unit of one. The result is in broadcast
- * order (by the first segment's season/episode). Airings are matched by the
- * episode ids they contain, so this works no matter how the show/season was
- * selected, and a segment whose file is missing is simply dropped.
+ * Fold a member show's episodes into program units using the airings owned by
+ * that show: each airing becomes one ordered multi-segment unit — playing ALL
+ * its segments, including any borrowed from another show (2 Stupid Dogs pulling
+ * in a Secret Squirrel short) — and every one of the member's own episodes not
+ * claimed by an airing stays a unit of one. Units come back in broadcast order
+ * (by the first segment's season/episode). A segment whose file is missing or
+ * has no duration is skipped.
  */
-function groupIntoAirings(episodes: MediaItem[], airings: AiringWithSegments[]): ProgramUnit[] {
-  const byId = new Map(episodes.map((e) => [e.id, e]))
+function groupIntoAirings(memberEpisodes: MediaItem[], airings: AiringWithSegments[]): ProgramUnit[] {
   const used = new Set<number>()
   const units: ProgramUnit[] = []
   for (const a of airings) {
     const items: MediaItem[] = []
     for (const s of [...a.segments].sort((x, y) => x.order - y.order)) {
-      if (used.has(s.mediaItemId)) continue // an episode belongs to at most one airing
-      const m = byId.get(s.mediaItemId)
-      if (m) {
-        items.push(m)
-        used.add(m.id)
-      }
+      const m = s.mediaItem
+      if (!m || m.missing || !(m.durationSec && m.durationSec > 0)) continue
+      if (used.has(m.id)) continue // a file belongs to at most one airing
+      items.push(m)
+      used.add(m.id)
     }
     if (items.length > 0) units.push(items)
   }
-  for (const e of episodes) if (!used.has(e.id)) units.push([e])
+  for (const e of memberEpisodes) if (!used.has(e.id)) units.push([e])
   return units.sort(byUnit)
 }
 
-/** The airings that group any of the given episodes, with their segments. */
-async function airingsForEpisodes(episodeIds: number[]): Promise<AiringWithSegments[]> {
-  if (episodeIds.length === 0) return []
+const airingInclude = {
+  segments: { orderBy: { order: 'asc' as const }, include: { mediaItem: true } },
+}
+
+/** Airings owned by (filed under) the given shows, with their segments' files. */
+async function airingsForShows(
+  where: { libraryId?: number; showTitle?: string; showTitles?: string[]; season?: number },
+): Promise<AiringWithSegments[]> {
+  const titleClause = where.showTitles
+    ? { showTitle: { in: where.showTitles } }
+    : where.showTitle
+      ? { showTitle: where.showTitle }
+      : {}
   return prisma.airing.findMany({
-    where: { segments: { some: { mediaItemId: { in: episodeIds } } } },
-    include: { segments: { orderBy: { order: 'asc' } } },
+    where: {
+      ...titleClause,
+      ...(where.libraryId ? { libraryId: where.libraryId } : {}),
+      ...(where.season != null ? { season: where.season } : {}),
+    },
+    include: airingInclude,
   })
 }
 
@@ -169,7 +184,11 @@ async function resolveUnitGroups(c: CollectionWithItems): Promise<ProgramUnit[]>
         },
       })
       if (eps.length === 0) continue
-      const airings = await airingsForEpisodes(eps.map((e) => e.id))
+      const airings = await airingsForShows({
+        showTitle: it.showTitle,
+        ...(it.libraryId ? { libraryId: it.libraryId } : {}),
+        ...(it.kind === 'season' && it.season != null ? { season: it.season } : {}),
+      })
       for (const u of groupIntoAirings(eps, airings)) out.push(u)
     } else if ((it.kind === 'movie' || it.kind === 'episode') && it.mediaItemId != null) {
       const m = singleById.get(it.mediaItemId)
@@ -181,7 +200,13 @@ async function resolveUnitGroups(c: CollectionWithItems): Promise<ProgramUnit[]>
     const filtered = await prisma.mediaItem.findMany({ where: collectionWhere(c) })
     const eps = filtered.filter((m) => m.type === 'episode' && m.showTitle)
     const others = filtered.filter((m) => !(m.type === 'episode' && m.showTitle))
-    const airings = await airingsForEpisodes(eps.map((e) => e.id))
+    const showTitles = [...new Set(eps.map((e) => e.showTitle as string))]
+    const airings = showTitles.length
+      ? await airingsForShows({
+          showTitles,
+          ...(c.libraryId ? { libraryId: c.libraryId } : {}),
+        })
+      : []
     for (const u of groupIntoAirings(eps, airings)) out.push(u)
     for (const m of others.sort((a, b) => a.title.localeCompare(b.title))) out.push([m])
   }

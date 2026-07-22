@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api, type Airing, type MediaItem } from '../lib/api'
+import { api, type Airing, type AiringSegmentInfo, type MediaItem } from '../lib/api'
 import { episodeCode, formatDuration } from '../lib/format'
 import { toast } from '../lib/toast'
-import { Badge, Button, cx, Input } from './ui'
+import { Badge, Button, cx, Input, Modal } from './ui'
 
 const TARGET_PRESETS = [
   { label: '11 min', sec: 11 * 60 },
@@ -16,17 +16,27 @@ type Props = {
   season: number | null
   /** This season's episodes, already in episode order. */
   episodes: MediaItem[]
-  /** Called after a successful save, so the parent can refresh its markers. */
   onSaved?: () => void
-  /** Reports whether there are unsaved groupings, to guard leaving the editor. */
   onDirtyChange?: (dirty: boolean) => void
 }
 
+function toSeg(e: MediaItem): AiringSegmentInfo {
+  return {
+    mediaItemId: e.id,
+    showTitle: e.showTitle,
+    season: e.season,
+    episode: e.episode,
+    title: e.title,
+    durationSec: e.durationSec,
+    missing: e.missing,
+  }
+}
+
 /**
- * Groups a show's episode files into "broadcast episodes" — the multi-segment
- * blocks that aired together (Dexter's three shorts, etc.). Editing is local
- * until Save; a block of one is just a normal episode and isn't stored. Grouping
- * is metadata only: the underlying files keep their real S/E numbering.
+ * Groups a show's episodes into broadcast episodes. A group can also borrow a
+ * segment from another show (2 Stupid Dogs pulling in a Secret Squirrel short),
+ * with the order within a group under your control. Grouping is metadata only —
+ * the files keep their real numbering — and nothing is stored until you Save.
  */
 export default function AiringsEditor({
   libraryId,
@@ -36,41 +46,41 @@ export default function AiringsEditor({
   onSaved,
   onDirtyChange,
 }: Props) {
-  const epById = useMemo(() => new Map(episodes.map((e) => [e.id, e])), [episodes])
   const orderIndex = useMemo(() => new Map(episodes.map((e, i) => [e.id, i])), [episodes])
 
   const [blocks, setBlocks] = useState<number[][]>([])
   const [savedGroups, setSavedGroups] = useState<number[][]>([])
+  // Metadata for every id we might render — owned episodes plus borrowed ones.
+  const [segMeta, setSegMeta] = useState<Map<number, AiringSegmentInfo>>(new Map())
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [targetSec, setTargetSec] = useState(22 * 60)
-  // Custom target in minutes as typed; '' means "use a preset".
   const [customMin, setCustomMin] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  // The id of a segment in the block we're adding another show's segment to.
+  const [pickerFor, setPickerFor] = useState<number | null>(null)
 
-  const minIdx = (b: number[]) => Math.min(...b.map((id) => orderIndex.get(id) ?? 1e9))
-  const sortBlocks = (bs: number[][]) => [...bs].sort((a, b) => minIdx(a) - minIdx(b))
+  const isOwned = (id: number) => orderIndex.has(id)
+  const minOwnedIdx = (b: number[]) => {
+    const owned = b.filter(isOwned).map((id) => orderIndex.get(id) as number)
+    return owned.length ? Math.min(...owned) : Number.MAX_SAFE_INTEGER
+  }
+  const sortBlocks = (bs: number[][]) => [...bs].sort((a, b) => minOwnedIdx(a) - minOwnedIdx(b))
 
-  // Compose the running order from saved airings; every episode not held by a
-  // 2+ airing stands alone.
+  // Saved airings -> running order: each airing's full ordered segments as one
+  // block (positioned by its first owned episode), each unclaimed owned episode
+  // a block of one.
   const compose = (airings: Airing[]): number[][] => {
-    const idToBlock = new Map<number, number[]>()
+    const claimed = new Set<number>()
+    const groups: number[][] = []
     for (const a of airings) {
-      const ids = a.segmentIds.filter((id) => epById.has(id))
-      if (ids.length >= 2) ids.forEach((id) => idToBlock.set(id, ids))
+      const ids = a.segments.map((s) => s.mediaItemId)
+      if (ids.length < 2) continue
+      ids.forEach((id) => claimed.add(id))
+      groups.push(ids)
     }
-    const emitted = new Set<number[]>()
-    const out: number[][] = []
-    for (const e of episodes) {
-      const b = idToBlock.get(e.id)
-      if (b) {
-        if (!emitted.has(b)) {
-          emitted.add(b)
-          out.push(b)
-        }
-      } else out.push([e.id])
-    }
-    return out
+    const singles = episodes.filter((e) => !claimed.has(e.id)).map((e) => [e.id])
+    return sortBlocks([...groups, ...singles])
   }
 
   useEffect(() => {
@@ -81,6 +91,10 @@ export default function AiringsEditor({
       .then(({ airings }) => {
         if (!alive) return
         const scoped = airings.filter((a) => (a.season ?? null) === (season ?? null))
+        const meta = new Map<number, AiringSegmentInfo>()
+        episodes.forEach((e) => meta.set(e.id, toSeg(e)))
+        scoped.forEach((a) => a.segments.forEach((s) => meta.set(s.mediaItemId, s)))
+        setSegMeta(meta)
         const composed = compose(scoped)
         setBlocks(composed)
         setSavedGroups(composed.filter((b) => b.length >= 2))
@@ -113,36 +127,68 @@ export default function AiringsEditor({
     })
 
   const groupSelected = () => {
-    if (selected.size < 2) return
-    const sel = [...selected].sort((a, b) => (orderIndex.get(a) ?? 0) - (orderIndex.get(b) ?? 0))
-    const stripped: number[][] = []
-    for (const b of blocks) {
-      const remaining = b.filter((id) => !selected.has(id))
-      if (remaining.length === 0) continue
-      // A group that loses members down to one becomes a plain episode again.
-      if (remaining.length === 1) stripped.push([remaining[0]])
-      else stripped.push(remaining)
-    }
-    stripped.push(sel)
-    setBlocks(sortBlocks(stripped))
+    const sel = [...selected]
+      .filter(isOwned)
+      .sort((a, b) => (orderIndex.get(a) ?? 0) - (orderIndex.get(b) ?? 0))
+    if (sel.length < 2) return
+    setBlocks((bs) => {
+      const stripped: number[][] = []
+      for (const b of bs) {
+        const remaining = b.filter((id) => !selected.has(id))
+        if (remaining.length === 0) continue
+        if (remaining.length === 1 && !isOwned(remaining[0])) continue // lone borrowed segment can't stand alone
+        stripped.push(remaining)
+      }
+      stripped.push(sel)
+      return sortBlocks(stripped)
+    })
     setSelected(new Set())
   }
 
-  const ungroup = (block: number[]) => {
-    const rest = blocks.filter((b) => b !== block)
-    for (const id of block) rest.push([id])
-    setBlocks(sortBlocks(rest))
+  // Ungroup: owned episodes return to standalone; borrowed segments are released.
+  const ungroup = (target: number[]) =>
+    setBlocks((bs) =>
+      sortBlocks(bs.flatMap((b) => (b === target ? b.filter(isOwned).map((id) => [id]) : [b]))),
+    )
+
+  const replaceBlock = (target: number[], next: number[] | null) =>
+    setBlocks((bs) =>
+      sortBlocks(bs.flatMap((b) => (b === target ? (next && next.length ? [next] : []) : [b]))),
+    )
+
+  const move = (target: number[], id: number, dir: -1 | 1) => {
+    const i = target.indexOf(id)
+    const j = i + dir
+    if (i < 0 || j < 0 || j >= target.length) return
+    const nb = [...target]
+    ;[nb[i], nb[j]] = [nb[j], nb[i]]
+    replaceBlock(target, nb)
+  }
+
+  const removeSeg = (target: number[], id: number) => {
+    const remaining = target.filter((x) => x !== id)
+    // A single borrowed segment can't stand on its own — drop it with the block.
+    if (remaining.length === 1 && !isOwned(remaining[0])) return replaceBlock(target, null)
+    replaceBlock(target, remaining)
+  }
+
+  const addSegment = (seg: AiringSegmentInfo) => {
+    if (pickerFor == null) return
+    if (blocks.some((b) => b.includes(seg.mediaItemId))) {
+      toast.error('That episode is already in the running order')
+      return
+    }
+    setSegMeta((m) => new Map(m).set(seg.mediaItemId, seg))
+    setBlocks((bs) =>
+      sortBlocks(bs.map((b) => (b.includes(pickerFor) ? [...b, seg.mediaItemId] : b))),
+    )
   }
 
   const suggest = () => {
     api
       .suggestAirings(libraryId, show, season, targetSec)
       .then(({ blocks: proposed }) =>
-        setBlocks(
-          sortBlocks(
-            proposed.map((g) => g.filter((id) => epById.has(id))).filter((g) => g.length > 0),
-          ),
-        ),
+        setBlocks(sortBlocks(proposed.map((g) => g.filter(isOwned)).filter((g) => g.length > 0))),
       )
       .catch(() => toast.error('Could not suggest groupings'))
     setSelected(new Set())
@@ -177,9 +223,11 @@ export default function AiringsEditor({
     <div>
       <p className="text-sm text-ink-soft mb-3 max-w-2xl">
         Group the segments that aired together into one broadcast episode — they'll play
-        back-to-back as a single program and show as one guide entry. Your files aren't
-        touched. <span className="text-ink-faint">Changes apply the next time a channel
-        builds its schedule.</span>
+        back-to-back as a single program and show as one guide entry. Use{' '}
+        <span className="text-ink">Add segment from another show</span> to interleave a short from
+        a different series. Your files aren't touched.{' '}
+        <span className="text-ink-faint">Changes apply the next time a channel builds its
+        schedule.</span>
       </p>
 
       <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -237,66 +285,248 @@ export default function AiringsEditor({
       <div className="space-y-2">
         {blocks.map((b) => {
           if (b.length === 1) {
-            const ep = epById.get(b[0])
-            if (!ep) return null
+            const seg = segMeta.get(b[0])
+            if (!seg) return null
             return (
-              <div key={'blk' + b[0]} className="rounded-lg border border-edge">
-                <Row id={b[0]} epById={epById} selected={selected} onToggle={toggleSel} />
+              <div key={'blk' + b[0]} className="rounded-lg border border-edge flex items-stretch">
+                <div className="flex-1 min-w-0">
+                  <Row
+                    seg={seg}
+                    show={show}
+                    selectable={isOwned(b[0])}
+                    checked={selected.has(b[0])}
+                    onToggle={() => toggleSel(b[0])}
+                  />
+                </div>
+                <button
+                  onClick={() => setPickerFor(b[0])}
+                  className="px-3 text-xs text-ink-faint hover:text-indigo-300 border-l border-edge/60 transition-colors"
+                  title="Start a broadcast episode by adding a segment from another show"
+                >
+                  + Add segment
+                </button>
               </div>
             )
           }
-          const total = b.reduce((a, id) => a + (epById.get(id)?.durationSec ?? 0), 0)
+          const total = b.reduce((a, id) => a + (segMeta.get(id)?.durationSec ?? 0), 0)
           return (
             <div key={'blk' + b[0]} className="rounded-lg border border-indigo-500/40 bg-indigo-500/5">
               <div className="flex items-center justify-between px-3 py-1.5">
                 <span className="text-xs font-medium text-indigo-300">
                   Broadcast episode · {b.length} segments · {formatDuration(total)}
                 </span>
-                <button
-                  onClick={() => ungroup(b)}
-                  className="text-xs text-ink-faint hover:text-rose-400 transition-colors"
-                >
-                  Ungroup
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setPickerFor(b[0])}
+                    className="text-xs text-ink-faint hover:text-indigo-300 transition-colors"
+                  >
+                    + Add segment
+                  </button>
+                  <button
+                    onClick={() => ungroup(b)}
+                    className="text-xs text-ink-faint hover:text-rose-400 transition-colors"
+                  >
+                    Ungroup
+                  </button>
+                </div>
               </div>
               <div className="divide-y divide-edge/40 border-t border-edge/40">
-                {b.map((id) => (
-                  <Row key={id} id={id} epById={epById} selected={selected} onToggle={toggleSel} />
-                ))}
+                {b.map((id, idx) => {
+                  const seg = segMeta.get(id)
+                  if (!seg) return null
+                  return (
+                    <Row
+                      key={id}
+                      seg={seg}
+                      show={show}
+                      selectable={isOwned(id)}
+                      checked={selected.has(id)}
+                      onToggle={() => toggleSel(id)}
+                      reorder={{
+                        up: idx > 0 ? () => move(b, id, -1) : undefined,
+                        down: idx < b.length - 1 ? () => move(b, id, 1) : undefined,
+                        remove: () => removeSeg(b, id),
+                      }}
+                    />
+                  )
+                })}
               </div>
             </div>
           )
         })}
       </div>
+
+      {pickerFor != null && (
+        <SegmentPicker
+          libraryId={libraryId}
+          show={show}
+          onClose={() => setPickerFor(null)}
+          onPick={addSegment}
+        />
+      )}
     </div>
   )
 }
 
 function Row({
-  id,
-  epById,
-  selected,
+  seg,
+  show,
+  selectable,
+  checked,
   onToggle,
+  reorder,
 }: {
-  id: number
-  epById: Map<number, MediaItem>
-  selected: Set<number>
-  onToggle: (id: number) => void
+  seg: AiringSegmentInfo
+  show: string
+  selectable: boolean
+  checked: boolean
+  onToggle: () => void
+  reorder?: { up?: () => void; down?: () => void; remove: () => void }
 }) {
-  const ep = epById.get(id)
-  if (!ep) return null
-  const code = episodeCode(ep) || (ep.episode != null ? `E${ep.episode}` : '—')
+  const code = episodeCode(seg) || (seg.episode != null ? `E${seg.episode}` : '—')
+  const foreign = seg.showTitle !== show
   return (
-    <label className="flex items-center gap-3 px-3 py-2 hover:bg-surface/60 cursor-pointer">
-      <input
-        type="checkbox"
-        className="accent-indigo-500"
-        checked={selected.has(id)}
-        onChange={() => onToggle(id)}
-      />
+    <div className="flex items-center gap-3 px-3 py-2">
+      {selectable ? (
+        <input
+          type="checkbox"
+          className="accent-indigo-500"
+          checked={checked}
+          onChange={onToggle}
+          title="Select to group"
+        />
+      ) : (
+        <span className="w-[13px]" />
+      )}
       <span className="w-14 font-mono text-xs text-ink-faint shrink-0">{code}</span>
-      <span className="flex-1 truncate text-sm text-ink">{ep.title}</span>
-      <span className="text-xs text-ink-muted shrink-0">{formatDuration(ep.durationSec)}</span>
-    </label>
+      <span className="flex-1 truncate text-sm text-ink flex items-center gap-2">
+        <span className="truncate">{seg.title}</span>
+        {foreign && (
+          <Badge tone="accent" className="shrink-0">
+            {seg.showTitle ?? 'Other show'}
+          </Badge>
+        )}
+        {seg.missing && (
+          <Badge tone="bad" className="shrink-0">
+            missing
+          </Badge>
+        )}
+      </span>
+      <span className="text-xs text-ink-muted shrink-0">{formatDuration(seg.durationSec)}</span>
+      {reorder && (
+        <div className="flex items-center gap-1 shrink-0 text-ink-faint">
+          <button
+            disabled={!reorder.up}
+            onClick={reorder.up}
+            className="px-1 hover:text-indigo-300 disabled:opacity-30 disabled:hover:text-ink-faint"
+            title="Move up"
+          >
+            ↑
+          </button>
+          <button
+            disabled={!reorder.down}
+            onClick={reorder.down}
+            className="px-1 hover:text-indigo-300 disabled:opacity-30 disabled:hover:text-ink-faint"
+            title="Move down"
+          >
+            ↓
+          </button>
+          <button
+            onClick={reorder.remove}
+            className="px-1 hover:text-rose-400"
+            title="Remove from this broadcast episode"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SegmentPicker({
+  libraryId,
+  show,
+  onClose,
+  onPick,
+}: {
+  libraryId: number
+  show: string
+  onClose: () => void
+  onPick: (seg: AiringSegmentInfo) => void
+}) {
+  const [q, setQ] = useState('')
+  const [results, setResults] = useState<AiringSegmentInfo[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    const t = setTimeout(() => {
+      api
+        .searchAiringEpisodes(libraryId, q)
+        .then((r) => alive && setResults(r.episodes))
+        .catch(() => alive && setResults([]))
+        .finally(() => alive && setLoading(false))
+    }, 200)
+    return () => {
+      alive = false
+      clearTimeout(t)
+    }
+  }, [libraryId, q])
+
+  return (
+    <Modal onClose={onClose} panelClassName="w-full max-w-lg p-4 max-h-[80vh] flex flex-col">
+      <h3 className="text-sm font-semibold mb-1">Add a segment from another show</h3>
+      <p className="text-xs text-ink-faint mb-3">
+        Pick the episode that aired inside this broadcast block. It'll be added to the end — reorder
+        it with the ↑↓ controls.
+      </p>
+      <Input
+        autoFocus
+        placeholder="Search episodes across the library…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        className="mb-3"
+      />
+      <div className="flex-1 overflow-y-auto rounded-lg border border-edge divide-y divide-edge/60">
+        {loading && results.length === 0 ? (
+          <div className="text-ink-faint text-sm px-3 py-4">Searching…</div>
+        ) : results.length === 0 ? (
+          <div className="text-ink-faint text-sm px-3 py-4">No episodes found.</div>
+        ) : (
+          results.map((seg) => {
+            const code = episodeCode(seg)
+            const self = seg.showTitle === show
+            return (
+              <button
+                key={seg.mediaItemId}
+                onClick={() => onPick(seg)}
+                className="w-full flex items-center gap-3 px-3 py-2 hover:bg-surface/60 text-left transition-colors"
+              >
+                <span className="flex-1 min-w-0">
+                  <span className="block truncate text-sm text-ink">
+                    {seg.showTitle ?? '—'}
+                    {code ? <span className="text-ink-faint font-mono"> {code}</span> : null}
+                  </span>
+                  <span className="block truncate text-xs text-ink-faint">
+                    {seg.title}
+                    {self ? ' · this show' : ''}
+                  </span>
+                </span>
+                <span className="text-xs text-ink-muted shrink-0">
+                  {formatDuration(seg.durationSec)}
+                </span>
+              </button>
+            )
+          })
+        )}
+      </div>
+      <div className="flex justify-end mt-3">
+        <Button size="sm" variant="secondary" onClick={onClose}>
+          Done
+        </Button>
+      </div>
+    </Modal>
   )
 }
