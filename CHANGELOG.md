@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.7.5 — Streams pace to real time (2026-07-22)
+
+- **Programs no longer race ahead of the clock and leave the channel sitting on
+  a station ident.** 0.7.4 stopped a program that finished early from replaying
+  its own ending, but that treated the symptom: a program whose encoder ran
+  faster than real time still burned through its entire slot in seconds, and the
+  rest of the slot was filled with the looping ident — once, more than twenty
+  minutes of it after a short game show, with the next block starting late. Each
+  program (and the ident itself) is now paced to real time as it encodes, so it
+  plays for its full slot and the 0.7.4 hold goes back to being the rare safety
+  net it was meant to be. (The encoder used to be held back only by how fast the
+  player pulled frames from it. On the shared HLS stream, which writes segments
+  to disk, nothing pulled back — so a cheap-to-decode episode could encode more
+  than 20x faster than real time and run its whole slot out in under a minute.
+  Measured: a clip that encoded in ~5s unpaced now takes its full ~60s.)
+- **Smoother playback across program boundaries — most visibly on stricter
+  players like Chromecast.** The seams between programs were where the stream
+  stalled; a Chromecast casting the Jellyfin live-TV tuner is the least forgiving
+  of that and could fail to load a channel where a phone or browser rode through.
+  Pacing the encoder removes those stalls at the seams. The picture itself was
+  always fine — the breaks only ever happened at the transitions.
+
 ## 0.7.4 — No replayed episode endings (2026-07-22)
 
 - **A program no longer re-airs its own ending when its encoder briefly outruns
