@@ -293,7 +293,7 @@ export function songChyronFilter(
 // ---- Full command construction ----------------------------------------------
 
 /** The ffmpeg command that encodes one on-air segment to MPEG-TS on stdout. */
-export function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: StreamProfile, textFilter?: string): string[] {
+export function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: StreamProfile, textFilter?: string, readrate?: string[]): string[] {
   // Filler is usually built out of the logo already, so the bug goes on top of
   // it only if explicitly asked for.
   const useWatermark = wm.mode !== 'none' && !!seg.logo && (!seg.isFiller || wm.showOnFiller)
@@ -310,10 +310,16 @@ export function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: St
   if (enc === 'h264_vaapi') a.push('-vaapi_device', VAAPI_DEVICE)
   if (seg.offsetSec > 0.1) a.push('-ss', seg.offsetSec.toFixed(3))
   if (seg.loop) a.push('-stream_loop', '-1')
-  // Deliberately NOT -re: the outer concat process meters the session at real
-  // time, and two pacers in series just starve each other. Unpaced, this races
-  // ahead until the pipe backs up, which keeps a little of the item buffered
-  // and ready the moment the previous one ends.
+  // Meter the read at real time (`readrate` = -readrate 1.0 + a connect burst) so
+  // a cheap-to-decode source can't race minutes ahead of the wall clock. The
+  // burst still front-loads a few seconds, so a little of the item stays buffered
+  // and ready the moment the previous one ends. NOT bare -re: with no burst this
+  // pacer and the outer concat's would have no slack to absorb a seam and could
+  // starve each other — the trap the old unpaced design was avoiding. Without the
+  // cap the outer meter is the only brake, and the shared-HLS path (segments to
+  // disk, no consumer backpressure) has nothing behind it: a 480p source outran
+  // by ~20x, finished its slot early, and tripped the replay guard's hold.
+  if (readrate) a.push(...readrate)
   a.push('-i', seg.filePath) // input 0 = main video
 
   let idx = 1
