@@ -1,0 +1,44 @@
+name: CI
+
+# Typecheck and build both packages on every push, mirroring the Dockerfile's
+# build stages (web: tsc + vite build; server: prisma generate + tsc). This
+# catches a broken build on any branch before the Docker image job — which only
+# runs on main — ever starts.
+
+on:
+  push:
+  workflow_dispatch:
+
+# One run per branch: a newer push cancels an in-flight run on the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            server/package-lock.json
+
+      - name: Build web
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build server
+        working-directory: server
+        run: |
+          npm ci
+          npx prisma generate
+          npm run build
