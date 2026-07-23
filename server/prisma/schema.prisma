@@ -205,6 +205,12 @@ model Filler {
   generatedAssetId Int? // the last generated output clip, saved as a Media asset (for preview/reuse)
   durationMode String      @default("fixed") // "fixed" | "audio" (match the audio length)
   durationSec  Int         @default(30)
+  // Render resolution of the generated clip ("720p" | "1080p" | "1440p").
+  // Playback still scales to the channel profile, but a higher source keeps a
+  // filler sharp on a 1080p channel instead of upscaling a 720p clip.
+  resolution   String      @default("1080p")
+  // Multiplier on the branded logo's size in the generated styles (1 = default).
+  logoScale    Float       @default(1)
   // Legacy per-owner columns: fillers are now a GLOBAL library assigned via
   // FillerAssignment. Kept (nullable) so `prisma db push` doesn't drop data;
   // the boot migration copies any set owner into an assignment and nulls these.

@@ -107,7 +107,7 @@ export default function FillerAssignmentPicker({ owner, hint }: { owner: FillerO
           <p className="text-xs text-ink-faint mb-3">
             Added to the shared library and assigned to this {owner.channelId != null ? 'channel' : 'block'}.
           </p>
-          <FillerEditor onCancel={() => setCreating(false)} onSaved={createdHere} />
+          <FillerEditor previewOwner={owner} onCancel={() => setCreating(false)} onSaved={createdHere} />
         </Modal>
       )}
     </div>

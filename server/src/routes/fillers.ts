@@ -3,13 +3,17 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { prisma } from '../db.js'
 import { assetsDir } from '../paths.js'
-import { warmFiller, resolveFillerClipById } from '../streaming/filler.js'
+import { warmFiller, resolveFillerClipById, generateDraftStill, removeFillerCache } from '../streaming/filler.js'
 
 export const fillersRouter = Router()
 
+const STYLES = ['animated', 'frosted', 'spotlight', 'custom', 'logowall', 'pulse', 'retro', 'vintage']
+const RESOLUTIONS = ['720p', '1080p', '1440p']
+
 // Clamp an incoming Filler definition payload.
 function fillerData(body: Record<string, unknown>) {
-  const style = ['animated', 'frosted', 'custom', 'logowall', 'pulse', 'retro', 'vintage'].includes(String(body?.style)) ? String(body.style) : 'frosted'
+  const style = STYLES.includes(String(body?.style)) ? String(body.style) : 'frosted'
+  const scale = Number(body?.logoScale)
   return {
     name: body?.name ? String(body.name).trim() : null,
     style,
@@ -18,6 +22,8 @@ function fillerData(body: Record<string, unknown>) {
     logoId: body?.logoId != null && body.logoId !== '' ? Number(body.logoId) : null,
     durationMode: body?.durationMode === 'audio' ? 'audio' : 'fixed',
     durationSec: Math.max(5, Math.min(600, Number(body?.durationSec) || 30)),
+    resolution: RESOLUTIONS.includes(String(body?.resolution)) ? String(body.resolution) : '1080p',
+    logoScale: Math.max(0.4, Math.min(2, Number.isFinite(scale) ? scale : 1)),
   }
 }
 
@@ -79,6 +85,40 @@ fillersRouter.delete('/assignments', async (req, res) => {
   res.status(204).end()
 })
 
+// POST /api/fillers/preview { …draft } ?channelId= | ?timeBlockId= — render a
+// single still frame of a draft (unsaved) filler and stream it back as a JPEG.
+// Lets the user see the branded look before committing to a full generation.
+// Nothing is persisted: the still is written to scratch, sent, then deleted.
+// Declared before "/:id" so "preview" isn't captured as an id.
+fillersRouter.post('/preview', async (req, res) => {
+  const d = fillerData(req.body ?? {})
+  const ctx = ownerFilter(req)
+  try {
+    const out = await generateDraftStill(
+      {
+        id: 0,
+        style: d.style,
+        assetId: d.assetId,
+        audioAssetId: d.audioAssetId,
+        durationMode: d.durationMode,
+        durationSec: d.durationSec,
+        logoId: d.logoId,
+        resolution: d.resolution,
+        logoScale: d.logoScale,
+      },
+      ctx,
+    )
+    if (!fs.existsSync(out)) throw new Error('Preview produced no image — check the Logs.')
+    res.type('image/jpeg')
+    res.sendFile(out, (err) => {
+      fs.rm(out, () => {})
+      if (err && !res.headersSent) res.status(500).end()
+    })
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : 'Preview failed' })
+  }
+})
+
 // ── Library CRUD ──────────────────────────────────────────────────────────
 
 // GET /api/fillers -> the whole global filler library.
@@ -103,7 +143,7 @@ async function dropAsset(assetId: number | null): Promise<void> {
 
 // Everything that changes how the clip renders. `name` is only a label, so
 // renaming a filler shouldn't throw away a clip that's still correct.
-const RENDER_FIELDS = ['style', 'assetId', 'audioAssetId', 'logoId', 'durationMode', 'durationSec'] as const
+const RENDER_FIELDS = ['style', 'assetId', 'audioAssetId', 'logoId', 'durationMode', 'durationSec', 'resolution', 'logoScale'] as const
 
 fillersRouter.patch('/:id', async (req, res) => {
   const id = Number(req.params.id)
@@ -112,9 +152,14 @@ fillersRouter.patch('/:id', async (req, res) => {
 
   const data = fillerData(req.body ?? {})
   // A kept clip would silently be the old settings — Preview claimed to show
-  // what airs, so an edit has to invalidate it rather than leave it stale.
+  // what airs, so an edit has to invalidate it rather than leave it stale. Its
+  // cached renders (one per branding logo, etc.) go too, so old settings don't
+  // pile up in the data dir.
   const restyled = RENDER_FIELDS.some((k) => before[k] !== data[k])
-  if (restyled) await dropAsset(before.generatedAssetId)
+  if (restyled) {
+    await dropAsset(before.generatedAssetId)
+    removeFillerCache(id)
+  }
 
   const f = await prisma.filler
     .update({ where: { id }, data: restyled ? { ...data, generatedAssetId: null } : data })
@@ -140,6 +185,9 @@ fillersRouter.delete('/:id', async (req, res) => {
     const shared = await prisma.filler.count({ where: { assetId: filler.assetId, id: { not: id } } })
     if (shared === 0) await dropAsset(filler.assetId)
   }
+  // Also sweep the cached generated clips this filler left in the data dir —
+  // the generated Media asset above is only the copy kept for the UI preview.
+  removeFillerCache(id)
   await prisma.filler.delete({ where: { id } }).catch(() => {})
   res.status(204).end()
 })

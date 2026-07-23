@@ -44,3 +44,12 @@ export function logoCacheDir(): string {
   fs.mkdirSync(d, { recursive: true })
   return d
 }
+
+// Scratch space for single-frame filler previews. These are written, streamed
+// to the browser, then deleted immediately — nothing here is meant to persist,
+// so a boot-time sweep clears anything a crash left behind (see warmFiller).
+export function previewsDir(): string {
+  const d = path.join(dataDir(), 'previews')
+  fs.mkdirSync(d, { recursive: true })
+  return d
+}

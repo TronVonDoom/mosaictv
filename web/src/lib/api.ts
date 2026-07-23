@@ -246,7 +246,8 @@ export type CollectionItem = {
 }
 
 export type FillerOwner = { channelId?: number; timeBlockId?: number }
-export type FillerVisual = 'animated' | 'frosted' | 'custom' | 'logowall' | 'pulse' | 'retro' | 'vintage'
+export type FillerVisual = 'animated' | 'frosted' | 'spotlight' | 'custom' | 'logowall' | 'pulse' | 'retro' | 'vintage'
+export type FillerResolution = '720p' | '1080p' | '1440p'
 export type Filler = {
   id: number
   channelId: number | null
@@ -259,6 +260,8 @@ export type Filler = {
   generatedAssetId: number | null
   durationMode: 'fixed' | 'audio'
   durationSec: number
+  resolution: FillerResolution
+  logoScale: number
   order: number
 }
 export type FillerInput = {
@@ -269,6 +272,8 @@ export type FillerInput = {
   logoId?: number | null
   durationMode: 'fixed' | 'audio'
   durationSec: number
+  resolution: FillerResolution
+  logoScale: number
 }
 export type FillerGenStatus = { percent?: number; done?: boolean; error?: string; assetId?: number; idle?: boolean }
 export type FillerGenJob = { fillerId: number; percent: number; done: boolean; error: string | null }
@@ -652,6 +657,28 @@ export const api = {
     return request<{ started: boolean }>(`/api/fillers/${id}/generate${qs}`, { method: 'POST' })
   },
   fillerGenStatus: (id: number) => request<FillerGenStatus>(`/api/fillers/${id}/generate/status`),
+  // Render a single still frame of a draft (unsaved) filler, branded with the
+  // owner's logo, and hand back the image as a Blob (turn it into an object URL
+  // for an <img>). Nothing is stored server-side, so previews never pile up.
+  fillerPreviewImage: async (draft: FillerInput, owner?: FillerOwner): Promise<Blob> => {
+    const qs = owner?.channelId != null ? `?channelId=${owner.channelId}` : owner?.timeBlockId != null ? `?timeBlockId=${owner.timeBlockId}` : ''
+    const res = await fetch(`/api/fillers/preview${qs}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(draft),
+    })
+    if (!res.ok) {
+      let message = `Preview failed (${res.status})`
+      try {
+        const b = await res.json()
+        if (b?.error) message = b.error
+      } catch {
+        /* non-JSON error */
+      }
+      throw new Error(message)
+    }
+    return res.blob()
+  },
   // Every generation the server is running or recently finished — lets a page
   // that wasn't open for the whole build resume showing its progress.
   fillerGenJobs: () => request<FillerGenJob[]>('/api/fillers/generating'),

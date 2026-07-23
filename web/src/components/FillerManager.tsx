@@ -112,7 +112,7 @@ export default function FillerManager() {
   }
   function startEdit(f: Filler) {
     setEditId(f.id)
-    setDraft({ name: f.name, style: f.style, assetId: f.assetId, audioAssetId: f.audioAssetId, logoId: f.logoId, durationMode: f.durationMode, durationSec: f.durationSec })
+    setDraft({ name: f.name, style: f.style, assetId: f.assetId, audioAssetId: f.audioAssetId, logoId: f.logoId, durationMode: f.durationMode, durationSec: f.durationSec, resolution: f.resolution, logoScale: f.logoScale })
     setOpen(true)
   }
   function closeEditor() {
@@ -133,7 +133,7 @@ export default function FillerManager() {
     setUploading(true)
     try {
       const asset = await api.uploadAsset('filler', name, file)
-      await api.addFiller({ name, style: 'custom', assetId: asset.id, audioAssetId: null, durationMode: 'fixed', durationSec: 30 })
+      await api.addFiller({ name, style: 'custom', assetId: asset.id, audioAssetId: null, durationMode: 'fixed', durationSec: 30, resolution: '1080p', logoScale: 1 })
       toast.success(`Added ${name}`)
       refresh()
       refreshAssets()
@@ -306,7 +306,16 @@ export default function FillerManager() {
         </div>
       )}
 
-      {open && <FillerEditor key={editId ?? 'new'} editId={editId} initial={draft} onCancel={closeEditor} onSaved={saved} />}
+      {open && (
+        <FillerEditor
+          key={editId ?? 'new'}
+          editId={editId}
+          initial={draft}
+          previewOwner={previewChannelId != null ? { channelId: previewChannelId } : undefined}
+          onCancel={closeEditor}
+          onSaved={saved}
+        />
+      )}
 
       {fillers.length === 0 && !open && (
         <p className="text-xs text-ink-faint">

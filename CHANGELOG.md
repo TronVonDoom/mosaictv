@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.8.0 — A bigger filler studio (2026-07-22)
+
+- **Fillers render at 1080p by default, with a resolution choice per filler.**
+  Generated idents were always built on a 720p canvas and then upscaled to
+  whatever the channel outputs — soft on a Full-HD channel. Each filler now
+  carries a resolution (720p · 1080p · 1440p, new default 1080p), so the source
+  is as sharp as the channel it airs on. Playback still scales to the channel
+  profile; a higher source only removes the upscale. Existing fillers move to
+  1080p and rebuild themselves the next time they're warmed.
+- **A second polished ident: Spotlight.** A calmer counterpart to the frosted
+  glass look — the channel logo on a softly lit glass card with a gleam that
+  sweeps across it, the MosaicTV wordmark resting below a hairline divider.
+  Pick it under a filler's **Visual**, same as frosted.
+- **A logo size control for the branded styles.** Frosted and Spotlight (and the
+  retired logo styles) take a **Logo size** slider, 40–200%, so a small
+  wordmark can be brought up or a busy logo eased back without editing artwork.
+  It scales the channel logo only — the MosaicTV mark stays put.
+- **Preview a still frame before committing to a full clip.** The filler form
+  has a **Preview image** button that renders a single frame of exactly what
+  would air — style, logo, size and resolution — in a second or two, so you can
+  judge the look without waiting on (or generating) a whole clip. The frame is
+  streamed straight to the browser and never written to your library.
+- **Deleting or restyling a filler now clears the clips it left on disk.**
+  Removing a filler from the Studio used to delete the preview asset but leave
+  its cached renders (one per channel logo, duration and resolution) piling up
+  in the data directory. Those are now swept when a filler is deleted or its
+  look is changed, and orphaned still-preview frames are cleared at startup.
+
 ## 0.7.5 — Streams pace to real time (2026-07-22)
 
 - **Programs no longer race ahead of the clock and leave the channel sitting on
