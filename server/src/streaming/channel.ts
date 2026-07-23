@@ -200,7 +200,14 @@ async function streamHold(res: Response, p: StreamProfile, enc: string, wm: Wate
     isFiller: true, fadeInSec: 0, fadeOutSec: 0, hwDecode,
   }
   if (!res.headersSent) res.writeHead(200, { 'Content-Type': 'video/mp2t', 'Cache-Control': 'no-cache, no-store' })
-  const proc = spawn('ffmpeg', ffmpegArgs(seg, enc, wm, p))
+  // Meter the ident at real time too. The looped filler is trivially cheap to
+  // decode, so unpaced it produces the whole `durSec` in a second or two, exits,
+  // and the concat immediately reopens onto the still-unfilled slot — the hold
+  // then respawns ~15x per window (seen in the logs as "holding 30.0s" every ~2s)
+  // instead of once. Pacing it makes one hold actually last `durSec` of wall time
+  // and hand the consumer steady frames, the same as a program.
+  const readrate = ['-readrate', '1.0', ...(await readrateBurstArgs(READ_BURST_SEC))]
+  const proc = spawn('ffmpeg', ffmpegArgs(seg, enc, wm, p, undefined, readrate))
   res.on('close', () => proc.kill('SIGKILL'))
   await pipeSegment(proc, res, `Ch ${channelNumber} hold`, session)
   if (!res.writableEnded) res.end()
@@ -655,7 +662,12 @@ export async function streamChannelItem(channelNumber: number, res: Response, re
     }
   }
 
-  const args = ffmpegArgs(seg, enc, wm, profile, textFilter)
+  // Cap this per-item encoder at real time (same 1.0 + connect burst the outer
+  // meter uses). Without it the encoder is held back only by downstream
+  // backpressure, which the shared-HLS path (writing segments to disk) doesn't
+  // provide — a cheap source then outruns the slot and trips the replay guard.
+  const readrate = ['-readrate', '1.0', ...(await readrateBurstArgs(READ_BURST_SEC))]
+  const args = ffmpegArgs(seg, enc, wm, profile, textFilter, readrate)
   let wmDesc: string
   if (wm.mode === 'none' || !logo) {
     wmDesc = 'no watermark'
