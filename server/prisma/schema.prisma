@@ -82,6 +82,7 @@ model Logo {
   channels  Channel[]
   blocks    TimeBlock[]
   collections Collection[]
+  fillers   Filler[]
 }
 
 // Show-level metadata (one row per distinct show title in a TV library).
@@ -197,6 +198,10 @@ model Filler {
   style        String      @default("frosted") // "animated" | "frosted" | "custom"
   assetId      Int? // custom visual (Asset kind "filler"); null for generated styles
   audioAssetId Int? // ambient audio (Asset kind "audio"); baked into generated clips
+  // Explicit brand logo for the generated (frosted/logo) styles. Null = derive
+  // from whichever channel/block the filler airs in (the per-owner default).
+  logo         Logo?       @relation(fields: [logoId], references: [id], onDelete: SetNull)
+  logoId       Int?
   generatedAssetId Int? // the last generated output clip, saved as a Media asset (for preview/reuse)
   durationMode String      @default("fixed") // "fixed" | "audio" (match the audio length)
   durationSec  Int         @default(30)

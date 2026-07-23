@@ -112,7 +112,7 @@ export default function FillerManager() {
   }
   function startEdit(f: Filler) {
     setEditId(f.id)
-    setDraft({ name: f.name, style: f.style, assetId: f.assetId, audioAssetId: f.audioAssetId, durationMode: f.durationMode, durationSec: f.durationSec })
+    setDraft({ name: f.name, style: f.style, assetId: f.assetId, audioAssetId: f.audioAssetId, logoId: f.logoId, durationMode: f.durationMode, durationSec: f.durationSec })
     setOpen(true)
   }
   function closeEditor() {

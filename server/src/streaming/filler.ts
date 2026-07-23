@@ -24,6 +24,16 @@ const FPS = 30
 
 const clampDur = (d: number) => Math.max(5, Math.min(600, Math.round(d) || 30))
 
+// Fit a foreground logo inside a maxW×maxH box, preserving aspect and never
+// upscaling past its native size (both dims are min'd against the source, so a
+// tiny logo stays crisp). Capping the WIDTH — not just the height — is what
+// keeps a short, wide wordmark from ballooning to fill its half of the frame:
+// with only a height cap, a wide logo hits the frame edge long before that
+// height and reads as huge. Width leads; height is the ceiling for tall marks.
+function logoScale(maxW: number, maxH: number): string {
+  return `scale='min(iw,${maxW})':'min(ih,${maxH})':force_original_aspect_ratio=decrease`
+}
+
 // Audio input for a generated clip: a chosen track (looped) baked in, else a
 // soft tone. `-shortest`/`-t` cap the output to the video length.
 function audioInput(audioFile: string | undefined, dur: number, toneHz: number, vol: number): string[] {
@@ -184,10 +194,12 @@ function frostedArgs(out: string, channelLogo: string, mzLogo: string, D: number
     // Frost: blur the scrolling layer, tint it like glass, and draw a faint
     // vertical seam down the middle so the two halves read as side-by-side panes.
     `[rows]boxblur=14:2,drawbox=x=0:y=0:w=iw:h=ih:color=white@0.07:t=fill,drawbox=x=(iw-2)/2:y=0:w=2:h=ih:color=white@0.10:t=fill[frost]`,
-    // Sharp foreground logos in front of the glass. Each is capped to ~40% of
-    // the frame width so a wide logo stays inside its own half.
-    `[chFg]scale='min(iw,${Math.floor(W * 0.4)})':180:force_original_aspect_ratio=decrease,format=rgba[chfg]`,
-    `[mzFg]scale='min(iw,${Math.floor(W * 0.4)})':120:force_original_aspect_ratio=decrease,format=rgba[mzfg]`,
+    // Sharp foreground logos in front of the glass. Each sits inside a box that
+    // is a fraction of its own half-panel (~60% wide), so a short, wide logo is
+    // held to that width instead of swelling toward the seam, while a tall logo
+    // is bounded by the height instead.
+    `[chFg]${logoScale(Math.floor(W * 0.3), 180)},format=rgba[chfg]`,
+    `[mzFg]${logoScale(Math.floor(W * 0.28), 120)},format=rgba[mzfg]`,
     // Channel logo centered in the left half; MosaicTV logo centered in the right.
     `[frost][chfg]overlay=x=(W/2-w)/2:y=(H-h)/2[f1]`,
     `[f1][mzfg]overlay=x=W/2+(W/2-w)/2:y=(H-h)/2,format=yuv420p[v]`,
@@ -225,7 +237,7 @@ function mosaictvLogoFile(): string | undefined {
 
 // Bump these when the generators change so persisted clips regenerate.
 const FILLER_VERSION = 4
-const FROSTED_VERSION = 4
+const FROSTED_VERSION = 5
 const THEME_VERSION = 1
 
 // Resolve an Asset id to its on-disk file (or undefined).
@@ -323,15 +335,20 @@ async function ensureThemedFiller(
 
 // ---- Resolution -------------------------------------------------------------
 
-type FillerRow = { style: string; assetId: number | null; audioAssetId: number | null; durationMode: string; durationSec: number }
+type FillerRow = { style: string; assetId: number | null; audioAssetId: number | null; durationMode: string; durationSec: number; logoId: number | null }
 
 /**
  * Resolve a Filler to a playable clip (+ music overlaid at playback for custom
  * clips). Generated styles bake the chosen audio in and match its length. Falls
  * back to animated on any failure. `onProgress` reports generation progress.
+ *
+ * `logoFile` is the logo of wherever this filler is airing; if the filler pins
+ * its own brand logo (`logoId`), that wins so it looks the same on every
+ * channel it's assigned to.
  */
 export async function resolveFillerClip(f: FillerRow, logoFile: string | undefined, onProgress?: ProgressCb): Promise<{ clip?: string; music?: string }> {
   const audioFile = await assetFilePath(f.audioAssetId)
+  if (f.logoId != null) logoFile = (await logoFileById(f.logoId, null)) ?? logoFile
   let dur = clampDur(f.durationSec)
   if (f.durationMode === 'audio' && audioFile) {
     const probed = await probeDuration(audioFile)

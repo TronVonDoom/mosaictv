@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, type Asset, type Filler, type FillerInput } from '../lib/api'
 import { errorMessage } from '../lib/errors'
+import LogoPicker from './LogoPicker'
 import { Banner, Input, Select } from './ui'
 
 export const emptyFillerDraft: FillerInput = {
@@ -8,9 +9,14 @@ export const emptyFillerDraft: FillerInput = {
   style: 'frosted',
   assetId: null,
   audioAssetId: null,
+  logoId: null,
   durationMode: 'fixed',
   durationSec: 30,
 }
+
+// Styles whose generated clip is branded with a logo — the only ones for which
+// a logo override makes sense (a custom clip carries its own artwork).
+const LOGO_STYLES = new Set(['frosted', 'logowall', 'pulse'])
 
 // Generated visual presets you can create (custom = an uploaded clip instead).
 // Only the polished frosted-glass ident ships for now; the other generated
@@ -127,6 +133,16 @@ export default function FillerEditor({
               {fillerAssets.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </Select>
           </label>
+        )}
+        {LOGO_STYLES.has(draft.style) && (
+          <div className="col-span-2 md:col-span-3 flex flex-col gap-1 text-xs">
+            <span className="text-ink-muted">Logo</span>
+            <LogoPicker value={draft.logoId ?? null} onChange={(id) => set('logoId', id)} noneLabel="Use the channel / block logo" />
+            <span className="text-[10px] text-ink-faint leading-tight">
+              Brands this filler with a specific logo everywhere it airs. Leave on “Use the channel / block logo”
+              to keep taking each channel or block’s own logo.
+            </span>
+          </div>
         )}
         <label className="flex flex-col gap-1 text-xs">
           <span className="text-ink-muted">Audio (optional)</span>

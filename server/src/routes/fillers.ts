@@ -15,6 +15,7 @@ function fillerData(body: Record<string, unknown>) {
     style,
     assetId: body?.assetId != null && body.assetId !== '' ? Number(body.assetId) : null,
     audioAssetId: body?.audioAssetId != null && body.audioAssetId !== '' ? Number(body.audioAssetId) : null,
+    logoId: body?.logoId != null && body.logoId !== '' ? Number(body.logoId) : null,
     durationMode: body?.durationMode === 'audio' ? 'audio' : 'fixed',
     durationSec: Math.max(5, Math.min(600, Number(body?.durationSec) || 30)),
   }
@@ -102,7 +103,7 @@ async function dropAsset(assetId: number | null): Promise<void> {
 
 // Everything that changes how the clip renders. `name` is only a label, so
 // renaming a filler shouldn't throw away a clip that's still correct.
-const RENDER_FIELDS = ['style', 'assetId', 'audioAssetId', 'durationMode', 'durationSec'] as const
+const RENDER_FIELDS = ['style', 'assetId', 'audioAssetId', 'logoId', 'durationMode', 'durationSec'] as const
 
 fillersRouter.patch('/:id', async (req, res) => {
   const id = Number(req.params.id)

@@ -255,6 +255,7 @@ export type Filler = {
   style: FillerVisual
   assetId: number | null
   audioAssetId: number | null
+  logoId: number | null
   generatedAssetId: number | null
   durationMode: 'fixed' | 'audio'
   durationSec: number
@@ -265,6 +266,7 @@ export type FillerInput = {
   style: FillerVisual
   assetId?: number | null
   audioAssetId?: number | null
+  logoId?: number | null
   durationMode: 'fixed' | 'audio'
   durationSec: number
 }
