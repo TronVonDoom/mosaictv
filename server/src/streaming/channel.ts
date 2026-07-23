@@ -58,6 +58,47 @@ type SegmentResult = { code: number | null; stderr: string; spawnError?: Error; 
 // A quiet encoder with a *drainable* pipe, though, is always a fault.
 const STARVED_SEC = 5
 const BACKPRESSURE_SEC = 30
+// Past this many seconds of a silent producer with a drainable pipe, the hop is
+// not slow — it is wedged, and a hung ffmpeg never exits on its own, so nothing
+// downstream ever gets the chance to restart it. The watchdog force-kills it and
+// lets the caller's supervisor (or the concat reopening the item) start a fresh
+// one, turning a silent multi-minute freeze into a ~20s blip. Only starvation is
+// killed, never backpressure: a slow-but-live consumer is pacing us, not failing.
+const STALL_KILL_SEC = 20
+// A concat seam should advance the output timeline smoothly. A jump larger than
+// this (either direction) is the discontinuity that makes the outer readrate
+// meter believe it is far ahead and oversleep. Logged, never acted on — purely a
+// breadcrumb for confirming the cause during a soak.
+const SEAM_JUMP_SEC = 10
+
+/**
+ * PTS (seconds) of the first PES packet that carries one in an MPEG-TS buffer,
+ * or null if none is found. Used only to trace timestamp continuity across
+ * concat seams — it never gates streaming, so any parse miss just skips a sample.
+ */
+function firstPtsFromTs(buf: Buffer): number | null {
+  for (let i = 0; i + 188 <= buf.length; i++) {
+    if (buf[i] !== 0x47) continue // TS sync byte
+    if ((buf[i + 1] & 0x40) === 0) continue // want payload_unit_start_indicator
+    const afc = (buf[i + 3] & 0x30) >> 4
+    if (afc === 0 || afc === 2) continue // no payload in this packet
+    let p = i + 4
+    if (afc === 3) p += 1 + buf[i + 4] // skip the adaptation field
+    if (p + 14 >= buf.length) continue // not enough room for a PES header
+    if (buf[p] !== 0x00 || buf[p + 1] !== 0x00 || buf[p + 2] !== 0x01) continue // PES start code
+    if (buf[p + 3] < 0xc0) continue // only audio/video elementary streams carry a PTS
+    if ((buf[p + 7] & 0x80) === 0) continue // PTS_DTS_flags say no PTS present
+    const b = p + 9
+    const pts =
+      ((buf[b] & 0x0e) >> 1) * 2 ** 30 +
+      buf[b + 1] * 2 ** 22 +
+      ((buf[b + 2] & 0xfe) >> 1) * 2 ** 15 +
+      buf[b + 3] * 2 ** 7 +
+      ((buf[b + 4] & 0xfe) >> 1)
+    return pts / 90000
+  }
+  return null
+}
 
 /**
  * Pipe a child's stdout to the response with backpressure; resolve on exit.
@@ -68,7 +109,7 @@ const BACKPRESSURE_SEC = 30
  * (black filler) that aren't worth watching. `session` attributes those
  * warnings to the viewer whose stream froze.
  */
-function pipeSegment(proc: ChildProcess, res: Response, tag?: string, session?: string): Promise<SegmentResult> {
+function pipeSegment(proc: ChildProcess, res: Response, tag?: string, session?: string, probeSeam = false): Promise<SegmentResult> {
   return new Promise((resolve) => {
     let stderr = ''
     let spawnError: Error | undefined
@@ -85,6 +126,7 @@ function pipeSegment(proc: ChildProcess, res: Response, tag?: string, session?: 
     let lastByteAt = Date.now()
     let blocked = false
     let stalled = false
+    let killed = false
     const watchdog = tag
       ? setInterval(() => {
           const idleMs = Date.now() - lastByteAt
@@ -93,6 +135,23 @@ function pipeSegment(proc: ChildProcess, res: Response, tag?: string, session?: 
               stalled = false
               log('info', 'stream', `${tag}: recovered after ${(idleMs / 1000).toFixed(0)}s of no data`, undefined, session)
             }
+            return
+          }
+          // A silent producer that stays quiet past the hard deadline is wedged,
+          // not slow, and will never exit on its own — so kill it and let the
+          // caller restart. Backpressure is deliberately exempt: a slow-but-live
+          // consumer is pacing us, and killing a working stream over a slow
+          // client would be worse than the wait.
+          if (!blocked && !killed && idleMs >= STALL_KILL_SEC * 1000) {
+            killed = true
+            log(
+              'warn',
+              'stream',
+              `${tag}: frozen ${(idleMs / 1000).toFixed(0)}s — force-killing ffmpeg so it can restart`,
+              'producer silent with a drainable pipe past the hard deadline — the hop is wedged, not pacing',
+              session,
+            )
+            proc.kill('SIGKILL')
             return
           }
           if (stalled) return // already reported; wait for recovery or exit
@@ -109,10 +168,31 @@ function pipeSegment(proc: ChildProcess, res: Response, tag?: string, session?: 
         }, 1000)
       : undefined
     watchdog?.unref()
+    let lastPts: number | null = null
+    let lastPtsAt = 0
     const onData = (chunk: Buffer) => {
       if (firstByteMs < 0) firstByteMs = Date.now() - t0
       bytes += chunk.length
       lastByteAt = Date.now()
+      // Trace timeline continuity across concat seams (outer hop only). Sampled
+      // at most every 2s, not per packet, and purely diagnostic — a parse miss
+      // is simply skipped, and a jump only logs a breadcrumb.
+      if (probeSeam && lastByteAt - lastPtsAt >= 2000) {
+        const pts = firstPtsFromTs(chunk)
+        if (pts != null) {
+          if (lastPts != null && Math.abs(pts - lastPts) > SEAM_JUMP_SEC) {
+            log(
+              'debug',
+              'stream',
+              `${tag}: output DTS jumped ${(pts - lastPts).toFixed(1)}s (${lastPts.toFixed(1)}→${pts.toFixed(1)})`,
+              'the outer readrate meters this timeline — a large forward jump makes it oversleep, which reads as a freeze',
+              session,
+            )
+          }
+          lastPts = pts
+          lastPtsAt = lastByteAt
+        }
+      }
       if (!res.write(chunk)) {
         blocked = true
         proc.stdout?.pause()
@@ -373,7 +453,7 @@ export async function streamChannel(channelNumber: number, res: Response, req?: 
     const proc = spawn('ffmpeg', args)
     const kill = () => proc.kill('SIGKILL')
     res.on('close', kill)
-    const result = await pipeSegment(proc, res, `Ch ${channelNumber} concat→player`, tag)
+    const result = await pipeSegment(proc, res, `Ch ${channelNumber} concat→player`, tag, true)
     res.off('close', kill)
     if (res.destroyed || res.writableEnded) break // viewer left — the normal way out
     if (result.spawnError) {
