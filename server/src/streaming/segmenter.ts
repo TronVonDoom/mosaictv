@@ -37,7 +37,12 @@ export const SEGMENTER_V2 = process.env.SEGMENTER === 'v2'
 export type HlsStatus = 'ready' | 'starting' | 'unavailable'
 
 const SEGMENT_SEC = 4
-const WINDOW_SEGMENTS = 12 // ~48s of playlist; a player rides ~3 segments back (~12s buffer)
+// ~2.7 min of live window. Deep enough that a raw-HLS client (e.g. Jellyfin's
+// tuner ffmpeg) that stalls briefly can still fetch where it left off rather
+// than 404ing off the back of the window and wedging permanently — unlike the
+// mpegts wrapper, it has no jump-to-live of its own. The wrapper rides only ~3
+// segments back regardless of how deep this is (see -live_start_index below).
+const WINDOW_SEGMENTS = 40
 const READY_MIN_SEGS = 2 // serve the playlist once it holds this many segments
 const READY_TIMEOUT_MS = 12_000 // report "starting" if not ready within this
 const POLL_MS = 300 // how often to sweep an item's child playlist for finished segments
@@ -48,6 +53,13 @@ const VIEWER_WINDOW_MS = 20_000 // an IP seen within this window counts as watch
 // slot — hold the remainder rather than re-attempting an instant-EOF program.
 const EARLY_EXIT_MARGIN_SEC = 5
 const HOLD_CHUNK_SEC = 30 // fill dead air / short-file remainder in chunks this big
+// A live per-item encoder produces a segment every SEGMENT_SEC. One that hangs —
+// no segment yet never exits (a wedged nvdec, a pathological file) — would stall
+// the producer loop forever, freezing every viewer with no way back. Past this
+// long with no new segment while the process is still alive, it's wedged, not
+// slow: force-kill it so the timeline can advance. Well above the ~one segment of
+// wall time the first output legitimately takes to finalize.
+const PRODUCER_STALL_SEC = 15
 // Single real-time meter, no connect burst: the buffer here is structural (the
 // player sits ~12s behind the live edge), so front-loading the encoder would
 // only make each item finish early and desync from the schedule.
@@ -243,6 +255,21 @@ class ChannelSegmenter {
     const res = await this.encodeToMaster(built.args, built.label, built.captionFiles)
     const ranSec = (Date.now() - startedAt) / 1000
 
+    // The watchdog force-killed a wedged encoder. Re-serving the same item next
+    // iteration would likely hang again on the same input, so hold the rest of
+    // its slot with black — the schedule advances and the next program still
+    // starts on time, same as the early-exit and short-file cases below.
+    if (res.stalled) {
+      const remaining = (item.stopTime.getTime() - Date.now()) / 1000
+      if (remaining > 1) {
+        await this.encodeToMaster(
+          blackArgs(profile, enc, Math.min(remaining, HOLD_CHUNK_SEC), this.hlsOutput()),
+          `black (${built.label} stalled — holding to stay on schedule)`,
+        )
+      }
+      return
+    }
+
     // A real program whose encoder exited well before its slot ended hit EOF —
     // its file is shorter than the slot. Hold the remainder with black so we
     // stay on schedule instead of re-attempting an instant-EOF program next
@@ -282,7 +309,10 @@ class ChannelSegmenter {
   }
 
   // ── Run one ffmpeg to disk and ingest its segments ─────────────────────────
-  private async encodeToMaster(args: string[], label: string, captionFiles: string[] = []): Promise<{ code: number | null }> {
+  // Resolves once the process exits. `stalled` means our watchdog force-killed it
+  // for producing no segment past the hard deadline — the caller holds the rest
+  // of the slot rather than re-attempting the same wedging input next iteration.
+  private async encodeToMaster(args: string[], label: string, captionFiles: string[] = []): Promise<{ code: number | null; stalled: boolean }> {
     // Recover the child playlist path from the args (hlsOutput just set it as
     // the last positional argument).
     const playlist = args[args.length - 1]
@@ -296,6 +326,33 @@ class ChannelSegmenter {
     const poll = setInterval(() => this.ingest(run), POLL_MS)
     poll.unref?.()
 
+    // Producer-side stall watchdog (see PRODUCER_STALL_SEC). A segment lands via
+    // ingest → nextSeq advances; if that hasn't moved for the deadline while the
+    // process is still alive, the encoder is wedged, so kill it and let the loop
+    // move on. Progress resets the clock, so a slow-but-producing encoder is safe.
+    let lastSeq = this.nextSeq
+    let lastProgressAt = Date.now()
+    let stalled = false
+    const watchdog = setInterval(() => {
+      if (this.nextSeq !== lastSeq) {
+        lastSeq = this.nextSeq
+        lastProgressAt = Date.now()
+        return
+      }
+      if (!stalled && Date.now() - lastProgressAt >= PRODUCER_STALL_SEC * 1000) {
+        stalled = true
+        log(
+          'warn',
+          'ffmpeg',
+          `Channel ${this.n}: no segment from ${label} for ${PRODUCER_STALL_SEC}s — force-killing the encoder so the timeline can advance`,
+          stderr || '(no stderr)',
+          this.tag,
+        )
+        proc.kill('SIGKILL')
+      }
+    }, 1000)
+    watchdog.unref?.()
+
     const code: number | null = await new Promise((resolve) => {
       proc.on('error', (e) => {
         log('error', 'ffmpeg', `Channel ${this.n}: failed to launch encoder for ${label}`, String(e), this.tag)
@@ -304,18 +361,20 @@ class ChannelSegmenter {
       proc.on('close', (c) => resolve(c))
     })
     clearInterval(poll)
+    clearInterval(watchdog)
     this.ingest(run) // final drain: pick up the last finalized segment
     if (this.proc === proc) this.proc = null
 
-    // 255 / SIGKILL is our own reaper or a restart; anything else mid-life is a
-    // real fault worth surfacing (the loop keeps going regardless).
-    if (code && code !== 0 && code !== 255) {
+    // 255 / SIGKILL is our own reaper, the watchdog, or a restart; anything else
+    // mid-life is a real fault worth surfacing (the loop keeps going regardless).
+    // A watchdog kill is already logged above, so don't double-report it here.
+    if (!stalled && code && code !== 0 && code !== 255) {
       log('warn', 'ffmpeg', `Channel ${this.n}: encoder exited ${code} on ${label}`, stderr || '(no stderr)', this.tag)
     }
     // ffmpeg has read the caption files at init; drop them and the child playlist.
     for (const f of captionFiles) fs.rmSync(f, { force: true })
     fs.rm(run.playlist, { force: true }, () => {})
-    return { code }
+    return { code, stalled }
   }
 
   // Move any newly-finalized child segments into the master playlist. A segment
