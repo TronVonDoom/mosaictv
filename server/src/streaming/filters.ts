@@ -292,8 +292,39 @@ export function songChyronFilter(
 
 // ---- Full command construction ----------------------------------------------
 
-/** The ffmpeg command that encodes one on-air segment to MPEG-TS on stdout. */
-export function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: StreamProfile, textFilter?: string, readrate?: string[]): string[] {
+/**
+ * Where the encoded segment goes. `mpegts-pipe` is the original per-item output
+ * consumed by the v1 outer concat / per-client wrapper. `hls` writes a child
+ * HLS playlist + mpegts segments to disk, which the v2 segmenter ingests into a
+ * channel-wide playlist — one encode stage, no second ffmpeg (see segmenter.ts).
+ */
+export type FfmpegOutput =
+  | { kind: 'mpegts-pipe' }
+  | { kind: 'hls'; playlist: string; segmentFilename: string; hlsTimeSec: number }
+
+// The output stanza for a finished command. mpegts-pipe writes the muxed TS to
+// stdout; hls writes each finalized segment to disk and lists it in a child
+// playlist (list_size 0 = keep them all, so the segmenter sees every one).
+// `temp_file` makes ffmpeg write each segment to a .tmp and rename on close, so
+// a reader never catches a half-written file.
+function outputArgs(output: FfmpegOutput): string[] {
+  if (output.kind === 'hls') {
+    return [
+      '-f', 'hls',
+      '-hls_time', String(output.hlsTimeSec),
+      '-hls_list_size', '0',
+      '-hls_flags', 'independent_segments+temp_file',
+      '-hls_segment_type', 'mpegts',
+      '-hls_segment_filename', output.segmentFilename,
+      output.playlist,
+    ]
+  }
+  return ['-mpegts_flags', '+resend_headers', '-f', 'mpegts', '-muxpreload', '0', '-muxdelay', '0', 'pipe:1']
+}
+
+/** The ffmpeg command that encodes one on-air segment — to MPEG-TS on stdout by
+ *  default, or to on-disk HLS segments when `output` says so (the v2 segmenter). */
+export function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: StreamProfile, textFilter?: string, readrate?: string[], output: FfmpegOutput = { kind: 'mpegts-pipe' }): string[] {
   // Filler is usually built out of the logo already, so the bug goes on top of
   // it only if explicitly asked for.
   const useWatermark = wm.mode !== 'none' && !!seg.logo && (!seg.isFiller || wm.showOnFiller)
@@ -391,11 +422,12 @@ export function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: St
   if (p.threads > 0) a.push('-threads', String(p.threads))
   a.push(...encoderArgs(enc, p))
   a.push('-c:a', 'aac', '-ar', '48000', '-ac', String(p.audioChannels), '-b:a', `${p.audioBitrate}k`)
-  // Each item starts at timestamp 0 (setpts above) and is stitched to the
-  // previous one by the outer concat process. We deliberately do NOT offset
-  // timestamps here any more: doing it by hand is what put DTS backwards at
-  // every seam.
-  a.push('-mpegts_flags', '+resend_headers', '-f', 'mpegts', '-muxpreload', '0', '-muxdelay', '0', 'pipe:1')
+  // Each item starts at timestamp 0 (setpts above). In v1 the outer concat
+  // process stitches items together; in v2 each item is its own HLS child and
+  // the boundary becomes an EXT-X-DISCONTINUITY the player resets on, so either
+  // way we deliberately do NOT offset timestamps here (doing it by hand is what
+  // put DTS backwards at every seam).
+  a.push(...outputArgs(output))
   return a
 }
 
@@ -405,7 +437,7 @@ export function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: St
  * session, so every /internal/stream request must answer with real TS — even
  * when there is nothing to play.
  */
-export function blackArgs(p: StreamProfile, enc: string, durSec: number): string[] {
+export function blackArgs(p: StreamProfile, enc: string, durSec: number, output: FfmpegOutput = { kind: 'mpegts-pipe' }): string[] {
   return [
     '-hide_banner', '-loglevel', 'error', '-nostdin',
     '-f', 'lavfi', '-i', `color=c=black:s=${p.width}x${p.height}:r=${p.fps}`,
@@ -413,6 +445,6 @@ export function blackArgs(p: StreamProfile, enc: string, durSec: number): string
     '-t', Math.max(0.5, durSec).toFixed(3),
     ...encoderArgs(enc, p),
     '-c:a', 'aac', '-ar', '48000', '-ac', String(p.audioChannels), '-b:a', `${p.audioBitrate}k`,
-    '-mpegts_flags', '+resend_headers', '-f', 'mpegts', '-muxpreload', '0', '-muxdelay', '0', 'pipe:1',
+    ...outputArgs(output),
   ]
 }

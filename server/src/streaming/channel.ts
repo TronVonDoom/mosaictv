@@ -109,7 +109,7 @@ function firstPtsFromTs(buf: Buffer): number | null {
  * (black filler) that aren't worth watching. `session` attributes those
  * warnings to the viewer whose stream froze.
  */
-function pipeSegment(proc: ChildProcess, res: Response, tag?: string, session?: string, probeSeam = false): Promise<SegmentResult> {
+export function pipeSegment(proc: ChildProcess, res: Response, tag?: string, session?: string, probeSeam = false): Promise<SegmentResult> {
   return new Promise((resolve) => {
     let stderr = ''
     let spawnError: Error | undefined
