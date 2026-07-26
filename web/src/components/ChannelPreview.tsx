@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import mpegts from 'mpegts.js'
+import Hls from 'hls.js'
 import { Modal } from './ui'
 
 type Props = {
@@ -10,22 +10,24 @@ type Props = {
 }
 
 // How long playback may sit without its currentTime advancing before we give up
-// on the current connection and reconnect. Kept above the server's own stall
-// recovery (it force-kills and restarts a wedged encoder at ~20s, resuming on
-// the same response) so we only act when that self-heal did NOT bring the stream
-// back — a truly dead response, not a blip the server is already handling.
+// on the current connection and rebuild it. hls.js self-heals most hiccups in
+// place (see the ERROR handler), so this only fires when that recovery did NOT
+// bring the stream back — a truly dead player, not a blip.
 const STALL_RECONNECT_SEC = 30
-// A reconnect spawns a fresh server-side viewer, so cap the churn: after this
+// A rebuild spawns a fresh set of segment fetches, so cap the churn: after this
 // many failed attempts, surface a real error instead of looping forever.
 const MAX_RECONNECTS = 6
 
-// The channel endpoint serves raw MPEG-TS, which no browser plays natively —
-// mpegts.js demuxes it to fMP4 and feeds it through Media Source Extensions.
-// Previewing opens a real tune-in: the server spawns an ffmpeg for us and we
-// count as a viewer until the player is torn down.
+// The browser previews the channel exactly the way ErsatzTV, Jellyfin, and every
+// other HLS client do: hls.js pulls the channel's live .m3u8 playlist and its
+// segments over HTTP. The point of using HLS here rather than the raw MPEG-TS
+// wrapper is the buffer — hls.js holds several segments back from the live edge
+// and fetches ahead, which smooths over the fact that the segmenter delivers one
+// ~4s segment at a time (a continuous-TS player with no buffer starves between
+// segments and stutters). Opening this counts as a real viewer until it closes.
 export default function ChannelPreview({ number, name, nowPlaying, onClose }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const playerRef = useRef<ReturnType<typeof mpegts.createPlayer> | null>(null)
+  const hlsRef = useRef<Hls | null>(null)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const attemptsRef = useRef(0)
   // Last time currentTime was seen to advance — the basis for the stall check.
@@ -33,7 +35,7 @@ export default function ChannelPreview({ number, name, nowPlaying, onClose }: Pr
   const [error, setError] = useState<string | null>(null)
   const [mutedFallback, setMutedFallback] = useState(false)
   const [reconnecting, setReconnecting] = useState(false)
-  const url = `${window.location.origin}/iptv/channel/${number}.ts`
+  const url = `${window.location.origin}/iptv/channel/${number}/index.m3u8`
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -45,29 +47,31 @@ export default function ChannelPreview({ number, name, nowPlaying, onClose }: Pr
     const video = videoRef.current
     if (!video) return
 
-    if (!mpegts.getFeatureList().mseLivePlayback) {
-      setError('This browser cannot play MPEG-TS (no Media Source Extensions). Try the stream URL in VLC.')
+    const canNativeHls = video.canPlayType('application/vnd.apple.mpegurl') !== ''
+    if (!Hls.isSupported() && !canNativeHls) {
+      setError('This browser cannot play HLS (no Media Source Extensions). Try the stream URL in VLC.')
       return
     }
 
     const teardown = () => {
-      const player = playerRef.current
-      playerRef.current = null
-      if (!player) return
-      try {
-        // Tearing the player down closes the HTTP response, which is what tells
-        // the server to kill this client's ffmpeg.
-        player.pause()
-        player.unload()
-        player.detachMediaElement()
-        player.destroy()
-      } catch {
-        // already gone
+      const hls = hlsRef.current
+      hlsRef.current = null
+      // Destroying hls.js stops all segment fetches, which is what tells the
+      // server this viewer left (the shared producer reaps once idle).
+      if (hls) {
+        try {
+          hls.destroy()
+        } catch {
+          // already gone
+        }
+      } else {
+        video.removeAttribute('src')
+        video.load()
       }
     }
 
-    // Rebuild the connection from scratch. Each reconnect is a new tune-in (a
-    // fresh server viewer), the same thing a manual close-and-reopen would do.
+    // Rebuild from scratch. Only used when hls.js's own recovery is exhausted —
+    // a fresh manifest load jumps back to the live edge.
     const reconnect = (why: string) => {
       if (reconnectTimerRef.current) return // one already pending
       teardown()
@@ -85,29 +89,7 @@ export default function ChannelPreview({ number, name, nowPlaying, onClose }: Pr
       }, delay)
     }
 
-    const connect = () => {
-      const player = mpegts.createPlayer(
-        { type: 'mpegts', isLive: true, url },
-        {
-          // Live tuning: don't sit on a stash buffer, and drift back toward the
-          // live edge if we fall behind.
-          enableStashBuffer: false,
-          liveBufferLatencyChasing: true,
-          lazyLoad: false,
-        },
-      )
-      playerRef.current = player
-
-      player.on(mpegts.Events.ERROR, (type: string, detail: string) => {
-        // Don't surface the error straight away — a dropped connection is exactly
-        // what a reconnect is for. Only the attempt cap turns it into a message.
-        reconnect(type === mpegts.ErrorTypes.NETWORK_ERROR ? 'network dropped' : detail || type)
-      })
-
-      player.attachMediaElement(video)
-      player.load()
-      progressRef.current = { t: video.currentTime || 0, at: Date.now() }
-
+    const attemptAutoplay = () => {
       // The click that opened this counts as a user gesture, so unmuted autoplay
       // is usually allowed — but fall back to muted rather than not playing.
       video.play().catch(() => {
@@ -117,18 +99,85 @@ export default function ChannelPreview({ number, name, nowPlaying, onClose }: Pr
       })
     }
 
+    const connect = () => {
+      progressRef.current = { t: 0, at: Date.now() }
+
+      // Safari (and iOS) play HLS natively and manage their own buffer — hand the
+      // playlist straight to the element and let the browser do the work.
+      if (!Hls.isSupported() && canNativeHls) {
+        video.src = url
+        attemptAutoplay()
+        return
+      }
+
+      const hls = new Hls({
+        enableWorker: true,
+        // Not an LL-HLS playlist (no partial segments), and low latency here would
+        // just re-create the hug-the-edge starvation we're fixing. Favour a buffer.
+        lowLatencyMode: false,
+        // Ride ~3 segments (~12s) behind the live edge: a real cushion that absorbs
+        // the segmenter's one-segment-at-a-time delivery and a program-boundary gap.
+        liveSyncDurationCount: 3,
+        liveMaxLatencyDurationCount: 12,
+        // Drift back toward the edge by playing slightly fast instead of a hard
+        // seek, so catching up after a stall is invisible rather than a jump.
+        maxLiveSyncPlaybackRate: 1.1,
+        // Fetch ahead / keep behind, both bounded so a long session can't grow the
+        // buffer without limit.
+        maxBufferLength: 30,
+        backBufferLength: 30,
+      })
+      hlsRef.current = hls
+
+      hls.on(Hls.Events.ERROR, (_evt, data) => {
+        if (!data.fatal) return // non-fatal: hls.js handles it internally
+        switch (data.type) {
+          case Hls.ErrorTypes.NETWORK_ERROR:
+            // A playlist/segment fetch failed — including the 503 the server sends
+            // while a cold producer warms up. Retries are exhausted at this point,
+            // so restart the loader; count it so a genuinely dead channel still
+            // trips the reconnect cap rather than spinning forever.
+            attemptsRef.current += 1
+            if (attemptsRef.current > MAX_RECONNECTS) {
+              teardown()
+              setError('Lost the stream and could not recover (network). Reopen the preview to try again.')
+              return
+            }
+            setReconnecting(true)
+            hls.startLoad()
+            break
+          case Hls.ErrorTypes.MEDIA_ERROR:
+            // A decode hiccup (e.g. across a program discontinuity) — hls.js can
+            // flush and recover in place without a full rebuild.
+            hls.recoverMediaError()
+            break
+          default:
+            reconnect(data.details || data.type)
+        }
+      })
+
+      // Clear the "reconnecting" veil and the attempt budget once media is flowing.
+      hls.on(Hls.Events.FRAG_BUFFERED, () => {
+        setReconnecting(false)
+        attemptsRef.current = 0
+      })
+
+      hls.attachMedia(video)
+      hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(url))
+      hls.on(Hls.Events.MANIFEST_PARSED, attemptAutoplay)
+    }
+
     // Watch that playback actually progresses. A live stream whose currentTime
-    // stops advancing (while not paused or ended) is frozen; give the server's
-    // own recovery a wide margin, then reconnect if it never came back.
+    // stops advancing (while not paused or ended) is frozen; give hls.js's own
+    // recovery a wide margin, then rebuild if it never came back.
     const watchdog = setInterval(() => {
-      if (reconnectTimerRef.current || !playerRef.current) return
+      if (reconnectTimerRef.current) return
       if (video.paused || video.ended) {
         progressRef.current.at = Date.now() // user paused / not playing — not a stall
         return
       }
       if (video.currentTime > progressRef.current.t + 0.25) {
         progressRef.current = { t: video.currentTime, at: Date.now() }
-        attemptsRef.current = 0 // healthy again — clear the reconnect budget
         return
       }
       if (Date.now() - progressRef.current.at > STALL_RECONNECT_SEC * 1000) {
