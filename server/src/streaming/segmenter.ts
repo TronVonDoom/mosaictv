@@ -487,23 +487,38 @@ reaper.unref?.()
 // this is ErsatzTV's "MPEG-TS is a light wrapper over the HLS Segmenter".
 
 export async function streamMpegtsViaSegmenter(n: number, res: Response, req?: Request): Promise<void> {
-  const status = await ensureSegmenter(n, clientIp(req), clientName(req))
+  const ip = clientIp(req)
+  const client = clientName(req)
+  const status = await ensureSegmenter(n, ip, client)
   if (status === 'unavailable') {
     res.status(409).end()
     return
   }
   // Wait briefly for the first segments so the copy has input to follow.
-  const seg = channels.get(n)
-  const until = Date.now() + READY_TIMEOUT_MS
-  while (seg && !seg.ready() && Date.now() < until) await sleep(200)
+  const waitReady = async (): Promise<boolean> => {
+    const seg = channels.get(n)
+    const until = Date.now() + READY_TIMEOUT_MS
+    while (seg && !seg.ready() && Date.now() < until) await sleep(200)
+    return !!seg?.ready()
+  }
+  await waitReady()
 
   const session = openSession(n, 'mpegts', req)
   const tag = session.tag
-  log('info', 'stream', `▶ Channel ${n} MPEG-TS wrapper connected`, `${clientName(req)} at ${clientIp(req)}`, tag)
+  log('info', 'stream', `▶ Channel ${n} MPEG-TS wrapper connected`, `${client} at ${ip}`, tag)
 
   res.on('error', () => {})
   res.socket?.setNoDelay(true)
   res.writeHead(200, { 'Content-Type': 'video/mp2t', 'Cache-Control': 'no-cache, no-store', Connection: 'close' })
+
+  // This viewer holds the shared producer open for its whole session, but its
+  // ffmpeg copy runs for minutes at a stretch — far longer than the reaper's
+  // idle grace — so touching once per spawn isn't enough: lastAccess goes stale
+  // mid-stream and the reaper deletes the playlist out from under this very
+  // stream (ffmpeg then 254s on the vanished index.m3u8). Beat well inside the
+  // grace period for as long as we're connected.
+  const heartbeat = setInterval(() => touchSegmenter(n, ip, client), IDLE_GRACE_MS / 3)
+  heartbeat.unref?.()
 
   const playlist = segmenterPlaylistFile(n)
   const args = [
@@ -519,7 +534,15 @@ export async function streamMpegtsViaSegmenter(n: number, res: Response, req?: R
   let reason = 'client disconnected'
   let strikes = 0
   while (!res.writableEnded && !res.destroyed) {
-    touchSegmenter(n, clientIp(req), clientName(req)) // keep the shared producer alive
+    // Revive the producer if it died/was reaped, not merely touch it — a bare
+    // touch no-ops on a dead segmenter, so a restart would loop forever against
+    // a playlist that no longer exists. Re-ensure, then wait for its first
+    // segments before pointing ffmpeg at the file again.
+    if ((await ensureSegmenter(n, ip, client)) === 'unavailable') {
+      reason = 'channel became unavailable'
+      break
+    }
+    await waitReady()
     const startedAt = Date.now()
     const proc = spawn('ffmpeg', args)
     const kill = () => proc.kill('SIGKILL')
@@ -540,6 +563,7 @@ export async function streamMpegtsViaSegmenter(n: number, res: Response, req?: R
     log('warn', 'ffmpeg', `Channel ${n}: MPEG-TS wrapper exited ${result.code ?? 'n/a'} — restarting`, result.stderr || '(no stderr)', tag)
   }
 
+  clearInterval(heartbeat)
   closeSession(session.id)
   log('info', 'stream', `⏹ Channel ${n} MPEG-TS wrapper ended — ${reason}`, undefined, tag)
   if (!res.writableEnded) res.end()
