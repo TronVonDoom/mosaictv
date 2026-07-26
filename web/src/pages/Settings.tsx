@@ -41,18 +41,18 @@ const DESCRIPTIONS: Record<SettingsTab, string> = {
 
 const STREAM_MODES = [
   {
-    id: 'hls',
-    title: 'Shared HLS',
+    id: 'mpegts',
+    title: 'MPEG-TS',
     badge: 'Recommended',
-    desc: 'One transcode per channel, served to every viewer.',
-    best: 'Best for multiple viewers, or a weaker CPU.',
+    desc: 'One shared encode per channel, remuxed to a continuous stream for each viewer. The reliable choice for Jellyfin, Plex, and other tuner clients.',
+    best: 'Recommended for almost everyone.',
   },
   {
-    id: 'mpegts',
-    title: 'MPEG-TS (per-client)',
+    id: 'hls',
+    title: 'Shared HLS',
     badge: null,
-    desc: 'A separate transcode for each viewer.',
-    best: 'Simplest; fine for a single viewer or a very fast box.',
+    desc: "Viewers read the channel's HLS segments straight off disk — lightest when many people watch at once or behind a CDN. Tuner clients that don't follow the live edge (Jellyfin, Plex) can freeze on the sliding window.",
+    best: 'Many HLS-native viewers, or a CDN in front.',
   },
 ] as const
 
@@ -271,7 +271,8 @@ export default function Settings() {
                   Both endpoints stay live regardless of this setting — a channel is always reachable
                   at <code className="text-ink">/iptv/channel/N.ts</code> and{' '}
                   <code className="text-ink">/iptv/channel/N/index.m3u8</code>. This only changes
-                  which one the playlist points at.
+                  which one the playlist points at. The in-app channel preview always uses HLS either
+                  way.
                 </InfoHint>
               </>
             }
