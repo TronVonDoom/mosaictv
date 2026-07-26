@@ -1,12 +1,16 @@
 name: Build and publish Docker image
 
-# Builds the image on every push to main and publishes it to the GitHub
-# Container Registry (GHCR). Unraid then just pulls the image — no building on
-# the server. The package inherits the repo's visibility (private here).
+# Builds the image on every push to main (published as :latest) and to the v2
+# branch (published as :v2), and pushes to the GitHub Container Registry (GHCR).
+# Unraid then just pulls the image — no building on the server. The package
+# inherits the repo's visibility (private here).
+#
+# :latest only ever comes from the default branch (main), so the v2 branch can
+# be soak-tested from its own :v2 image without ever touching the live :latest.
 
 on:
   push:
-    branches: [main]
+    branches: [main, v2]
     tags: ['v*']
   workflow_dispatch:
 
@@ -40,6 +44,7 @@ jobs:
           images: ${{ env.IMAGE }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=v2,enable=${{ github.ref == 'refs/heads/v2' }}
             type=ref,event=tag
             type=sha,format=short
 

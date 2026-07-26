@@ -30,3 +30,6 @@ Thumbs.db
 # SQLite WAL/SHM sidecar files (local dev)
 *.db-wal
 *.db-shm
+
+# Reference copy of ErsatzTV (compiled binaries kept locally for comparison, not tracked)
+ErsatzTV-Legacy-*/
