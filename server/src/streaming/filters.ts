@@ -293,10 +293,11 @@ export function songChyronFilter(
 // ---- Full command construction ----------------------------------------------
 
 /**
- * Where the encoded segment goes. `mpegts-pipe` is the original per-item output
- * consumed by the v1 outer concat / per-client wrapper. `hls` writes a child
- * HLS playlist + mpegts segments to disk, which the v2 segmenter ingests into a
- * channel-wide playlist — one encode stage, no second ffmpeg (see segmenter.ts).
+ * Where the encoded segment goes. `hls` writes a child HLS playlist + mpegts
+ * segments to disk, which the segmenter ingests into a channel-wide playlist —
+ * one encode stage, no second ffmpeg (see segmenter.ts); this is what the
+ * pipeline uses. `mpegts-pipe` writes a raw MPEG-TS stream to stdout instead,
+ * kept as a general-purpose output option.
  */
 export type FfmpegOutput =
   | { kind: 'mpegts-pipe' }
@@ -422,20 +423,19 @@ export function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: St
   if (p.threads > 0) a.push('-threads', String(p.threads))
   a.push(...encoderArgs(enc, p))
   a.push('-c:a', 'aac', '-ar', '48000', '-ac', String(p.audioChannels), '-b:a', `${p.audioBitrate}k`)
-  // Each item starts at timestamp 0 (setpts above). In v1 the outer concat
-  // process stitches items together; in v2 each item is its own HLS child and
-  // the boundary becomes an EXT-X-DISCONTINUITY the player resets on, so either
-  // way we deliberately do NOT offset timestamps here (doing it by hand is what
+  // Each item starts at timestamp 0 (setpts above). Each item is its own HLS
+  // child and the boundary becomes an EXT-X-DISCONTINUITY the player resets on,
+  // so we deliberately do NOT offset timestamps here (doing it by hand is what
   // put DTS backwards at every seam).
   a.push(...outputArgs(output))
   return a
 }
 
 /**
- * Valid black+silence in the channel's format. The concat demuxer treats an
- * empty or unreadable entry as a broken input and gives up on the whole
- * session, so every /internal/stream request must answer with real TS — even
- * when there is nothing to play.
+ * Valid black+silence in the channel's format, for filling dead air or a
+ * short-file remainder. It must be real, playable output — an empty or
+ * unreadable segment would break the playlist's continuity — even when there is
+ * nothing to play.
  */
 export function blackArgs(p: StreamProfile, enc: string, durSec: number, output: FfmpegOutput = { kind: 'mpegts-pipe' }): string[] {
   return [

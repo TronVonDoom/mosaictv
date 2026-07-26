@@ -1,10 +1,9 @@
 // Build the ffmpeg command for ONE on-air item — program, music video, or
 // filler — with the full channel look (scale/pad/deinterlace, subtitle burn,
 // corner watermark, coming-up caption, song chyron, GPU decode). This is the
-// per-item construction the v2 segmenter (segmenter.ts) drives once per playout
-// item; it reuses the same leaf helpers as v1's streamChannelItem so every
-// feature carries over unchanged, and it can terminate as either an MPEG-TS
-// pipe or on-disk HLS segments via the `output` argument.
+// per-item construction the segmenter (segmenter.ts) drives once per playout
+// item; it can terminate as either an MPEG-TS pipe or on-disk HLS segments via
+// the `output` argument.
 //
 // It builds args only — it never spawns ffmpeg or touches the response. The
 // caller owns the process and (for captions) deletes the returned captionFiles
@@ -33,9 +32,9 @@ import {
 import { activeBlockAt, activeLogo, localLogo } from './logo.js'
 import { FILLER_H, FILLER_W, ensureAnimatedFiller, ensureFrostedFiller, resolveFillerClip } from './filler.js'
 
-// The channel shape the builder needs — the same relations streamChannelItem
-// loads (timeBlocks with their collection + ordered filler assignments, the
-// channel-level filler assignments, plus the logo/coming-up columns).
+// The channel shape the builder needs — timeBlocks with their collection +
+// ordered filler assignments, the channel-level filler assignments, plus the
+// logo/coming-up columns.
 export type ChannelForBuild = Prisma.ChannelGetPayload<{
   include: {
     timeBlocks: { include: { collection: true; fillerAssignments: { include: { filler: true } } } }
@@ -47,7 +46,7 @@ export type PlayoutItemForBuild = Prisma.PlayoutItemGetPayload<{ include: { medi
 
 /** The result of building one item: a ready-to-spawn encode, or an instruction
  *  to fill `durSec` with black (missing / exhausted media). The caller renders
- *  black in its own medium (response pipe for v1, an on-disk item for v2). */
+ *  the black as an on-disk HLS segment. */
 export type BuiltItem =
   | {
       kind: 'encode'
@@ -86,9 +85,9 @@ export type BuildItemParams = {
 
 /**
  * Build the ffmpeg args for `item`, resuming at `offset` and capped to `segDur`.
- * Mirrors streamChannelItem's per-item construction (channel.ts) feature for
- * feature — filler pools, watermark fades across filler edges, coming-up
- * caption, and the music-video chyron — but returns args instead of streaming.
+ * Handles the full per-item look — filler pools, watermark fades across filler
+ * edges, coming-up caption, and the music-video chyron — returning args for the
+ * segmenter to spawn rather than streaming them itself.
  */
 export async function buildItemArgs(params: BuildItemParams): Promise<BuiltItem> {
   const { channelNumber, channel, profile, enc, defaultWm, logoPath, logoWm, item, next, prevKind, offset, segDur, output, readrate, tag } = params

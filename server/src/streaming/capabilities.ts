@@ -278,9 +278,9 @@ export function encoderArgs(enc: string, p: StreamProfile): string[] {
   const preset = (fallback: string) => (p.preset !== 'auto' && PRESETS[enc]?.includes(p.preset) ? p.preset : fallback)
 
   // No B-frames. They make DTS run ahead of PTS by the reorder delay (measured
-  // at 200ms on nvenc). This bit the old v1 hand-splice (-output_ts_offset put
+  // at 200ms on nvenc). This bit the old hand-splice (-output_ts_offset put
   // the next segment's first DTS *before* the previous segment's last one and
-  // players dropped video at the seam); v2 turns each boundary into an
+  // players dropped video at the seam); the segmenter turns each boundary into an
   // EXT-X-DISCONTINUITY the player resets on, so the hazard is gone there — but
   // dropping B-frames also keeps every segment cleanly seekable/independent and
   // costs little, so both paths keep it.

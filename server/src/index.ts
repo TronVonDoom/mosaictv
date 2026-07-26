@@ -7,8 +7,7 @@ import { log } from './logs.js'
 import { warmFiller } from './streaming/filler.js'
 import { warmCapabilities } from './streaming/capabilities.js'
 import { startMetrics } from './metrics.js'
-import { resetHls } from './hls.js'
-import { SEGMENTER_V2, resetSegments } from './streaming/segmenter.js'
+import { resetSegments } from './streaming/segmenter.js'
 import { migrateCollectionOwnership, migrateFillersToLibrary } from './migrate.js'
 import { seedDefaultAudio } from './seedDefaults.js'
 import { librariesRouter } from './routes/libraries.js'
@@ -31,7 +30,6 @@ import { adminRouter } from './routes/admin.js'
 import { assetsRouter } from './routes/assets.js'
 import { profilesRouter } from './routes/profiles.js'
 import { fillersRouter } from './routes/fillers.js'
-import { internalRouter } from './routes/internal.js'
 
 const app = express()
 const PORT = Number(process.env.PORT ?? 8688)
@@ -129,8 +127,6 @@ app.use('/iptv', iptvRouter)
 // HDHomeRun emulation lives at root — Plex/Emby's tuner discovery expects
 // /discover.json etc. there, not namespaced under /iptv.
 app.use('/', hdhrRouter)
-// Loopback-only: the channel's outer ffmpeg fetches its per-item streams here.
-app.use('/internal', internalRouter)
 
 // --- Static frontend (production only) --------------------------------------
 const publicDir = path.join(process.cwd(), 'public')
@@ -164,15 +160,14 @@ async function boot(): Promise<void> {
   await migrateCollectionOwnership().catch((e) => log('error', 'system', 'Collection ownership migration failed', String(e?.stack || e)))
   await migrateFillersToLibrary().catch((e) => log('error', 'system', 'Filler library migration failed', String(e?.stack || e)))
   await seedDefaultAudio().catch((e) => log('error', 'system', 'Default audio seed failed', String(e?.stack || e)))
-  if (SEGMENTER_V2) resetSegments() // v2 single-stage segmenter
-  else resetHls() // v1: clear any stale shared-HLS output from a previous run
+  resetSegments() // clear any stale segmenter output from a previous run
   const metricSource = startMetrics()
   await checkFfmpeg()
   app.listen(PORT, () => {
     console.log(`MosaicTV v${VERSION} listening on http://0.0.0.0:${PORT}`)
     console.log(`ffmpeg available: ${ffmpegAvailable}`)
     log('info', 'system', `MosaicTV v${VERSION} started — ffmpeg ${ffmpegAvailable ? 'available' : 'NOT available'}`)
-    log('info', 'system', `Streaming pipeline: ${SEGMENTER_V2 ? 'v2 single-stage segmenter (SEGMENTER=v2)' : 'v1 concat pipeline'}`)
+    log('info', 'system', 'Streaming pipeline: single-stage HLS segmenter')
     // Say which scope the resource graph is measuring: 'process' means we
     // couldn't find a cgroup and the numbers exclude ffmpeg entirely.
     log(

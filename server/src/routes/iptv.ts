@@ -1,10 +1,7 @@
 import { Router } from 'express'
 import type { Request } from 'express'
 import { prisma } from '../db.js'
-import { streamChannel } from '../streaming/channel.js'
-import { ensureHls, touchHls, hlsPlaylistFile, hlsSegmentFile } from '../hls.js'
 import {
-  SEGMENTER_V2,
   ensureSegmenter,
   touchSegmenter,
   segmenterPlaylistFile,
@@ -19,13 +16,11 @@ export const iptvRouter = Router()
 
 const clientIp = (req: Request) => (req.socket.remoteAddress ?? '') || undefined
 
-// Live stream (per-client MPEG-TS): GET /iptv/channel/1.ts
-// Under SEGMENTER=v2 this is a thin -c copy wrapper over the channel's HLS
-// segmenter; otherwise it's the v1 concat pipeline.
+// Live stream (per-client MPEG-TS): GET /iptv/channel/1.ts — a thin -c copy
+// wrapper over the channel's shared HLS segmenter.
 iptvRouter.get(/^\/channel\/(\d+)\.ts$/, (req, res) => {
   const n = Number((req.params as unknown as string[])[0])
-  const stream = SEGMENTER_V2 ? streamMpegtsViaSegmenter : streamChannel
-  stream(n, res, req).catch(() => {
+  streamMpegtsViaSegmenter(n, res, req).catch(() => {
     // Always close the response — a hanging one leaves the player spinning.
     if (!res.headersSent) res.status(500).end()
     else if (!res.writableEnded) res.end()
@@ -38,9 +33,7 @@ iptvRouter.get(/^\/channel\/(\d+)\.ts$/, (req, res) => {
 iptvRouter.get(/^\/channel\/(\d+)\/index\.m3u8$/, async (req, res) => {
   const n = Number((req.params as unknown as string[])[0])
   try {
-    const status = SEGMENTER_V2
-      ? await ensureSegmenter(n, clientIp(req), clientName(req))
-      : await ensureHls(n, clientIp(req), clientName(req))
+    const status = await ensureSegmenter(n, clientIp(req), clientName(req))
     if (status === 'unavailable') return res.status(409).end() // missing / nothing scheduled
     if (status === 'starting') {
       res.setHeader('Retry-After', '2')
@@ -48,7 +41,7 @@ iptvRouter.get(/^\/channel\/(\d+)\/index\.m3u8$/, async (req, res) => {
     }
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl')
     res.setHeader('Cache-Control', 'no-cache, no-store')
-    res.sendFile(SEGMENTER_V2 ? segmenterPlaylistFile(n) : hlsPlaylistFile(n))
+    res.sendFile(segmenterPlaylistFile(n))
   } catch {
     if (!res.headersSent) res.status(500).end()
   }
@@ -57,10 +50,9 @@ iptvRouter.get(/^\/channel\/(\d+)\/index\.m3u8$/, async (req, res) => {
 iptvRouter.get(/^\/channel\/(\d+)\/(seg_\d+\.ts)$/, (req, res) => {
   const params = req.params as unknown as string[]
   const n = Number(params[0])
-  const file = SEGMENTER_V2 ? segmenterSegmentFile(n, params[1]) : hlsSegmentFile(n, params[1])
+  const file = segmenterSegmentFile(n, params[1])
   if (!file) return res.status(404).end()
-  if (SEGMENTER_V2) touchSegmenter(n, clientIp(req), clientName(req))
-  else touchHls(n, clientIp(req), clientName(req))
+  touchSegmenter(n, clientIp(req), clientName(req))
   res.setHeader('Content-Type', 'video/mp2t')
   res.setHeader('Cache-Control', 'no-cache, no-store')
   res.sendFile(file, (err) => {

@@ -1,18 +1,18 @@
-// v2 streaming core: one single-stage HLS segmenter per channel (the ErsatzTV
+// The streaming core: one single-stage HLS segmenter per channel (the ErsatzTV
 // model). A per-channel producer walks the deterministic playout timeline and
 // runs ONE ffmpeg per item that encodes straight to on-disk HLS segments; this
 // module owns the channel's master playlist, stitching each item's child
 // segments into one live playlist with an EXT-X-DISCONTINUITY at every program
 // boundary. Players reset their decoder on the discontinuity, so the seam
-// hazards that plague the v1 three-stage concat pipeline (double-meter freeze,
-// wall-clock replay) cannot happen here.
+// hazards of the old three-stage concat pipeline it replaced (double-meter
+// freeze, wall-clock replay) cannot happen here.
 //
 // No second ffmpeg, no HTTP loopback for media, no self-referential concat. The
 // MPEG-TS / HDHomeRun path is a thin `-c copy` wrapper that reads this
 // playlist, so every output shares the one encode stage.
 //
-// Selected at boot by SEGMENTER=v2; the v1 path (channel.ts / hls.ts) stays put
-// behind the flag until this is proven.
+// This is the channel's only streaming pipeline; the shared low-level helpers it
+// leans on live in pipe.ts.
 
 import { spawn, type ChildProcess } from 'node:child_process'
 import fs from 'node:fs'
@@ -24,14 +24,12 @@ import { log } from '../logs.js'
 import { markEvent } from '../metrics.js'
 import { buildPlayout, prunePlayout } from '../playout.js'
 import { clientIp, clientName, closeSession, openSession, type Session } from '../sessions.js'
-import { ensureChannelReady, pipeSegment } from './channel.js'
+import { ensureChannelReady, pipeSegment } from './pipe.js'
 import { resolveProfile } from './profile.js'
 import { loadWatermark, parseWatermark, type WatermarkConfig } from './overlays.js'
 import { resolveEncoder } from './capabilities.js'
 import { blackArgs, type FfmpegOutput } from './filters.js'
 import { buildItemArgs, type ChannelForBuild, type PlayoutItemForBuild } from './itemBuild.js'
-
-export const SEGMENTER_V2 = process.env.SEGMENTER === 'v2'
 
 // ready = playlist has segments; starting = warming up; unavailable = no channel/schedule.
 export type HlsStatus = 'ready' | 'starting' | 'unavailable'
@@ -156,7 +154,7 @@ class ChannelSegmenter {
   private async produceNext(): Promise<void> {
     const now = Date.now()
     // Load channel + config fresh each item so schedule/logo/watermark edits go
-    // live, exactly like v1's per-item endpoint.
+    // live from the next item on.
     const channel = await prisma.channel.findFirst({
       where: { number: this.n },
       include: {

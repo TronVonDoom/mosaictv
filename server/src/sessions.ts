@@ -7,9 +7,8 @@ import type { Request } from 'express'
 // watching at once: the ffmpeg exit at 20:14:02 belongs to V3 in Plex, not to
 // V4 in Jellyfin.
 //
-// The per-item endpoints are fetched by the outer ffmpeg over loopback, so the
-// session id travels with them as a query parameter on the concat URL — see
-// concatPlaylist in streaming/channel.ts.
+// A channel's shared segmenter opens one 'hls' session for its own producer; each
+// per-client MPEG-TS wrapper opens its own 'mpegts' session.
 
 export type SessionKind = 'mpegts' | 'hls'
 

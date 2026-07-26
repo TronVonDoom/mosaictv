@@ -2,8 +2,7 @@ import { Router } from 'express'
 import { prisma } from '../db.js'
 import { buildPlayout, prunePlayout, resetPlayout } from '../playout.js'
 import { sanitizeComingUp } from '../streaming/overlays.js'
-import { viewerCount } from '../streaming/channel.js'
-import { SEGMENTER_V2, segmenterViewers } from '../streaming/segmenter.js'
+import { segmenterViewers } from '../streaming/segmenter.js'
 import { asOrderSetting } from '../collections.js'
 import { programLabel } from '../labels.js'
 
@@ -70,7 +69,7 @@ channelsRouter.get('/', async (_req, res) => {
         blockCount: c._count.timeBlocks,
         playoutCount: c._count.playout,
         playoutCursor: c.playoutCursor,
-        viewers: SEGMENTER_V2 && c.number != null ? segmenterViewers(c.number) : viewerCount(c.number),
+        viewers: c.number != null ? segmenterViewers(c.number) : 0,
         nowPlaying: cur ? nowLabel(cur) : null,
       }
     }),
