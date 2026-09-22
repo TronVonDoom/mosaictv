@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.8.1 — Rotations that keep every show (2026-09-22)
+
+- **A rotation no longer thins out to whichever show has the most episodes.**
+  "Round-robin across shows" dropped a show from the rotation the moment its
+  last episode aired, handing its slot to the shows that still had episodes
+  left. A block pairing a 19-episode show with a 200-episode one would start
+  balanced and decay until the long show was playing alone. Every show now
+  returns to its first episode and keeps its turn, so the split stays even for
+  as long as the channel runs. Chronological, shuffle and shuffle-by-show are
+  unchanged.
+- **Release tags no longer leak into the guide.** Quality tags were only
+  stripped from a title when the whole parenthetical was a single token, so
+  "(HD)" came off but "(Bluray-1080p x265)", "(480p x265 EDGE2020)", "(MPEG2)"
+  and "(XviD)" rode along into the channel guide. A parenthetical is now
+  removed when everything inside it is release metadata — resolution, source,
+  codec, audio, and a release group's tag next to them. Parentheticals that
+  carry meaning are left alone: "(Unaired Pilot)", "(Colorized)", "(Director's
+  Cut 1992)", the "(US)" in a show's name, and the "(1)"/"(2)" that number a
+  two-parter.
+- **A re-scan picks up parser fixes without re-probing your library.** An
+  ordinary scan skipped unchanged files outright, so a better title only
+  reached items you had re-added. A scan now also compares the name it parses
+  against what is stored, and rewrites the row from the cached probe when they
+  differ — no ffprobe pass, no forced re-scan. Scan your libraries once after
+  updating to clean up the titles above.
+
 ## 0.8.0 — A bigger filler studio (2026-07-22)
 
 - **Fillers render at 1080p by default, with a resolution choice per filler.**
