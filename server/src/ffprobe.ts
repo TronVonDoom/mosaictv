@@ -134,3 +134,70 @@ export function probeDuration(filePath: string): Promise<number> {
     filePath,
   ]).then((out) => parseFloat(out) || 0)
 }
+
+// ---- Audio track selection --------------------------------------------------
+
+// ISO 639 is two standards deep: files tag audio "eng" or "en", "jpn" or "ja",
+// and the two forms share no prefix, so matching needs the pairs spelled out.
+// Only the languages offered in the UI need an entry; anything else falls
+// through to an exact match on whatever the file says.
+const LANG_ALIASES: Record<string, string> = {
+  en: 'eng', eng: 'eng', english: 'eng',
+  ja: 'jpn', jpn: 'jpn', japanese: 'jpn',
+  es: 'spa', spa: 'spa', spanish: 'spa',
+  fr: 'fre', fre: 'fre', fra: 'fre', french: 'fre',
+  de: 'ger', ger: 'ger', deu: 'ger', german: 'ger',
+  it: 'ita', ita: 'ita', italian: 'ita',
+  pt: 'por', por: 'por', portuguese: 'por',
+  ko: 'kor', kor: 'kor', korean: 'kor',
+  zh: 'chi', chi: 'chi', zho: 'chi', chinese: 'chi',
+  ru: 'rus', rus: 'rus', russian: 'rus',
+}
+
+/** Normalize a language tag: "en-US" -> "eng", "Japanese" -> "jpn". */
+export function normalizeLang(tag: string | null | undefined): string {
+  const base = String(tag ?? '').trim().toLowerCase().split(/[-_]/)[0]
+  if (!base) return ''
+  return LANG_ALIASES[base] ?? base
+}
+
+/**
+ * Which audio track to air, as an index into the file's audio streams.
+ *
+ * Falls back to the first track whenever the preference can't be honoured — no
+ * preference, no tags on the file, or no track in that language. Silence would
+ * be the alternative, and a wrong-language track beats no sound at all.
+ */
+export function pickAudioTrack(langs: string[], preferred: string | null | undefined): number {
+  const want = normalizeLang(preferred)
+  if (!want || langs.length === 0) return 0
+  const idx = langs.findIndex((l) => normalizeLang(l) === want)
+  return idx >= 0 ? idx : 0
+}
+
+/**
+ * The language tag of each audio stream, in the file's own order — '' where a
+ * stream carries no tag, so the array index is always the ffmpeg `a:N` index.
+ */
+const audioLangCache = new Map<string, Promise<string[]>>()
+export function probeAudioLangs(filePath: string): Promise<string[]> {
+  const hit = audioLangCache.get(filePath)
+  if (hit) return hit
+  const probe = ffprobeText([
+    '-v', 'error',
+    '-select_streams', 'a',
+    '-show_entries', 'stream=index:stream_tags=language',
+    '-of', 'json',
+    filePath,
+  ]).then((out) => {
+    if (!out) return []
+    try {
+      const json = JSON.parse(out) as { streams?: { tags?: { language?: string } }[] }
+      return (json.streams ?? []).map((s) => s.tags?.language ?? '')
+    } catch {
+      return []
+    }
+  })
+  audioLangCache.set(filePath, probe)
+  return probe
+}

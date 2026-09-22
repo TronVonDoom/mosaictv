@@ -111,8 +111,8 @@ channelsRouter.get('/:id', async (req, res) => {
 
 channelsRouter.patch('/:id', async (req, res) => {
   const id = Number(req.params.id)
-  const { name, group, logoUrl, number, logoId, profileId, comingUp } = req.body ?? {}
-  const data: { name?: string; group?: string | null; logoUrl?: string | null; number?: number | null; logoId?: number | null; profileId?: number | null; comingUp?: string | null } = {}
+  const { name, group, logoUrl, number, logoId, profileId, comingUp, audioLanguage } = req.body ?? {}
+  const data: { name?: string; group?: string | null; logoUrl?: string | null; number?: number | null; logoId?: number | null; profileId?: number | null; comingUp?: string | null; audioLanguage?: string | null } = {}
   if (name !== undefined) data.name = String(name).trim()
   if (group !== undefined) data.group = group || null
   if (logoUrl !== undefined) data.logoUrl = logoUrl || null
@@ -120,6 +120,8 @@ channelsRouter.patch('/:id', async (req, res) => {
   if (profileId !== undefined) data.profileId = profileId ? Number(profileId) : null
   if (number !== undefined) data.number = number === null || number === '' ? null : Number(number)
   if (comingUp !== undefined) data.comingUp = asComingUp(comingUp)
+  // '' from a cleared <select> means "inherit the global setting", not "no audio".
+  if (audioLanguage !== undefined) data.audioLanguage = audioLanguage ? String(audioLanguage) : null
   try {
     const c = await prisma.channel.update({ where: { id }, data })
     res.json(c)

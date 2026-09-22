@@ -196,6 +196,7 @@ export type SettingsInfo = {
   hdhrDeviceId: string
   hdhrFriendlyName: string
   playoutHorizonHours: number
+  audioLanguage: string
 }
 
 export type MetadataStatus = {
@@ -310,10 +311,36 @@ export type RotationItem = {
   collection: { id: number; name: string; defaultOrder: string }
 }
 
-export type Logo = { id: number; name: string; mime: string; watermark: WatermarkConfig }
-export function logoImageUrl(id: number): string {
-  return `/api/logos/${id}/image`
+export type Logo = {
+  id: number
+  name: string
+  mime: string
+  /** When the image was last replaced — the cache-buster for logoImageUrl. */
+  updatedAt?: string
+  watermark: WatermarkConfig
 }
+/** Pass the logo (not just its id) after a replace, so the swapped image shows
+ *  immediately instead of waiting out the response's cache lifetime. */
+export function logoImageUrl(logo: number | Logo): string {
+  if (typeof logo === 'number') return `/api/logos/${logo}/image`
+  const v = logo.updatedAt ? `?v=${encodeURIComponent(logo.updatedAt)}` : ''
+  return `/api/logos/${logo.id}/image${v}`
+}
+
+/** Audio languages offered in the UI. 'first' keeps the file's own order. */
+export const AUDIO_LANGUAGES = [
+  { value: 'first', label: "First track (file's own order)" },
+  { value: 'eng', label: 'English' },
+  { value: 'jpn', label: 'Japanese' },
+  { value: 'spa', label: 'Spanish' },
+  { value: 'fre', label: 'French' },
+  { value: 'ger', label: 'German' },
+  { value: 'ita', label: 'Italian' },
+  { value: 'por', label: 'Portuguese' },
+  { value: 'kor', label: 'Korean' },
+  { value: 'chi', label: 'Chinese' },
+  { value: 'rus', label: 'Russian' },
+] as const
 
 export type AssetKind = 'audio' | 'filler'
 export type Asset = {
@@ -383,6 +410,7 @@ export type ChannelDetail = {
   logoId: number | null
   profileId: number | null
   comingUp: string | null // JSON ComingUpConfig; null = off
+  audioLanguage: string | null // null = inherit the global setting
   rotationItems: RotationItem[]
   timeBlocks: TimeBlock[]
 }
@@ -582,6 +610,13 @@ export const api = {
     request<{ ok: boolean; watermark: WatermarkConfig }>('/api/settings/watermark', { method: 'POST', body: JSON.stringify(wm) }),
   saveStreamMode: (mode: StreamMode) =>
     request<{ ok: boolean; streamMode: StreamMode }>('/api/settings/stream-mode', { method: 'POST', body: JSON.stringify({ mode }) }),
+  saveAudioLanguage: (audioLanguage: string) =>
+    request<{ ok: boolean; audioLanguage: string }>('/api/settings/audio-language', {
+      method: 'POST',
+      body: JSON.stringify({ audioLanguage }),
+    }),
+  replaceLogoImage: (id: number, dataUrl: string) =>
+    request<Logo>(`/api/logos/${id}/image`, { method: 'PUT', body: JSON.stringify({ dataUrl }) }),
   savePlayoutHorizon: (playoutHorizonHours: number) =>
     request<{ ok: boolean; playoutHorizonHours: number }>('/api/settings/playout-horizon', {
       method: 'POST',
@@ -703,7 +738,7 @@ export const api = {
   addChannel: (data: { number?: number | null; name: string; group?: string | null; logoId?: number | null }) =>
     request<Channel>('/api/channels', { method: 'POST', body: JSON.stringify(data) }),
   channel: (id: number) => request<ChannelDetail>(`/api/channels/${id}`),
-  updateChannel: (id: number, data: { number?: number | null; name?: string; group?: string | null; logoUrl?: string | null; logoId?: number | null; profileId?: number | null; comingUp?: ComingUpConfig | null }) =>
+  updateChannel: (id: number, data: { number?: number | null; name?: string; group?: string | null; logoUrl?: string | null; logoId?: number | null; profileId?: number | null; comingUp?: ComingUpConfig | null; audioLanguage?: string | null }) =>
     request<Channel>(`/api/channels/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   // --- encoding profiles ---

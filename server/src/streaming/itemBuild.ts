@@ -15,7 +15,8 @@ import type { Prisma } from '@prisma/client'
 import { dataDir } from '../paths.js'
 import { programLabel } from '../labels.js'
 import { log } from '../logs.js'
-import { hasSubtitleStream, probeSar } from '../ffprobe.js'
+import { hasSubtitleStream, pickAudioTrack, probeAudioLangs, probeSar } from '../ffprobe.js'
+import { effectiveAudioLanguage, globalAudioLanguage } from '../audio.js'
 import { detectTextOverlay, nvdecIfReady } from './capabilities.js'
 import type { StreamProfile } from './profile.js'
 import { parseComingUp, type WatermarkConfig } from './overlays.js'
@@ -159,7 +160,12 @@ export async function buildItemArgs(params: BuildItemParams): Promise<BuiltItem>
     const dispW = Math.round((mi.width ?? FILLER_W) * sar)
     const hwDecode = enc === 'h264_nvenc' && mi.videoCodec ? await nvdecIfReady(mi.videoCodec.toLowerCase()) : false
     const hasSubtitles = profile.burnSubtitles ? await hasSubtitleStream(mi.path) : false
-    seg = { filePath: mi.path, offsetSec: offset, loop: false, durationSec: segDur, hasAudio: !!mi.audioCodec, logo, wmEpochSec, mediaWidth: dispW, mediaHeight: mi.height ?? FILLER_H, isFiller: false, fadeInSec, fadeOutSec, hwDecode, hasSubtitles }
+    // Only worth a probe when a language is actually preferred; a file with one
+    // audio track (most of them) still answers instantly from the cache.
+    const audioLanguage = effectiveAudioLanguage(channel.audioLanguage, await globalAudioLanguage())
+    const audioTrack =
+      audioLanguage && mi.audioCodec ? pickAudioTrack(await probeAudioLangs(mi.path), audioLanguage) : 0
+    seg = { filePath: mi.path, offsetSec: offset, loop: false, durationSec: segDur, hasAudio: !!mi.audioCodec, logo, wmEpochSec, mediaWidth: dispW, mediaHeight: mi.height ?? FILLER_H, isFiller: false, fadeInSec, fadeOutSec, hwDecode, hasSubtitles, audioTrack }
     label = programLabel(mi, { withTitle: true })
   } else {
     log('warn', 'stream', `Channel ${channelNumber}: media file missing, skipping`, mi.path, tag)

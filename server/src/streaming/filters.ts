@@ -14,6 +14,9 @@ export type Segment = {
   durationSec?: number // cap output length (filler loop); undefined = play to EOF
   loop: boolean // loop the input (filler)
   hasAudio: boolean
+  // Which of the file's audio tracks to air, as an `a:N` index. 0 unless the
+  // channel prefers a language the file carries on a later track.
+  audioTrack?: number
   logo?: string // logo file path or http url
   wmEpochSec: number // segment's absolute start time (s) — aligns intermittent watermark to wall clock
   mediaWidth: number // source pixel dims (for constrain-to-media watermark)
@@ -409,7 +412,9 @@ export function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: St
   if (textFilter) vf += `;[vpre]${textFilter}[v]`
   // VAAPI: upload the finished software frame to a GPU surface for the encoder.
   if (enc === 'h264_vaapi') vf = vf.replace(/\[v\]$/, '[vsw]') + ';[vsw]format=nv12,hwupload[v]'
-  const aIn = audioIdx >= 0 ? `${audioIdx}:a:0` : '0:a:0'
+  // A generated audio input (ambient music, silence) is always its own stream
+  // 0; only the clip's own audio has tracks to choose between.
+  const aIn = audioIdx >= 0 ? `${audioIdx}:a:0` : `0:a:${seg.audioTrack ?? 0}`
   const layout = p.audioChannels === 6 ? '5.1' : 'stereo'
   // Evens out the jump between a 1970s sitcom and a modern show. dynaudnorm,
   // not loudnorm: loudnorm looks 3s ahead, and since the muxer can't interleave

@@ -3,6 +3,7 @@ import { getTmdbKey, setTmdbKey, validateKey } from '../tmdb.js'
 import { loadWatermark, sanitizeWatermark } from '../streaming/overlays.js'
 import { prisma } from '../db.js'
 import { MAX_HORIZON_HOURS, MIN_HORIZON_HOURS, horizonHours } from '../playout.js'
+import { NO_AUDIO_PREFERENCE, globalAudioLanguage } from '../audio.js'
 import {
   MAX_FRIENDLY_NAME,
   MAX_TUNER_COUNT,
@@ -35,6 +36,7 @@ settingsRouter.get('/', async (_req, res) => {
     hdhrDeviceId: await deviceId(),
     hdhrFriendlyName: await friendlyName(),
     playoutHorizonHours: await horizonHours(),
+    audioLanguage: await globalAudioLanguage(),
   })
 })
 
@@ -92,6 +94,18 @@ settingsRouter.post('/playout-horizon', async (req, res) => {
   const hours = Math.round(n)
   await setSetting('playoutHorizonHours', String(hours))
   res.json({ ok: true, playoutHorizonHours: hours })
+})
+
+// Which audio track channels air when a file carries more than one: an ISO 639
+// language tag, or 'first' to keep whatever order the file lists.
+settingsRouter.post('/audio-language', async (req, res) => {
+  const raw = String(req.body?.audioLanguage ?? '').trim().toLowerCase()
+  if (!raw) return res.status(400).json({ error: 'audioLanguage is required' })
+  if (raw !== NO_AUDIO_PREFERENCE && !/^[a-z]{2,3}$/.test(raw)) {
+    return res.status(400).json({ error: "audioLanguage must be a 2- or 3-letter language code, or 'first'" })
+  }
+  await setSetting('audioLanguage', raw)
+  res.json({ ok: true, audioLanguage: raw })
 })
 
 // Validate and save the TMDB API key in one step.

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { api, backupUrl, type StreamMode, type WatermarkConfig } from '../lib/api'
+import { api, backupUrl, AUDIO_LANGUAGES, type StreamMode, type WatermarkConfig } from '../lib/api'
 import { errorMessage } from '../lib/errors'
 import WatermarkFields from '../components/WatermarkFields'
 import EncodingProfilesCard from '../components/EncodingProfilesCard'
@@ -15,6 +15,7 @@ import {
   Input,
   LinkButton,
   PageHeader,
+  Select,
   Skeleton,
   Tabs,
   cx,
@@ -98,6 +99,7 @@ export default function Settings() {
   const [wm, setWm] = useState<WatermarkConfig | null>(null)
   const [streamMode, setStreamMode] = useState<StreamMode>('mpegts')
   const [horizon, setHorizon] = useState(48)
+  const [audioLang, setAudioLang] = useState('eng')
   const [tunerCount, setTunerCount] = useState(4)
   const [tunerDraft, setTunerDraft] = useState('4')
   const [deviceId, setDeviceId] = useState('')
@@ -114,6 +116,7 @@ export default function Settings() {
         setWm(s.watermark)
         setStreamMode(s.streamMode)
         setHorizon(s.playoutHorizonHours)
+        setAudioLang(s.audioLanguage)
         setTunerCount(s.tunerCount)
         setTunerDraft(String(s.tunerCount))
         setDeviceId(s.hdhrDeviceId)
@@ -143,6 +146,19 @@ export default function Settings() {
     } catch (err) {
       setHorizon(previous)
       toast.error(errorMessage(err, 'Failed to save schedule horizon'))
+    }
+  }
+
+  async function saveAudioLang(lang: string) {
+    if (lang === audioLang) return
+    const previous = audioLang
+    setAudioLang(lang)
+    try {
+      await api.saveAudioLanguage(lang)
+      toast.success(`Audio: ${AUDIO_LANGUAGES.find((l) => l.value === lang)?.label ?? lang}`)
+    } catch (err) {
+      setAudioLang(previous)
+      toast.error(errorMessage(err, 'Failed to save audio language'))
     }
   }
 
@@ -293,9 +309,9 @@ export default function Settings() {
                 feed publishes.{' '}
                 <InfoHint>
                   A channel tops itself up while it streams, refilling once less than half the
-                  horizon is left, so a channel someone watches never publishes less than half of
-                  this. A channel nobody watches keeps whatever was last built until you press
-                  Build on its Guide tab.
+                  horizon is left, so it never publishes less than half of this. An hourly sweep
+                  does the same for the channels nobody is watching, so an idle channel keeps a
+                  full guide too.
                   <br />
                   <br />
                   Deeper costs nothing at playback — it is rows in a table, built in seconds —
@@ -373,6 +389,38 @@ export default function Settings() {
                 )
               })}
             </div>
+          </SettingsCard>
+
+          <SettingsCard
+            title="Audio language"
+            description={
+              <>
+                Which track to air when a file carries more than one. Applies from each program's
+                start, so it takes effect on the next one.{' '}
+                <InfoHint>
+                  Plenty of files list the original language first — an anime rip is often
+                  Japanese on track 1 and English on track 2 — and without a preference the
+                  first track is what plays. If a file has no track in this language, its first
+                  track plays rather than nothing.
+                  <br />
+                  <br />
+                  A channel can override this on its General tab, so an anime channel can stay
+                  subtitled while everything else runs dubbed.
+                </InfoHint>
+              </>
+            }
+          >
+            <Select
+              className="w-64"
+              value={audioLang}
+              onChange={(e) => saveAudioLang(e.target.value)}
+            >
+              {AUDIO_LANGUAGES.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
+                </option>
+              ))}
+            </Select>
           </SettingsCard>
 
           <SettingsCard

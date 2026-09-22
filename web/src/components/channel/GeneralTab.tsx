@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   api,
+  AUDIO_LANGUAGES,
   parseComingUp,
   DEFAULT_COMINGUP,
   type ComingUpConfig,
@@ -28,6 +29,7 @@ export default function GeneralTab({ channelId, ch, guard, drafts }: ChannelTabP
     logoUrl: ch.logoUrl ?? '',
     logoId: ch.logoId ?? (null as number | null),
     profileId: ch.profileId ?? (null as number | null),
+    audioLanguage: ch.audioLanguage ?? '',
   }))
   const [cu, setCu, clearCuDraft] = useDraft<ComingUpConfig>(drafts, 'general.comingUp', () =>
     parseComingUp(ch.comingUp) ?? offComingUp(),
@@ -48,6 +50,7 @@ export default function GeneralTab({ channelId, ch, guard, drafts }: ChannelTabP
           logoUrl: form.logoUrl || null,
           logoId: form.logoId,
           profileId: form.profileId,
+          audioLanguage: form.audioLanguage || null,
           comingUp: cu.enabled ? cu : null,
         }),
       'Channel saved',
@@ -121,6 +124,34 @@ export default function GeneralTab({ channelId, ch, guard, drafts }: ChannelTabP
               {profiles.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field
+            label={
+              <span className="inline-flex items-center gap-1.5">
+                Audio language
+                <InfoHint>
+                  Which track this channel airs when a file has more than one. Inherit follows{' '}
+                  <Link to="/settings#streaming" className="text-indigo-300">
+                    Settings → Streaming
+                  </Link>
+                  ; set it here for a channel that should differ — subtitled anime on an otherwise
+                  dubbed instance, say. A file with no track in the language plays its first.
+                </InfoHint>
+              </span>
+            }
+          >
+            <Select
+              value={form.audioLanguage}
+              onChange={(e) => setForm({ ...form, audioLanguage: e.target.value })}
+            >
+              <option value="">Inherit global setting</option>
+              {AUDIO_LANGUAGES.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
                 </option>
               ))}
             </Select>
