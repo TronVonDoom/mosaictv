@@ -81,7 +81,10 @@ model Logo {
   createdAt DateTime    @default(now())
   // Bumped when the image is replaced in place (same id, new file), which is
   // what lets the UI cache-bust a swapped logo instead of showing the old one.
-  updatedAt DateTime    @updatedAt
+  // @default is not optional here: without it this is a NOT NULL column with no
+  // default, and `db push` cannot add one to a table that already has rows — it
+  // aborts, which takes the whole container down on an existing install.
+  updatedAt DateTime    @default(now()) @updatedAt
   channels  Channel[]
   blocks    TimeBlock[]
   collections Collection[]

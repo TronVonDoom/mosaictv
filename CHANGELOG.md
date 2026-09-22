@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.8.4 — Fix: 0.8.3 could not start on an existing install (2026-09-22)
+
+- **Fixes a 0.8.3 upgrade that stopped the container from starting.** 0.8.3
+  added `Logo.updatedAt` as a required column with no default. The entrypoint
+  runs `prisma db push` before the server starts, and SQLite cannot add a NOT
+  NULL column with no default to a table that already has rows — so on any
+  install with logos, push aborted and MosaicTV never came up:
+
+  > Added the required column `updatedAt` to the `Logo` table without a default
+  > value. There are 8 rows in this table, it is not possible to execute this
+  > step.
+
+  The column now defaults to the current time, so it backfills. **Do not run
+  `--force-reset`** as that message suggests — it drops the database. Pull
+  0.8.4 and start normally; your data is untouched, existing logos simply get
+  today's date as their last-changed time.
+- A schema test now fails the build if an `@updatedAt` column is ever added
+  without a default again.
+
+A fresh install was unaffected, as were 0.8.2 and earlier.
+
 ## 0.8.3 — Pick your audio, swap your logos (2026-09-22)
 
 - **Channels can prefer an audio language.** Files that carry several audio
