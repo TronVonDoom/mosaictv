@@ -79,6 +79,9 @@ model Logo {
   // opacity/timing and the constrain-to-media flag.
   watermark String?
   createdAt DateTime    @default(now())
+  // Bumped when the image is replaced in place (same id, new file), which is
+  // what lets the UI cache-bust a swapped logo instead of showing the old one.
+  updatedAt DateTime    @updatedAt
   channels  Channel[]
   blocks    TimeBlock[]
   collections Collection[]
@@ -287,6 +290,10 @@ model Channel {
   comingUp      String?
   // A test channel: streamable/previewable but hidden from the public M3U/EPG.
   isTest        Boolean        @default(false)
+  // Preferred audio language (ISO 639 tag, e.g. "eng"). Null = use the global
+  // setting; "" is never stored. Picks among a file's audio tracks at air time
+  // — a dub-first anime channel sets "jpn" without changing the rest.
+  audioLanguage String?
   collections   Collection[]
   rotationItems RotationItem[]
   timeBlocks    TimeBlock[]

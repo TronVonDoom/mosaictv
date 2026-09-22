@@ -14,6 +14,9 @@ export default function LogoManager() {
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState<Logo | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  // One hidden picker, aimed at whichever logo's Replace was clicked.
+  const replaceRef = useRef<HTMLInputElement>(null)
+  const [replacingId, setReplacingId] = useState<number | null>(null)
 
   const refresh = () => api.logos().then(setLogos).catch(() => {})
   useEffect(() => {
@@ -47,6 +50,38 @@ export default function LogoManager() {
     }
   }
 
+  /** Swap a logo's image in place: same id, so every channel and block that
+   *  already points at it keeps pointing at it, watermark settings and all. */
+  async function replaceImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    const id = replacingId
+    e.target.value = '' // let the same file be picked again after a failure
+    if (!f || id == null) return
+    setBusy(true)
+    setError(null)
+    try {
+      const dataUrl = await new Promise<string>((res, rej) => {
+        const r = new FileReader()
+        r.onload = () => res(String(r.result))
+        r.onerror = rej
+        r.readAsDataURL(f)
+      })
+      await api.replaceLogoImage(id, dataUrl)
+      toast.success('Logo replaced')
+      refresh()
+    } catch (err) {
+      setError(errorMessage(err, 'Replace failed'))
+    } finally {
+      setBusy(false)
+      setReplacingId(null)
+    }
+  }
+
+  function pickReplacement(id: number) {
+    setReplacingId(id)
+    replaceRef.current?.click()
+  }
+
   async function del(id: number) {
     await api.deleteLogo(id).catch(() => {})
     refresh()
@@ -55,6 +90,14 @@ export default function LogoManager() {
   return (
     <div>
       {error && <Banner className="mb-5">{error}</Banner>}
+
+      <input
+        ref={replaceRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        className="hidden"
+        onChange={replaceImage}
+      />
 
       <Card className="p-5 mb-6">
         <form onSubmit={upload} className="flex flex-wrap gap-3 items-end">
@@ -77,7 +120,7 @@ export default function LogoManager() {
           {logos.map((l) => (
             <Card key={l.id} className="overflow-hidden">
               <div className="aspect-video flex items-center justify-center p-4 bg-[repeating-conic-gradient(#1e293b_0_25%,#0f172a_0_50%)] bg-[length:20px_20px]">
-                <img src={logoImageUrl(l.id)} alt={l.name} className="max-h-full max-w-full object-contain" />
+                <img src={logoImageUrl(l)} alt={l.name} className="max-h-full max-w-full object-contain" />
               </div>
               <div className="flex items-center gap-2 px-3 py-2">
                 <span className="text-sm truncate flex-1" title={l.name}>{l.name}</span>
@@ -89,12 +132,22 @@ export default function LogoManager() {
                     ? 'watermark off'
                     : `${l.watermark.mode} · ${l.watermark.position}${l.watermark.constrainToMedia ? ' · media-fit' : ''}`}
                 </span>
-                <button
-                  onClick={() => setEditing(l)}
-                  className={buttonClass('secondary', 'sm', 'text-xs px-2 py-0.5')}
-                >
-                  Watermark
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => pickReplacement(l.id)}
+                    disabled={busy}
+                    title="Swap the image, keeping this logo's name, watermark and every channel using it"
+                    className={buttonClass('subtle', 'sm', 'text-xs px-2 py-0.5')}
+                  >
+                    Replace
+                  </button>
+                  <button
+                    onClick={() => setEditing(l)}
+                    className={buttonClass('secondary', 'sm', 'text-xs px-2 py-0.5')}
+                  >
+                    Watermark
+                  </button>
+                </div>
               </div>
             </Card>
           ))}
@@ -145,7 +198,7 @@ function WatermarkEditor({
     <Modal onClose={onClose} panelClassName="w-full max-w-2xl p-5 max-h-[90vh] overflow-auto">
       <div className="flex items-center gap-3 mb-4">
           <div className="w-16 h-10 rounded flex items-center justify-center bg-[repeating-conic-gradient(#1e293b_0_25%,#0f172a_0_50%)] bg-[length:14px_14px] shrink-0">
-            <img src={logoImageUrl(logo.id)} alt={logo.name} className="max-h-full max-w-full object-contain" />
+            <img src={logoImageUrl(logo)} alt={logo.name} className="max-h-full max-w-full object-contain" />
           </div>
           <div className="min-w-0">
             <h2 className="font-semibold truncate">{logo.name}</h2>
