@@ -22,7 +22,7 @@ import { prisma } from '../db.js'
 import { hlsDir, logosDir } from '../paths.js'
 import { log } from '../logs.js'
 import { markEvent } from '../metrics.js'
-import { buildPlayout, prunePlayout } from '../playout.js'
+import { topUpPlayout } from '../playout.js'
 import { clientIp, clientName, closeSession, openSession, type Session } from '../sessions.js'
 import { ensureChannelReady, pipeSegment } from './pipe.js'
 import { resolveProfile } from './profile.js'
@@ -285,15 +285,12 @@ class ChannelSegmenter {
 
   /** Build the playout further ahead if it's running low. False = nothing scheduled. */
   private async ensurePlayout(channel: { id: number; playoutCursor: Date | null; rotationItems: unknown[] }): Promise<boolean> {
-    const now = Date.now()
-    if (channel.playoutCursor && channel.playoutCursor.getTime() >= now + 30 * 60 * 1000) return true
-    const blocks = await prisma.timeBlock.count({ where: { channelId: channel.id } })
-    if (channel.rotationItems.length === 0 && blocks === 0) return false
-    await prunePlayout(channel.id).catch(() => {})
-    await buildPlayout(channel.id, new Date(now + 4 * 3600 * 1000)).catch((e) =>
-      log('error', 'playout', `Channel ${this.n}: playout build failed`, String(e?.stack || e), this.tag),
-    )
-    return true
+    const res = await topUpPlayout(channel).catch((e) => {
+      log('error', 'playout', `Channel ${this.n}: playout build failed`, String((e as Error)?.stack || e), this.tag)
+      // The build failed, not the channel — play whatever is already scheduled.
+      return { scheduled: true, built: 0 }
+    })
+    return res.scheduled
   }
 
   private hlsOutput(): FfmpegOutput {

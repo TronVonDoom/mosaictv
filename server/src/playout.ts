@@ -11,6 +11,61 @@ import { log } from './logs.js'
 
 const MAX_ITERATIONS = 50000
 
+/**
+ * How far ahead a channel builds its timeline, in hours.
+ *
+ * This is what the XMLTV guide can show: the guide route only reads what has
+ * been built, so the horizon is the depth of the published listings. A day is
+ * the floor — anything less and a player that asks for "tonight" comes up
+ * short between top-ups.
+ */
+export const MIN_HORIZON_HOURS = 24
+export const MAX_HORIZON_HOURS = 168
+export const DEFAULT_HORIZON_HOURS = 48
+
+/** A stored horizon value, clamped into range. Anything unparseable = default. */
+export function clampHorizon(value: unknown): number {
+  // Unset is not zero: null and '' mean "never configured", so they take the
+  // default rather than coercing to 0 and clamping up to the floor.
+  if (value == null || value === '') return DEFAULT_HORIZON_HOURS
+  const n = Number(value)
+  if (!Number.isFinite(n)) return DEFAULT_HORIZON_HOURS
+  return Math.min(MAX_HORIZON_HOURS, Math.max(MIN_HORIZON_HOURS, Math.round(n)))
+}
+
+export async function horizonHours(): Promise<number> {
+  const row = await prisma.setting.findUnique({ where: { key: 'playoutHorizonHours' } })
+  return clampHorizon(row?.value)
+}
+
+/**
+ * Top up a channel's timeline if it is running low, and say whether the channel
+ * has anything to schedule at all. Called on tune-in and before every program,
+ * so a channel left alone for a month still has a timeline the moment someone
+ * watches it.
+ *
+ * It refills at the halfway mark rather than at the last moment: a channel on a
+ * 48-hour horizon never publishes less than 24 hours of guide, where waiting
+ * until the timeline was nearly spent would let the listings thin out to the
+ * next couple of programs before they filled again.
+ */
+export async function topUpPlayout(channel: {
+  id: number
+  playoutCursor: Date | null
+  rotationItems: unknown[]
+}): Promise<{ scheduled: boolean; built: number }> {
+  const now = Date.now()
+  const horizonMs = (await horizonHours()) * 3600 * 1000
+  if (channel.playoutCursor && channel.playoutCursor.getTime() >= now + horizonMs / 2) {
+    return { scheduled: true, built: 0 }
+  }
+  const blocks = await prisma.timeBlock.count({ where: { channelId: channel.id } })
+  if (channel.rotationItems.length === 0 && blocks === 0) return { scheduled: false, built: 0 }
+  await prunePlayout(channel.id).catch(() => {})
+  const built = await buildPlayout(channel.id, new Date(now + horizonMs))
+  return { scheduled: true, built }
+}
+
 type BlockWithCollection = TimeBlock & { collection: CollectionWithItems }
 type State = { rotationIndex: number; positions: Record<string, number> }
 

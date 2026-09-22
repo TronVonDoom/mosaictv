@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { getTmdbKey, setTmdbKey, validateKey } from '../tmdb.js'
 import { loadWatermark, sanitizeWatermark } from '../streaming/overlays.js'
 import { prisma } from '../db.js'
+import { MAX_HORIZON_HOURS, MIN_HORIZON_HOURS, horizonHours } from '../playout.js'
 import {
   MAX_FRIENDLY_NAME,
   MAX_TUNER_COUNT,
@@ -33,6 +34,7 @@ settingsRouter.get('/', async (_req, res) => {
     // tuner request, so it's visible before Plex ever connects.
     hdhrDeviceId: await deviceId(),
     hdhrFriendlyName: await friendlyName(),
+    playoutHorizonHours: await horizonHours(),
   })
 })
 
@@ -76,6 +78,20 @@ settingsRouter.post('/tuner-name', async (req, res) => {
   }
   await setSetting('hdhrFriendlyName', name)
   res.json({ ok: true, hdhrFriendlyName: name })
+})
+
+// How far ahead every channel builds its timeline. This is also the depth of
+// the published XMLTV guide, since the guide only shows what has been built.
+settingsRouter.post('/playout-horizon', async (req, res) => {
+  const n = Number(req.body?.playoutHorizonHours)
+  if (!Number.isFinite(n) || n < MIN_HORIZON_HOURS || n > MAX_HORIZON_HOURS) {
+    return res.status(400).json({
+      error: `playoutHorizonHours must be a number between ${MIN_HORIZON_HOURS} and ${MAX_HORIZON_HOURS}`,
+    })
+  }
+  const hours = Math.round(n)
+  await setSetting('playoutHorizonHours', String(hours))
+  res.json({ ok: true, playoutHorizonHours: hours })
 })
 
 // Validate and save the TMDB API key in one step.

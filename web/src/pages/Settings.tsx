@@ -56,6 +56,15 @@ const STREAM_MODES = [
   },
 ] as const
 
+// How far ahead channels build. A day is the floor: the guide is only as deep
+// as the timeline, and a player asking for "tonight" needs at least that much.
+const HORIZONS = [
+  { hours: 24, label: '1 day' },
+  { hours: 48, label: '2 days' },
+  { hours: 72, label: '3 days' },
+  { hours: 168, label: '1 week' },
+] as const
+
 /** A titled block inside a settings tab — the heading, the one-line "what", and
  *  an optional badge for state that belongs next to the title. */
 function SettingsCard({
@@ -88,6 +97,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false)
   const [wm, setWm] = useState<WatermarkConfig | null>(null)
   const [streamMode, setStreamMode] = useState<StreamMode>('mpegts')
+  const [horizon, setHorizon] = useState(48)
   const [tunerCount, setTunerCount] = useState(4)
   const [tunerDraft, setTunerDraft] = useState('4')
   const [deviceId, setDeviceId] = useState('')
@@ -103,6 +113,7 @@ export default function Settings() {
         setConfigured(s.tmdbConfigured)
         setWm(s.watermark)
         setStreamMode(s.streamMode)
+        setHorizon(s.playoutHorizonHours)
         setTunerCount(s.tunerCount)
         setTunerDraft(String(s.tunerCount))
         setDeviceId(s.hdhrDeviceId)
@@ -119,6 +130,19 @@ export default function Settings() {
       toast.success(`Streaming mode: ${mode === 'hls' ? 'Shared HLS' : 'MPEG-TS'}`)
     } catch (err) {
       toast.error(errorMessage(err, 'Failed to save streaming mode'))
+    }
+  }
+
+  async function saveHorizon(hours: number) {
+    if (hours === horizon) return
+    const previous = horizon
+    setHorizon(hours)
+    try {
+      await api.savePlayoutHorizon(hours)
+      toast.success(`Building ${HORIZONS.find((h) => h.hours === hours)?.label ?? `${hours}h`} ahead`)
+    } catch (err) {
+      setHorizon(previous)
+      toast.error(errorMessage(err, 'Failed to save schedule horizon'))
     }
   }
 
@@ -261,6 +285,48 @@ export default function Settings() {
 
       {tab === 'streaming' && (
         <div className="space-y-4">
+          <SettingsCard
+            title="Schedule horizon"
+            description={
+              <>
+                How far ahead every channel builds its timeline — and so how much guide the XMLTV
+                feed publishes.{' '}
+                <InfoHint>
+                  A channel tops itself up while it streams, refilling once less than half the
+                  horizon is left, so a channel someone watches never publishes less than half of
+                  this. A channel nobody watches keeps whatever was last built until you press
+                  Build on its Guide tab.
+                  <br />
+                  <br />
+                  Deeper costs nothing at playback — it is rows in a table, built in seconds —
+                  but a schedule change only affects what has not been built yet, so a week-deep
+                  guide needs a Rebuild to pick up edits.
+                </InfoHint>
+              </>
+            }
+          >
+            <div className="flex flex-wrap gap-2">
+              {HORIZONS.map((h) => {
+                const active = horizon === h.hours
+                return (
+                  <button
+                    key={h.hours}
+                    type="button"
+                    onClick={() => saveHorizon(h.hours)}
+                    className={cx(
+                      'rounded-lg border px-3 py-1.5 text-sm transition-colors',
+                      active
+                        ? 'border-indigo-500/60 bg-indigo-500/10 text-indigo-200'
+                        : 'border-edge text-ink-muted hover:border-edge-strong hover:text-ink-soft',
+                    )}
+                  >
+                    {h.label}
+                  </button>
+                )
+              })}
+            </div>
+          </SettingsCard>
+
           <SettingsCard
             title="Streaming mode"
             description={

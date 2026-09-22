@@ -6,7 +6,7 @@
 import type { ChildProcess } from 'node:child_process'
 import type { Response } from 'express'
 import { prisma } from '../db.js'
-import { buildPlayout, prunePlayout } from '../playout.js'
+import { topUpPlayout } from '../playout.js'
 import { log } from '../logs.js'
 
 type SegmentResult = { code: number | null; stderr: string; spawnError?: Error; bytes: number; firstByteMs: number }
@@ -127,28 +127,24 @@ export function pipeSegment(proc: ChildProcess, res: Response, tag?: string, ses
   })
 }
 
-/** Build the playout if it's empty or nearly exhausted. False = nothing scheduled. */
+/** Build the playout if it's empty or running low. False = nothing scheduled. */
 async function ensurePlayout(
   channel: { id: number; playoutCursor: Date | null; rotationItems: unknown[] },
   channelNumber: number,
   session?: string,
 ): Promise<boolean> {
-  const now = Date.now()
-  if (channel.playoutCursor && channel.playoutCursor.getTime() >= now + 30 * 60 * 1000) return true
-
-  const blocks = await prisma.timeBlock.count({ where: { channelId: channel.id } })
-  if (channel.rotationItems.length === 0 && blocks === 0) {
+  const res = await topUpPlayout(channel).catch((e) => {
+    log('error', 'playout', `Playout build failed for channel ${channelNumber}`, String((e as Error)?.stack || e), session)
+    // The build failed, not the channel — play whatever is already scheduled.
+    return { scheduled: true, built: 0 }
+  })
+  if (!res.scheduled) {
     log('warn', 'stream', `Channel ${channelNumber} has nothing scheduled — no rotation or time blocks`, undefined, session)
     return false
   }
-  await prunePlayout(channel.id).catch((e) =>
-    log('warn', 'playout', `Prune failed for channel ${channelNumber}`, String(e), session),
-  )
-  const built = await buildPlayout(channel.id, new Date(now + 4 * 3600 * 1000)).catch((e) => {
-    log('error', 'playout', `Playout build failed for channel ${channelNumber}`, String(e?.stack || e), session)
-    return -1
-  })
-  if (built >= 0) log('debug', 'playout', `Channel ${channelNumber}: built ${built} playout item(s) on connect`, undefined, session)
+  if (res.built > 0) {
+    log('debug', 'playout', `Channel ${channelNumber}: built ${res.built} playout item(s) on connect`, undefined, session)
+  }
   return true
 }
 

@@ -195,6 +195,7 @@ export type SettingsInfo = {
   tunerCount: number
   hdhrDeviceId: string
   hdhrFriendlyName: string
+  playoutHorizonHours: number
 }
 
 export type MetadataStatus = {
@@ -581,6 +582,11 @@ export const api = {
     request<{ ok: boolean; watermark: WatermarkConfig }>('/api/settings/watermark', { method: 'POST', body: JSON.stringify(wm) }),
   saveStreamMode: (mode: StreamMode) =>
     request<{ ok: boolean; streamMode: StreamMode }>('/api/settings/stream-mode', { method: 'POST', body: JSON.stringify({ mode }) }),
+  savePlayoutHorizon: (playoutHorizonHours: number) =>
+    request<{ ok: boolean; playoutHorizonHours: number }>('/api/settings/playout-horizon', {
+      method: 'POST',
+      body: JSON.stringify({ playoutHorizonHours }),
+    }),
   saveTunerCount: (tunerCount: number) =>
     request<{ ok: boolean; tunerCount: number }>('/api/settings/tuner-count', { method: 'POST', body: JSON.stringify({ tunerCount }) }),
   saveTunerName: (friendlyName: string) =>
@@ -726,8 +732,11 @@ export const api = {
     request<TimeBlock>(`/api/channels/${channelId}/blocks/${blockId}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteBlock: (channelId: number, blockId: number) =>
     request<void>(`/api/channels/${channelId}/blocks/${blockId}`, { method: 'DELETE' }),
-  buildPlayout: (channelId: number, hours = 48) =>
-    request<{ built: number }>(`/api/channels/${channelId}/build?hours=${hours}`, { method: 'POST' }),
+  buildPlayout: (channelId: number, hours?: number) =>
+    request<{ built: number }>(
+      `/api/channels/${channelId}/build${hours ? `?hours=${hours}` : ''}`,
+      { method: 'POST' },
+    ),
   resetPlayout: (channelId: number, hard = false) =>
     request<{ ok: boolean }>(`/api/channels/${channelId}/reset${hard ? '?hard=1' : ''}`, { method: 'POST' }),
   playout: (channelId: number, hours = 24) =>

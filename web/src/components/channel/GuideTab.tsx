@@ -31,6 +31,8 @@ export default function GuideTab({
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'timeline' | 'list'>('timeline')
   const [building, setBuilding] = useState(false)
+  // The configured horizon, so the button names the depth it will build.
+  const [horizon, setHorizon] = useState<number | null>(null)
 
   const hasSchedule = ch.rotationItems.length > 0 || ch.timeBlocks.length > 0
 
@@ -48,6 +50,13 @@ export default function GuideTab({
     loadPlayout()
   }, [loadPlayout])
 
+  useEffect(() => {
+    api
+      .settings()
+      .then((s) => setHorizon(s.playoutHorizonHours))
+      .catch(() => {})
+  }, [])
+
   /** Run a build-ish action, keeping the button state and errors in one place. */
   async function run(fn: () => Promise<unknown>, fallback: string) {
     onError(null)
@@ -63,7 +72,9 @@ export default function GuideTab({
     }
   }
 
-  const build = () => run(() => api.buildPlayout(channelId, 48), 'Build failed')
+  const build = () => run(() => api.buildPlayout(channelId), 'Build failed')
+  const depth = horizon == null ? '' : horizon % 24 === 0 ? `${horizon / 24}d` : `${horizon}h`
+  const buildLabel = building ? 'Building…' : depth ? `Build ${depth}` : 'Build'
 
   const reset = (hard = false) => {
     if (
@@ -100,14 +111,14 @@ export default function GuideTab({
             ))}
           </div>
           <InfoHint>
-            The guide is generated ahead of time, 48 hours at a stretch. It's what the XMLTV feed
-            publishes and what the channel actually plays.
+            The guide is generated ahead of time, as far out as the schedule horizon in Settings.
+            It's what the XMLTV feed publishes and what the channel actually plays.
           </InfoHint>
         </div>
 
         <div className="flex gap-2">
           <Button onClick={build} disabled={building || !hasSchedule}>
-            {building ? 'Building…' : 'Build 48h'}
+            {buildLabel}
           </Button>
           <Button
             variant="secondary"
@@ -141,10 +152,10 @@ export default function GuideTab({
         <EmptyState
           icon="upnext"
           title="No guide built yet"
-          description="Build 48 hours of schedule to see what this channel will play — and to publish it to the XMLTV guide."
+          description="Build the schedule to see what this channel will play — and to publish it to the XMLTV guide."
           action={
             <Button onClick={build} disabled={building}>
-              {building ? 'Building…' : 'Build 48h'}
+              {buildLabel}
             </Button>
           }
         />

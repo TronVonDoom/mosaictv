@@ -25,7 +25,7 @@ export default function GettingStarted({ stats, channels }: { stats: Stats; chan
     { title: 'Scan your media', hint: 'Index shows & movies (grab TMDB posters after)', to: '/library#sources', done: stats.items > 0 },
     { title: 'Create a channel', hint: 'Name it — leave the number blank for now', to: '/channels', done: channels.length > 0 },
     { title: 'Schedule it', hint: 'Add collections, then a rotation or time blocks', to: channelPath, done: scheduled },
-    { title: 'Build the guide', hint: 'Guide tab → Build 48h to generate the timeline', to: channelPath, done: built },
+    { title: 'Build the guide', hint: 'Guide tab → Build to generate the timeline', to: channelPath, done: built },
     { title: 'Go live', hint: 'Give the channel a number — it joins the M3U & guide', to: channelPath, done: onAir },
   ]
   if (steps.every((s) => s.done)) return null

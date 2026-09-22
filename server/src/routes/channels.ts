@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { prisma } from '../db.js'
-import { buildPlayout, prunePlayout, resetPlayout } from '../playout.js'
+import { MAX_HORIZON_HOURS, buildPlayout, horizonHours, prunePlayout, resetPlayout } from '../playout.js'
 import { sanitizeComingUp } from '../streaming/overlays.js'
 import { segmenterViewers } from '../streaming/segmenter.js'
 import { asOrderSetting } from '../collections.js'
@@ -247,7 +247,11 @@ channelsRouter.delete('/:id/blocks/:blockId', async (req, res) => {
 // --- playout build / reset / read ---
 channelsRouter.post('/:id/build', async (req, res) => {
   const channelId = Number(req.params.id)
-  const hours = Math.min(168, Math.max(1, Number(req.query.hours) || 48))
+  // No ?hours= means "build as far ahead as the configured horizon".
+  const asked = Number(req.query.hours)
+  const hours = Number.isFinite(asked) && asked > 0
+    ? Math.min(MAX_HORIZON_HOURS, Math.max(1, asked))
+    : await horizonHours()
   try {
     await prunePlayout(channelId)
     const built = await buildPlayout(channelId, new Date(Date.now() + hours * 3600 * 1000))
