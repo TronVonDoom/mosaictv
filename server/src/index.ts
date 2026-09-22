@@ -7,6 +7,7 @@ import { log } from './logs.js'
 import { warmFiller } from './streaming/filler.js'
 import { warmCapabilities } from './streaming/capabilities.js'
 import { startMetrics } from './metrics.js'
+import { startGuideKeeper } from './guideKeeper.js'
 import { resetSegments } from './streaming/segmenter.js'
 import { migrateCollectionOwnership, migrateFillersToLibrary } from './migrate.js'
 import { seedDefaultAudio } from './seedDefaults.js'
@@ -162,6 +163,7 @@ async function boot(): Promise<void> {
   await seedDefaultAudio().catch((e) => log('error', 'system', 'Default audio seed failed', String(e?.stack || e)))
   resetSegments() // clear any stale segmenter output from a previous run
   const metricSource = startMetrics()
+  startGuideKeeper() // keep every channel's guide built out, watched or not
   await checkFfmpeg()
   app.listen(PORT, () => {
     console.log(`MosaicTV v${VERSION} listening on http://0.0.0.0:${PORT}`)
