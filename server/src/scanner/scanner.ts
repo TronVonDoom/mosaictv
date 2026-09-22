@@ -96,7 +96,11 @@ async function processFile(
   // way posters populate on a re-scan even for otherwise-unchanged files.
   const art = await detectArtwork(filePath, libraryPath, kind, parsed.season, cache)
 
-  // Skip only if the file is unchanged, already probed, and artwork matches.
+  // Skip only if the file is unchanged, already probed, artwork matches, and
+  // the name still parses to what's stored. That last check is what lets an
+  // improvement to the parser (a new release tag it knows to strip) reach a
+  // library on an ordinary re-scan: the row is rewritten from the cached probe,
+  // so nothing is re-probed and no forced re-scan is needed.
   if (
     !force &&
     existing &&
@@ -105,7 +109,11 @@ async function processFile(
     !existing.missing &&
     existing.posterPath === art.posterPath &&
     existing.showPosterPath === art.showPosterPath &&
-    existing.seasonPosterPath === art.seasonPosterPath
+    existing.seasonPosterPath === art.seasonPosterPath &&
+    existing.title === parsed.title &&
+    existing.showTitle === parsed.showTitle &&
+    existing.season === parsed.season &&
+    existing.episode === parsed.episode
   ) {
     status.skipped++
     return

@@ -23,15 +23,52 @@ const YEAR_RE = /\((\d{4})\)/
 // Matches S01E02, s1e2, 1x02, etc.
 const SEASON_EP_RE = /\bS(\d{1,2})[\s._-]*E(\d{1,3})\b|\b(\d{1,2})x(\d{1,3})\b/i
 
-// Parenthetical quality/source tags Plex users tack onto folder or file names.
-const QUALITY_TAG_RE =
-  /\((?:HD|SD|UHD|4K|1080p|720p|480p|x264|x265|h\.?264|h\.?265|hevc|Other|BluRay|Blu-Ray|WEB-?DL|WEBRip|HDR|DVD(?:Rip)?|Remux)\)/gi
+// One resolution/source/codec token as it appears inside a parenthetical.
+const QUALITY_TOKEN_RE = new RegExp(
+  '^(?:' +
+    [
+      '\\d{3,4}p', '4k', 'uhd', 'hd', 'sd', 'hdr\\d*', 'sdr',
+      'x26[45]', 'h\\.?26[45]', 'hevc', 'avc', 'xvid', 'divx', 'mpeg-?[24]', 'vp9', 'av1', '\\d+bits?',
+      'blu-?ray', 'bd-?rip', 'br-?rip', 'br-?disk', 'br', 'web-?dl', 'web-?rip', 'web',
+      'hd-?tv', 'dvd-?rip', 'dvd', 'remux',
+      'aac\\d*', 'ac-?3', 'e-?ac-?3', 'dts(?:-hd)?', 'flac', 'mp3',
+      'other',
+    ].join('|') +
+    ')$',
+  'i',
+)
+// A release group's tag: shouted, no lowercase — "EDGE2020", "RARBG", "YTS".
+const GROUP_TAG_RE = /^[A-Z][A-Z0-9]{2,}$/
 
-/** Strip a trailing "(2020)", quality tags, and tidy whitespace into a clean title. */
+function tokenKind(part: string): 'quality' | 'group' | 'other' {
+  if (QUALITY_TOKEN_RE.test(part)) return 'quality'
+  // Compounds the scene joins with a hyphen: "Bluray-1080p", "WEBRip-2160p".
+  const pieces = part.split('-')
+  if (pieces.length > 1 && pieces.every((p) => QUALITY_TOKEN_RE.test(p))) return 'quality'
+  if (GROUP_TAG_RE.test(part)) return 'group'
+  return 'other'
+}
+
+/**
+ * True when a parenthetical is nothing but release metadata — "(HD)",
+ * "(Bluray-1080p x265)", "(480p x265 EDGE2020)".
+ *
+ * A group's tag only counts alongside a real quality token, so a title keeps
+ * its meaningful parentheticals: "(Unaired Pilot)", "(Colorized)",
+ * "(Director's Cut 1992)", "(US)", and the "(1)"/"(2)" that number a two-parter.
+ */
+function isReleaseTag(inner: string): boolean {
+  const parts = inner.split(/[\s,._]+/).filter(Boolean)
+  if (parts.length === 0) return false
+  const kinds = parts.map(tokenKind)
+  return !kinds.includes('other') && kinds.includes('quality')
+}
+
+/** Strip a trailing "(2020)", release tags, and tidy whitespace into a clean title. */
 function cleanTitle(raw: string): string {
   return raw
     .replace(YEAR_RE, '')
-    .replace(QUALITY_TAG_RE, '')
+    .replace(/\(([^()]*)\)/g, (whole, inner: string) => (isReleaseTag(inner) ? '' : whole))
     .replace(/[._]/g, ' ')
     .replace(/\s{2,}/g, ' ')
     .replace(/\s*-\s*$/, '')
