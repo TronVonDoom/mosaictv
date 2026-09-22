@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.8.3 — Pick your audio, swap your logos (2026-09-22)
+
+- **Channels can prefer an audio language.** Files that carry several audio
+  tracks used to air whichever one came first, which on a lot of anime rips is
+  the original language or a dub you didn't want — a Cowboy Bebop episode here
+  lists two Italian tracks before English. Settings → Streaming → **Audio
+  language** sets the preference for the instance, and a channel's General tab
+  can override it, so a subtitled anime channel can keep Japanese while
+  everything else runs English. A file with no track in that language plays its
+  first track rather than going silent. **The default is English**, which is a
+  change for anyone whose files led with another language — choose *First
+  track* to keep the old behaviour.
+- **Replace a logo's image without recreating it.** Studio → Logos →
+  **Replace** swaps the picture while keeping the logo's id, name and watermark
+  settings — so every channel, block and collection already using it keeps
+  using it, instead of needing to be repointed at a new upload. The old file is
+  deleted, and the new one shows immediately rather than after the image cache
+  expires.
+- **Idle channels keep a full guide.** An hourly sweep now tops up every
+  channel to the schedule horizon, not just the one being watched. Before this,
+  a channel nobody tuned to ran off the end of what was last built and silently
+  lost its listings — the XMLTV feed publishes only what exists. Nothing to
+  configure; it uses the same horizon setting.
+
 ## 0.8.2 — A guide that stays ahead (2026-09-22)
 
 - **Choose how far ahead channels build: 1 day, 2 days, 3 days or a week.**
