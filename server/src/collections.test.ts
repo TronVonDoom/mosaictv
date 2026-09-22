@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { MediaItem } from '@prisma/client'
-import { groupIntoAirings } from './collections.js'
+import { groupIntoAirings, rotated } from './collections.js'
 
 // Minimal MediaItem — only the fields groupIntoAirings and its sort touch.
 function mi(id: number, over: Partial<MediaItem> = {}): MediaItem {
@@ -58,4 +58,74 @@ test('missing or zero-duration segments are skipped', () => {
   const zero = mi(6, { showTitle: 'Secret Squirrel', durationSec: 0 })
   const units = groupIntoAirings([a1], [airing(a1, gone, zero)])
   assert.deepEqual(ids(units), [[1]])
+})
+
+// --- rotate ---
+
+// One episode of `show`, numbered within it.
+const epOf = (show: string, n: number, id: number) => mi(id, { showTitle: show, episode: n })
+
+// What `rotate` airs over the first `n` positions, as "Show Ep".
+function airs(units: MediaItem[][], n: number): string[] {
+  const list = rotated(units)
+  return Array.from({ length: n }, (_, pos) => {
+    const m = list.at(pos)[0]
+    return `${m.showTitle} ${m.episode}`
+  })
+}
+
+test('rotate gives every show a turn, in show-name order', () => {
+  const units = [
+    [epOf('B Show', 1, 10)],
+    [epOf('B Show', 2, 11)],
+    [epOf('A Show', 1, 20)],
+    [epOf('A Show', 2, 21)],
+  ]
+  assert.deepEqual(airs(units, 4), ['A Show 1', 'B Show 1', 'A Show 2', 'B Show 2'])
+})
+
+test('a show that runs out starts over instead of dropping out of the rotation', () => {
+  // Short: 2 episodes. Long: 5. The short one must keep its every-other slot.
+  const units = [
+    ...[1, 2].map((n) => [epOf('Short', n, n)]),
+    ...[1, 2, 3, 4, 5].map((n) => [epOf('Long', n, 10 + n)]),
+  ]
+  assert.deepEqual(airs(units, 10), [
+    'Long 1', 'Short 1',
+    'Long 2', 'Short 2',
+    'Long 3', 'Short 1', // Short wraps to its first episode, still in rotation
+    'Long 4', 'Short 2',
+    'Long 5', 'Short 1',
+  ])
+})
+
+test('rotate keeps sharing airtime evenly long after the shortest show ends', () => {
+  const units = [
+    [epOf('Short', 1, 1)],
+    ...Array.from({ length: 50 }, (_, i) => [epOf('Long', i + 1, 100 + i)]),
+  ]
+  const played = airs(units, 200)
+  const short = played.filter((p) => p.startsWith('Short')).length
+  assert.equal(short, 100, 'the one-episode show should still get half the slots')
+})
+
+test('rotate loops the long show too, so the channel never runs dry', () => {
+  const units = [[epOf('A', 1, 1)], [epOf('A', 2, 2)], [epOf('B', 1, 3)]]
+  assert.deepEqual(airs(units, 8), ['A 1', 'B 1', 'A 2', 'B 1', 'A 1', 'B 1', 'A 2', 'B 1'])
+})
+
+test('movies rotate as one group against the shows, not one group each', () => {
+  const movie = (title: string, id: number) =>
+    mi(id, { showTitle: null, title, episode: null, season: null })
+  const units = [
+    [movie('Hocus Pocus', 1)],
+    [movie('Beetlejuice', 2)],
+    [epOf('Goosebumps', 1, 10)],
+    [epOf('Goosebumps', 2, 11)],
+  ]
+  const list = rotated(units)
+  const seen = Array.from({ length: 4 }, (_, pos) => list.at(pos)[0].title)
+  // Movie, show, movie, show — the two movies share one slot between them
+  // rather than taking one each, so the show keeps half the airtime.
+  assert.deepEqual(seen, ['Beetlejuice', 'Ep 10', 'Hocus Pocus', 'Ep 11'])
 })

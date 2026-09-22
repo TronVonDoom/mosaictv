@@ -396,23 +396,32 @@ function showGroups(units: ProgramUnit[]): ProgramUnit[][] {
     .map(([, arr]) => arr.sort(byUnit))
 }
 
-// Round-robin across shows: one unit from each show in turn, each show
-// advancing in episode order, looping until every unit is placed.
-function rotateShows(units: ProgramUnit[]): ProgramUnit[] {
+/**
+ * Round-robin across shows: one unit from each show in turn, each show
+ * advancing in episode order and starting over from its first episode when it
+ * runs out.
+ *
+ * A show keeps its slot in the rotation forever — it does NOT drop out once its
+ * last episode has aired. Dropping it would hand its airtime to whichever shows
+ * had more episodes left, so a rotation of a 19-episode show and a 200-episode
+ * one would decay into the long one playing alone. Every show gets an equal
+ * share instead, which is what "one from each show in turn" has to mean on a
+ * channel that runs forever.
+ *
+ * Each show wraps on its own count, so the position is not periodic over
+ * `length` the way a fixed list is; that is fine, since positions are stored
+ * ever-increasing and only this list interprets them.
+ */
+export function rotated(units: ProgramUnit[]): ResolvedList {
   const lists = showGroups(units)
-  const pointers = new Array(lists.length).fill(0)
-  const result: ProgramUnit[] = []
-  let remaining = units.length
-  while (remaining > 0) {
-    for (let g = 0; g < lists.length; g++) {
-      if (pointers[g] < lists[g].length) {
-        result.push(lists[g][pointers[g]])
-        pointers[g]++
-        remaining--
-      }
-    }
+  return {
+    length: units.length,
+    at(pos) {
+      if (units.length === 0) throw new Error('empty collection')
+      const show = lists[pos % lists.length]
+      return show[Math.floor(pos / lists.length) % show.length]
+    },
   }
-  return result
 }
 
 /** Resolve a collection to an ordered, endlessly repeating list of units. */
@@ -426,6 +435,6 @@ export async function resolveCollection(
   if (order === 'custom') return looped(units)
   if (order === 'shuffle') return shuffled(units, seed)
   if (order === 'shuffleShows') return shuffledShows(units, seed)
-  if (order === 'rotate') return looped(rotateShows(units))
+  if (order === 'rotate') return rotated(units)
   return looped(chronological(units))
 }
