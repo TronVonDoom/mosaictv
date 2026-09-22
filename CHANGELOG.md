@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.8.2 — A guide that stays ahead (2026-09-22)
+
+- **Choose how far ahead channels build: 1 day, 2 days, 3 days or a week.**
+  Settings → Streaming → **Schedule horizon**. A channel used to build only 4
+  hours ahead while it streamed, which is all the guide a player could ever
+  show — the XMLTV feed publishes what has been built and nothing more. The
+  floor is now a full day, the default 2 days.
+- **Channels top up at the halfway mark instead of the last minute.** The
+  refill used to wait until under 30 minutes of timeline was left, so listings
+  thinned to the next couple of programs before they filled again. A channel
+  now rebuilds once less than half its horizon remains, and so never publishes
+  less than half of it while anyone is watching.
+- **The Build button says what it will build.** It follows the horizon ("Build
+  2d") rather than always claiming 48 hours, and the same setting is the
+  default for `POST /api/channels/:id/build` when no `?hours=` is given.
+
+Note: a channel nobody is watching still keeps whatever was last built —
+nothing rebuilds it on a timer yet. Press Build on its Guide tab, or watch it
+for a moment, to bring it current.
+
 ## 0.8.1 — Rotations that keep every show (2026-09-22)
 
 - **A rotation no longer thins out to whichever show has the most episodes.**
