@@ -73,11 +73,18 @@ export async function validateKey(key: string): Promise<boolean> {
 }
 
 export async function searchMovie(key: string, title: string, year: number | null): Promise<number | null> {
-  const r = await tmdbGet<{ results: SearchResult[] }>(key, '/search/movie', {
-    query: title,
-    year: year ?? undefined,
-    include_adult: 'false',
-  })
+  const search = (params: Record<string, string | number | undefined>) =>
+    tmdbGet<{ results: SearchResult[] }>(key, '/search/movie', { query: title, include_adult: 'false', ...params })
+  // TMDB's `year` matches ANY release that year, re-releases included, so a
+  // remake searched with its own year can come back as the original — the 2010
+  // "A Nightmare on Elm Street" matched the 1984 film. `primary_release_year`
+  // is the film's first release only. Fall back to the looser match when a
+  // file's year is off by a festival premiere or a regional release.
+  if (year != null) {
+    const primary = await search({ primary_release_year: year })
+    if (primary?.results?.length) return primary.results[0].id
+  }
+  const r = await search({ year: year ?? undefined })
   return r?.results?.[0]?.id ?? null
 }
 
