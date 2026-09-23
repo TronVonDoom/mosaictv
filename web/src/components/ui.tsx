@@ -8,6 +8,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ButtonHTMLAttributes,
@@ -867,6 +868,10 @@ export type MenuItem =
  * An overflow menu: an icon button that opens a small popover of actions.
  * Closes on selection, outside click, or Escape. For secondary and
  * destructive actions that shouldn't sit on the surface as buttons.
+ *
+ * The popover is portalled to <body> and placed against the trigger: rendered
+ * in place, a card's overflow-hidden clipped it to the tile. It opens below
+ * the trigger, or above when there's no room, and stays inside the viewport.
  */
 export function Menu({
   items,
@@ -886,11 +891,51 @@ export function Menu({
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const menuItems = () => [...(menuRef.current?.querySelectorAll<HTMLElement>('[role=menuitem]:not(:disabled)') ?? [])]
+
+  // Placed before paint, written straight to the style so there's no frame at
+  // the wrong spot.
+  useLayoutEffect(() => {
+    if (!open) return
+    const place = () => {
+      const anchor = ref.current?.getBoundingClientRect()
+      const menu = menuRef.current
+      if (!anchor || !menu) return
+      // offset* rather than the rect: the entry animation scales the panel.
+      const w = menu.offsetWidth
+      const h = menu.offsetHeight
+      const gap = 6
+      const pad = 8
+      const vw = document.documentElement.clientWidth
+      const vh = window.innerHeight
+      const left = Math.max(pad, Math.min(align === 'end' ? anchor.right - w : anchor.left, vw - w - pad))
+      const below = anchor.bottom + gap
+      const top = below + h > vh - pad && anchor.top - gap - h >= pad ? anchor.top - gap - h : below
+      menu.style.left = `${left}px`
+      menu.style.top = `${top}px`
+    }
+    place()
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => {
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
+    }
+  }, [open, align])
 
   useEffect(() => {
     if (!open) return
+    // Opened from the keyboard: the portalled items no longer follow the
+    // trigger in the tab order, so focus moves into the menu, and back to the
+    // trigger when it closes.
+    const opener = document.activeElement as HTMLElement | null
+    const fromKeyboard = !!opener && !!ref.current?.contains(opener) && opener.matches(':focus-visible')
+    if (fromKeyboard) menuItems()[0]?.focus()
+
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (!ref.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
     document.addEventListener('mousedown', onDown)
@@ -898,8 +943,25 @@ export function Menu({
     return () => {
       document.removeEventListener('mousedown', onDown)
       window.removeEventListener('keydown', onKey)
+      // Only if focus fell to <body> with the menu — not if an action moved it.
+      if (fromKeyboard && (!document.activeElement || document.activeElement === document.body)) opener.focus()
     }
   }, [open])
+
+  const onMenuKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      const list = menuItems()
+      const i = list.indexOf(document.activeElement as HTMLElement)
+      const next = e.key === 'ArrowDown' ? (i + 1) % list.length : i <= 0 ? list.length - 1 : i - 1
+      list[next]?.focus()
+    } else if (e.key === 'Tab') {
+      // Back to the trigger, so Tab carries on from where the menu sits.
+      ref.current?.querySelector<HTMLElement>('button, [tabindex]')?.focus()
+      if (e.shiftKey) e.preventDefault()
+      setOpen(false)
+    }
+  }
 
   const toggle = () => setOpen((v) => !v)
   return (
@@ -909,39 +971,43 @@ export function Menu({
       ) : (
         <IconButton icon={icon} label={label} size="sm" onClick={toggle} aria-expanded={open} className={open ? 'bg-white/[0.06] text-ink' : undefined} />
       )}
-      {open && (
-        <div
-          role="menu"
-          className={cx(
-            'absolute top-full z-40 mt-1.5 min-w-48 rounded-xl border border-edge-strong bg-overlay/95 backdrop-blur p-1 shadow-2xl shadow-black/60 modal-in',
-            align === 'end' ? 'right-0' : 'left-0',
-          )}
-        >
-          {items.map((it, i) =>
-            it === 'divider' ? (
-              <div key={i} className="my-1 h-px bg-edge" />
-            ) : (
-              <button
-                key={i}
-                role="menuitem"
-                disabled={it.disabled}
-                onClick={() => {
-                  setOpen(false)
-                  it.onSelect()
-                }}
-                className={cx(
-                  'w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors disabled:opacity-40 disabled:pointer-events-none',
-                  it.danger ? 'text-rose-300 hover:bg-rose-500/12' : 'text-ink-soft hover:bg-white/[0.06] hover:text-ink',
-                )}
-              >
-                {it.icon && <Icon name={it.icon} size={15} className="shrink-0 opacity-80" />}
-                <span className="flex-1">{it.label}</span>
-                {it.hint && <span className="text-[11px] text-ink-faint">{it.hint}</span>}
-              </button>
-            ),
-          )}
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            // React events bubble through portals: keep a click on an item from
+            // also reaching the card the trigger sits in.
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={onMenuKeyDown}
+            className="fixed z-[60] min-w-48 rounded-xl border border-edge-strong bg-overlay/95 backdrop-blur p-1 shadow-2xl shadow-black/60 modal-in"
+          >
+            {items.map((it, i) =>
+              it === 'divider' ? (
+                <div key={i} className="my-1 h-px bg-edge" />
+              ) : (
+                <button
+                  key={i}
+                  role="menuitem"
+                  disabled={it.disabled}
+                  onClick={() => {
+                    setOpen(false)
+                    it.onSelect()
+                  }}
+                  className={cx(
+                    'w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors disabled:opacity-40 disabled:pointer-events-none',
+                    it.danger ? 'text-rose-300 hover:bg-rose-500/12' : 'text-ink-soft hover:bg-white/[0.06] hover:text-ink',
+                  )}
+                >
+                  {it.icon && <Icon name={it.icon} size={15} className="shrink-0 opacity-80" />}
+                  <span className="flex-1">{it.label}</span>
+                  {it.hint && <span className="text-[11px] text-ink-faint">{it.hint}</span>}
+                </button>
+              ),
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
