@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { prisma } from '../db.js'
 import { assetsDir } from '../paths.js'
-import { warmFiller, resolveFillerClipById, generateDraftStill, removeFillerCache } from '../streaming/filler.js'
+import { DEFAULT_FILLER_KEY, warmFiller, resolveFillerClipById, generateDraftStill, removeFillerCache } from '../streaming/filler.js'
 
 export const fillersRouter = Router()
 
@@ -191,6 +191,8 @@ fillersRouter.delete('/:id', async (req, res) => {
   // the generated Media asset above is only the copy kept for the UI preview.
   removeFillerCache(id)
   await prisma.filler.delete({ where: { id } }).catch(() => {})
+  // Deleting the default station ident leaves no default, not a dangling one.
+  await prisma.setting.deleteMany({ where: { key: DEFAULT_FILLER_KEY, value: String(id) } })
   res.status(204).end()
 })
 

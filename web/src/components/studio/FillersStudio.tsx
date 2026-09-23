@@ -78,6 +78,8 @@ export default function FillersStudio({ onCount }: { onCount: (n: number) => voi
   // library — which is channel-agnostic — has to be told whose logo to preview.
   const [channels, setChannels] = useState<Channel[]>([])
   const [previewChannelId, setPreviewChannelId] = useState<number | null>(null)
+  // The default station ident: airs on any channel with no filler of its own.
+  const [defaultId, setDefaultId] = useState<number | null>(null)
 
   // fillerId -> percent, for whatever the SERVER is building. Generation
   // outlives this component, so the source of truth is the job list, never a
@@ -105,8 +107,23 @@ export default function FillersStudio({ onCount }: { onCount: (n: number) => voi
     refreshAssets()
     api.assets('audio').then(setAudioAssets).catch(() => {})
     api.channels().then(setChannels).catch(() => {})
+    api.settings().then((s) => setDefaultId(s.defaultFillerId)).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  async function setDefault(f: Filler | null) {
+    try {
+      const r = await api.saveDefaultFiller(f?.id ?? null)
+      setDefaultId(r.defaultFillerId)
+      toast.success(
+        f
+          ? `“${f.name || styleLabel(f.style)}” is now the default station ident`
+          : 'No default station ident — channels without fillers use frosted glass',
+      )
+    } catch (e) {
+      toast.error(errorMessage(e, 'Could not change the default station ident'))
+    }
+  }
 
   const poll = useCallback(async () => {
     const list = await api.fillerGenJobs().catch(() => null)
@@ -177,6 +194,7 @@ export default function FillersStudio({ onCount }: { onCount: (n: number) => voi
         : `“${f.name || styleLabel(f.style)}” is removed from every channel and block using it.`
     if (!(await confirmDialog({ title: 'Delete this filler?', message: msg, confirmLabel: 'Delete filler', danger: true }))) return
     await api.deleteFiller(f.id).catch(() => {})
+    if (f.id === defaultId) setDefaultId(null) // the server clears it with the filler
     setSelected(null)
     refresh()
     refreshAssets()
@@ -344,7 +362,7 @@ export default function FillersStudio({ onCount }: { onCount: (n: number) => voi
         placeholder={
           <InspectorPlaceholder icon={<IconTile name="clip" size="lg" />} title="Select a filler">
             Watch it, change its look, music and length, or build a fresh preview. Assign fillers from a channel's Fillers
-            tab.
+            tab, or make one the default station ident (from its ⋯ menu) for every channel without fillers of its own.
           </InspectorPlaceholder>
         }
       >
@@ -412,6 +430,13 @@ export default function FillersStudio({ onCount }: { onCount: (n: number) => voi
                         <Badge>No preview</Badge>
                       )}
                     </div>
+                    {f.id === defaultId && (
+                      <div className="absolute top-2 right-2" title="Airs on any channel with no filler of its own">
+                        <Badge tone="accent">
+                          <Icon name="star" size={11} /> Default ident
+                        </Badge>
+                      </div>
+                    )}
                     {pct != null && <ProgressBar value={pct / 100} className="absolute inset-x-0 bottom-0 h-1 rounded-none" />}
                   </div>
                   <div className="px-3.5 py-3 flex items-start gap-2">
@@ -434,6 +459,9 @@ export default function FillersStudio({ onCount }: { onCount: (n: number) => voi
                             disabled: pct != null || f.style === 'custom',
                             onSelect: () => generate(f.id),
                           },
+                          f.id === defaultId
+                            ? { label: 'Stop using as default ident', icon: 'star', onSelect: () => setDefault(null) }
+                            : { label: 'Make default station ident', icon: 'star', onSelect: () => setDefault(f) },
                           'divider',
                           { label: 'Delete filler', icon: 'trash', danger: true, onSelect: () => del(f) },
                         ]}

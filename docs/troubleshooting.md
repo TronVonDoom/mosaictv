@@ -85,6 +85,18 @@ encoder is genuinely unusable here, not merely unlisted. On NVIDIA,
 container isn't seeing the card (runtime/toolkit issue). On VAAPI, make sure
 `/dev/dri` is passed into the container.
 
+### A program shows the station ident instead
+The channel couldn't play that file, so it covered the slot and moved on to the
+next program on time. **Logs** says why:
+
+- `… retrying it on the CPU` then `… holding the rest of its slot with the
+  station ident` — the file failed on the GPU and again on the CPU. The line
+  above each (`encoder exited …`) carries ffmpeg's own error, usually a damaged
+  or unreadable file. Check that it plays elsewhere, then rescan the library.
+- `… ended Ns before its slot` — the file is shorter than the length the
+  library recorded for it. The library's **Force** rescan re-reads every
+  file's duration.
+
 ---
 
 ## Backup & restore

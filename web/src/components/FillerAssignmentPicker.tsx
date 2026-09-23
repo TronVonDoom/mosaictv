@@ -13,12 +13,23 @@ export default function FillerAssignmentPicker({ owner, hint }: { owner: FillerO
   const [fillers, setFillers] = useState<Filler[]>([])
   const [assigned, setAssigned] = useState<Set<number>>(new Set())
   const [creating, setCreating] = useState(false)
+  const [defaultId, setDefaultId] = useState<number | null>(null)
   const ownerKey = owner.channelId ?? owner.timeBlockId
 
   const load = () => {
     api.fillers().then(setFillers).catch(() => {})
     api.fillerAssignments(owner).then((ids) => setAssigned(new Set(ids))).catch(() => {})
+    api.settings().then((s) => setDefaultId(s.defaultFillerId)).catch(() => {})
   }
+  // What fills this owner's gaps when nothing is assigned: a block falls back
+  // to its channel's fillers; a channel to the default station ident, else the
+  // frosted-glass ident built from its logo.
+  const defaultFiller = fillers.find((f) => f.id === defaultId)
+  const fallback = owner.timeBlockId != null
+    ? "the channel's fillers"
+    : defaultFiller
+      ? `the default station ident, “${defaultFiller.name || fillerStyleLabel(defaultFiller.style)}”`
+      : 'the frosted-glass ident built from its logo'
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, [ownerKey])
 
@@ -69,7 +80,7 @@ export default function FillerAssignmentPicker({ owner, hint }: { owner: FillerO
         <p className="text-xs text-ink-faint">
           No fillers in the library yet — make one with <span className="text-ink-muted">+ New filler</span>, or
           manage them all under <Link to="/studio#fillers" className="text-indigo-300">Studio → Fillers</Link>. Gaps
-          use the default frosted-glass ident until then.
+          use {fallback} until then.
         </p>
       ) : (
         <div className="space-y-1">
@@ -90,7 +101,7 @@ export default function FillerAssignmentPicker({ owner, hint }: { owner: FillerO
             )
           })}
           {assigned.size === 0 && (
-            <p className="text-[11px] text-ink-faint mt-1">Nothing assigned — gaps use the default frosted-glass ident.</p>
+            <p className="text-[11px] text-ink-faint mt-1">Nothing assigned — gaps use {fallback}.</p>
           )}
           {assigned.size > 1 && (
             <p className="text-[11px] text-ink-faint mt-1">{assigned.size} assigned — each gap plays one of them, rotating by start time.</p>

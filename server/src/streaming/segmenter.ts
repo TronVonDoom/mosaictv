@@ -27,9 +27,10 @@ import { clientIp, clientName, closeSession, openSession, type Session } from '.
 import { ensureChannelReady, pipeSegment } from './pipe.js'
 import { resolveProfile } from './profile.js'
 import { loadWatermark, parseWatermark, type WatermarkConfig } from './overlays.js'
-import { resolveEncoder } from './capabilities.js'
+import { detectReadrateBurst, resolveEncoder } from './capabilities.js'
 import { blackArgs, type FfmpegOutput } from './filters.js'
-import { buildItemArgs, type ChannelForBuild, type PlayoutItemForBuild } from './itemBuild.js'
+import { loadDefaultFiller } from './filler.js'
+import { buildItemArgs, type BuildItemParams, type ChannelForBuild, type PlayoutItemForBuild } from './itemBuild.js'
 
 // ready = playlist has segments; starting = warming up; unavailable = no channel/schedule.
 export type HlsStatus = 'ready' | 'starting' | 'unavailable'
@@ -46,11 +47,26 @@ const READY_TIMEOUT_MS = 12_000 // report "starting" if not ready within this
 const POLL_MS = 300 // how often to sweep an item's child playlist for finished segments
 const IDLE_GRACE_MS = 30_000 // stop the producer this long after the last request
 const VIEWER_WINDOW_MS = 20_000 // an IP seen within this window counts as watching
-// A per-item encoder capped to its slot with -readrate 1.0 exits ~at the slot
-// end. If it exits much earlier than this margin, its file was shorter than the
-// slot — hold the remainder rather than re-attempting an instant-EOF program.
+// An item that encodes this much less than its slot and exits cleanly hit the
+// end of its file — the file is shorter than the slot. Hold the remainder
+// rather than re-attempting an instant-EOF program.
 const EARLY_EXIT_MARGIN_SEC = 5
 const HOLD_CHUNK_SEC = 30 // fill dead air / short-file remainder in chunks this big
+
+// The producer runs a few seconds ahead of the schedule. It keeps its own
+// place on the timeline (the cursor) instead of reading the wall clock, meters
+// every encode at real time, and starts each one with a read burst sized to top
+// that lead back up. The lead is the buffer a player lives on while the next
+// item's encoder spins up, and it's what makes tuning in fast: a cold channel
+// bursts its first segments instead of encoding them in real time.
+const LEAD_SEC = 8
+// A burst never runs further ahead than this (a cold start or a recovery).
+const MAX_BURST_SEC = 14
+// Fallen further behind the schedule than this — an encoder slower than real
+// time, a long stall — jump to the clock rather than air an ever-later
+// schedule. Without burst support nothing can win the lead back, so the
+// producer never lags at all (see maxLagMs).
+const MAX_LAG_SEC = 6
 // A live per-item encoder produces a segment every SEGMENT_SEC. One that hangs —
 // no segment yet never exits (a wedged nvdec, a pathological file) — would stall
 // the producer loop forever, freezing every viewer with no way back. Past this
@@ -58,21 +74,49 @@ const HOLD_CHUNK_SEC = 30 // fill dead air / short-file remainder in chunks this
 // slow: force-kill it so the timeline can advance. Well above the ~one segment of
 // wall time the first output legitimately takes to finalize.
 const PRODUCER_STALL_SEC = 15
-// Single real-time meter, no connect burst: the buffer here is structural (the
-// player sits ~12s behind the live edge), so front-loading the encoder would
-// only make each item finish early and desync from the schedule.
-const READRATE = ['-readrate', '1.0']
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 // One segment in the master playlist. `seq` is the global monotonic index and
 // the on-disk name (seg_{seq}.ts); `disc` marks an item boundary the player
-// resets on; `pdt` is the wall-clock program-date-time on the first segment of
-// each item (for guide alignment).
+// resets on; `pdt` is the scheduled program-date-time on the first segment of
+// each run (for guide alignment).
 type MasterSeg = { seq: number; durSec: number; disc: boolean; pdt?: string }
 
-// Bookkeeping for one item's ffmpeg run and its child playlist.
-type Run = { dir: string; playlist: string; ingested: number; firstOfRun: boolean }
+// Bookkeeping for one item's ffmpeg run and its child playlist. `startMs` is
+// where the run's first frame sits on the schedule; `encodedSec` is how much
+// of it has landed in the master playlist.
+type Run = { dir: string; playlist: string; ingested: number; firstOfRun: boolean; startMs: number; encodedSec: number }
+
+// How one encode ended. `restyled` = we killed it to re-encode with a new look;
+// `stalled` = the watchdog killed it for producing nothing.
+type EncodeResult = { code: number | null; stalled: boolean; restyled: boolean; encodedSec: number }
+
+// What an item that failed to play has tried so far. A GPU failure earns one
+// retry on the CPU; after that (or once a file turns out shorter than its slot)
+// the rest of the slot is held rather than re-attempted.
+type Attempt = { stopMs: number; cpu: boolean; hold?: string }
+
+// Everything the per-item build needs about the channel, loaded once per item.
+type ItemContext = Omit<
+  BuildItemParams,
+  'item' | 'next' | 'nextProgram' | 'prevKind' | 'offset' | 'segDur' | 'output' | 'readrate' | 'tag'
+>
+
+/** A filler slot standing in for the station ident while a slot is held. */
+function identItem(channelId: number, startMs: number, stopMs: number): PlayoutItemForBuild {
+  return {
+    id: -1,
+    channelId,
+    mediaItemId: null,
+    kind: 'filler',
+    title: 'Station ident',
+    startTime: new Date(startMs),
+    stopTime: new Date(stopMs),
+    groupKey: null,
+    mediaItem: null,
+  }
+}
 
 class ChannelSegmenter {
   readonly n: number
@@ -91,6 +135,10 @@ class ChannelSegmenter {
   private runSeq = 0
   private loop: Promise<void> | null = null
   private restyled = false // the running encoder was killed by restyle()
+  // Where the next frame sits on the schedule (epoch ms): the end of everything
+  // encoded so far. Runs ~LEAD_SEC ahead of the wall clock.
+  private cursor = 0
+  private attempts = new Map<number, Attempt>() // playout item id -> what it has tried
 
   constructor(n: number) {
     this.n = n
@@ -109,6 +157,7 @@ class ChannelSegmenter {
     fs.mkdirSync(this.workDir, { recursive: true })
     this.session = openSession(this.n, 'hls')
     this.running = true
+    this.cursor = Date.now() // tune in at the live point; the first burst builds the lead
     this.loop = this.runLoop().catch((e) =>
       log('error', 'stream', `Channel ${this.n} segmenter loop crashed`, String(e?.stack || e), this.tag),
     )
@@ -142,8 +191,9 @@ class ChannelSegmenter {
    * edit would otherwise wait for the next program — up to a whole movie, which
    * reads as "the setting does nothing". Killing the encoder hands control back
    * to the producer loop, which reloads the channel and resumes the same item
-   * at the current offset: the viewer skips the few seconds of the unfinished
-   * segment and the player resets at a discontinuity, as at any item boundary.
+   * from the end of its last finished segment, and the player resets at a
+   * discontinuity as at any item boundary. The new look reaches the screen once
+   * the few seconds already buffered ahead have played.
    */
   restyle(): boolean {
     if (!this.running || !this.proc) return false
@@ -169,7 +219,25 @@ class ChannelSegmenter {
   }
 
   private async produceNext(): Promise<void> {
+    // Behind the schedule by more than a hiccup: jump to the clock.
     const now = Date.now()
+    const lagMs = now - this.cursor
+    if (lagMs > (await this.maxLagMs())) {
+      if (this.emittedAny && lagMs > 1000) {
+        log('info', 'stream', `Ch ${this.n}: ${(lagMs / 1000).toFixed(1)}s behind the schedule — skipping ahead to catch up`, undefined, this.tag)
+      }
+      this.cursor = now
+    }
+    // Comfortably ahead already (nothing unmetered should get here, but never
+    // race the clock): wait for it rather than encode further ahead.
+    const aheadMs = this.cursor - now - (LEAD_SEC + 2) * 1000
+    if (aheadMs > 0) {
+      await sleep(Math.min(aheadMs, 1000))
+      return
+    }
+    const at = this.cursor
+    for (const [id, a] of this.attempts) if (a.stopMs <= at) this.attempts.delete(id)
+
     // Load channel + config fresh each item so schedule/logo/watermark edits go
     // live from the next item on.
     const channel = await prisma.channel.findFirst({
@@ -192,15 +260,22 @@ class ChannelSegmenter {
     }
 
     const profile = resolveProfile(channel.profile)
-    const enc = await resolveEncoder(profile.hwaccel)
     const defaultWm = await loadWatermark()
     const logos = await prisma.logo.findMany()
-    const logoPath = new Map<number, string>(logos.map((l) => [l.id, path.join(logosDir(), l.filename)]))
-    const logoWm = new Map<number, WatermarkConfig>(logos.map((l) => [l.id, parseWatermark(l.watermark, defaultWm)]))
+    const ctx: ItemContext = {
+      channelNumber: this.n,
+      channel: channel as unknown as ChannelForBuild,
+      profile,
+      enc: await resolveEncoder(profile.hwaccel),
+      defaultWm,
+      logoPath: new Map<number, string>(logos.map((l) => [l.id, path.join(logosDir(), l.filename)])),
+      logoWm: new Map<number, WatermarkConfig>(logos.map((l) => [l.id, parseWatermark(l.watermark, defaultWm)])),
+      defaultFiller: await loadDefaultFiller(),
+    }
 
     // Enough look-ahead to see past a station break to the program after it.
     const items = (await prisma.playoutItem.findMany({
-      where: { channelId: channel.id, stopTime: { gt: new Date(now) } },
+      where: { channelId: channel.id, stopTime: { gt: new Date(at) } },
       orderBy: { startTime: 'asc' },
       take: 4,
       include: { mediaItem: true },
@@ -208,42 +283,47 @@ class ChannelSegmenter {
 
     if (items.length === 0) {
       // Playout exhausted (should be rare — we extend above). Keep the session
-      // alive with a short black fill; the next iteration rebuilds.
-      await this.encodeToMaster(blackArgs(profile, enc, 2, this.hlsOutput()), 'black (playout exhausted)')
+      // alive with a short hold; the next iteration rebuilds.
+      await this.hold(ctx, at + 2000, 'playout exhausted')
       return
     }
 
     const item = items[0]
+    const startMs = item.startTime.getTime()
+    const stopMs = item.stopTime.getTime()
     // Not on air yet: dead air until the next scheduled item (blocks-only gap).
-    if (item.startTime.getTime() > now + 1000) {
-      const gapSec = (item.startTime.getTime() - now) / 1000
-      await this.encodeToMaster(blackArgs(profile, enc, Math.min(gapSec, HOLD_CHUNK_SEC), this.hlsOutput()), 'black (dead air until next item)')
+    if (startMs > at) {
+      if (startMs - at < 500) this.cursor = startMs
+      else await this.hold(ctx, Math.min(startMs, at + HOLD_CHUNK_SEC * 1000), 'dead air until the next program')
+      return
+    }
+    // A sliver too short to be worth an encode: step over it.
+    if (stopMs - at < 500) {
+      this.cursor = stopMs
+      return
+    }
+    const attempt = this.attempts.get(item.id)
+    if (attempt?.hold) {
+      await this.hold(ctx, Math.min(stopMs, at + HOLD_CHUNK_SEC * 1000), attempt.hold, item.kind === 'filler', attempt.cpu)
       return
     }
 
     const next = items[1]
     const nextProgram = items.slice(1).find((it) => it.kind === 'program' && it.mediaItem)
     const prevRow = await prisma.playoutItem.findFirst({
-      where: { channelId: channel.id, stopTime: { lte: new Date(now) } },
+      where: { channelId: channel.id, stopTime: { lte: new Date(at) } },
       orderBy: { stopTime: 'desc' },
       select: { kind: true },
     })
-    const offset = Math.max(0, (now - item.startTime.getTime()) / 1000)
-    const segDur = (item.stopTime.getTime() - now) / 1000
-    if (segDur < 1) {
-      // Slot essentially over; let the wall clock advance to the next item.
-      await sleep(Math.min(Math.max(segDur, 0) * 1000, 500))
-      return
-    }
+    const offset = Math.max(0, (at - startMs) / 1000)
+    const segDur = (stopMs - at) / 1000
+    // After a GPU failure this item gets one go on the CPU: CPU encode, which
+    // also turns off GPU decode.
+    const enc = attempt?.cpu ? 'libx264' : ctx.enc
 
     const built = await buildItemArgs({
-      channelNumber: this.n,
-      channel: channel as unknown as ChannelForBuild,
-      profile,
+      ...ctx,
       enc,
-      defaultWm,
-      logoPath,
-      logoWm,
       item,
       next,
       nextProgram,
@@ -251,12 +331,12 @@ class ChannelSegmenter {
       offset,
       segDur,
       output: this.hlsOutput(),
-      readrate: READRATE,
+      readrate: await this.readrate(),
       tag: this.tag,
     })
 
     if (built.kind === 'black') {
-      await this.encodeToMaster(blackArgs(profile, enc, Math.min(built.durSec, HOLD_CHUNK_SEC), this.hlsOutput()), `black (${built.why})`)
+      this.attempts.set(item.id, { stopMs, cpu: attempt?.cpu ?? false, hold: built.why })
       return
     }
 
@@ -264,43 +344,100 @@ class ChannelSegmenter {
       'info',
       'stream',
       `Ch ${this.n} ▶ ${built.label}${offset > 1 ? ` (resuming at ${Math.round(offset)}s)` : ''}`,
-      `decode ${built.hwDecode ? 'GPU (nvdec)' : 'CPU'}, ${built.wmDesc}`,
+      `decode ${built.hwDecode ? 'GPU (nvdec)' : 'CPU'}, encode ${enc}, ${built.wmDesc}, lead ${((at - Date.now()) / 1000).toFixed(1)}s`,
       this.tag,
     )
     markEvent(this.n, item.kind === 'filler' ? 'filler' : item.mediaItem?.type === 'music' ? 'song' : 'program', built.label, enc)
 
-    const startedAt = Date.now()
-    const res = await this.encodeToMaster(built.args, built.label, built.captionFiles)
-    const ranSec = (Date.now() - startedAt) / 1000
+    const res = await this.encodeToMaster(built.args, built.label, built.captionFiles, at)
+    if (!this.running || res.restyled) return
 
-    // The watchdog force-killed a wedged encoder. Re-serving the same item next
-    // iteration would likely hang again on the same input, so hold the rest of
-    // its slot with black — the schedule advances and the next program still
-    // starts on time, same as the early-exit and short-file cases below.
-    if (res.stalled) {
-      const remaining = (item.stopTime.getTime() - Date.now()) / 1000
-      if (remaining > 1) {
-        await this.encodeToMaster(
-          blackArgs(profile, enc, Math.min(remaining, HOLD_CHUNK_SEC), this.hlsOutput()),
-          `black (${built.label} stalled — holding to stay on schedule)`,
-        )
+    // It failed outright, or the watchdog found it wedged. Relaunching the same
+    // command would fail the same way — the old loop did, many times a second,
+    // for the whole slot. Give a GPU encode one retry on the CPU (a GPU out of
+    // encode sessions, a file its decoder chokes on), then hold the rest of
+    // the slot with the station ident.
+    if (res.stalled || res.code !== 0) {
+      const why = res.stalled ? 'stalled' : `exited ${res.code ?? 'before starting'}`
+      if (!attempt?.cpu && (enc !== 'libx264' || built.hwDecode)) {
+        this.attempts.set(item.id, { stopMs, cpu: true })
+        log('warn', 'stream', `Ch ${this.n}: ${built.label} ${why} on the GPU — retrying it on the CPU`, undefined, this.tag)
+      } else {
+        this.attempts.set(item.id, { stopMs, cpu: true, hold: `${built.label} could not be played` })
+        log('warn', 'stream', `Ch ${this.n}: ${built.label} ${why} — holding the rest of its slot with the station ident`, undefined, this.tag)
       }
       return
     }
 
-    // A real program whose encoder exited well before its slot ended hit EOF —
-    // its file is shorter than the slot. Hold the remainder with black so we
-    // stay on schedule instead of re-attempting an instant-EOF program next
-    // iteration (which would spin). Filler already loops to fill its slot.
-    if (res.code === 0 && item.kind !== 'filler' && ranSec < segDur - EARLY_EXIT_MARGIN_SEC) {
-      const remaining = (item.stopTime.getTime() - Date.now()) / 1000
-      if (remaining > 1) {
-        await this.encodeToMaster(
-          blackArgs(profile, enc, Math.min(remaining, HOLD_CHUNK_SEC), this.hlsOutput()),
-          `black (${built.label} ended ${Math.round(segDur - ranSec)}s early — holding to stay on schedule)`,
-        )
+    // It exited cleanly well short of its slot (or with nothing at all): the
+    // file is shorter than the slot. Hold the remainder so the next program
+    // still starts on time, instead of re-attempting an instant-EOF program.
+    if (res.encodedSec < 0.5 || res.encodedSec < segDur - EARLY_EXIT_MARGIN_SEC) {
+      const short = Math.round(segDur - res.encodedSec)
+      this.attempts.set(item.id, { stopMs, cpu: attempt?.cpu ?? false, hold: `${built.label} ended ${short}s early` })
+      if (short > 1) log('info', 'stream', `Ch ${this.n}: ${built.label} ended ${short}s before its slot — holding to stay on schedule`, undefined, this.tag)
+    }
+  }
+
+  /**
+   * Fill the schedule from the cursor toward `untilMs` with what the channel
+   * airs in a break — its station ident — falling back to black on the CPU when
+   * that can't be built or played. One chunk per call (HOLD_CHUNK_SEC at most);
+   * the loop comes back for the rest, so schedule edits land between chunks.
+   * `skipIdent` is for a filler slot that failed: its ident would fail too.
+   */
+  private async hold(ctx: ItemContext, untilMs: number, why: string, skipIdent = false, cpu = false): Promise<void> {
+    const at = this.cursor
+    const sec = Math.min((untilMs - at) / 1000, HOLD_CHUNK_SEC)
+    if (sec < 0.5) {
+      this.cursor = Math.max(at, untilMs)
+      return
+    }
+    if (!skipIdent) {
+      const ident = await buildItemArgs({
+        ...ctx,
+        enc: cpu ? 'libx264' : ctx.enc,
+        item: identItem(ctx.channel.id, at, at + sec * 1000),
+        next: undefined,
+        nextProgram: undefined,
+        prevKind: undefined,
+        offset: 0,
+        segDur: sec,
+        output: this.hlsOutput(),
+        readrate: await this.readrate(),
+        tag: this.tag,
+      })
+      if (ident.kind === 'encode') {
+        log('debug', 'stream', `Ch ${this.n}: station ident for ${sec.toFixed(0)}s (${why})`, ident.label, this.tag)
+        const res = await this.encodeToMaster(ident.args, `station ident (${why})`, ident.captionFiles, at)
+        if (res.encodedSec >= 0.5 || res.restyled || !this.running) return
       }
     }
+    const res = await this.encodeToMaster(
+      blackArgs(ctx.profile, 'libx264', sec, this.hlsOutput(), await this.readrate()),
+      `black (${why})`,
+      [],
+      at,
+    )
+    if (res.encodedSec < 0.5 && !res.restyled && this.running) {
+      // Not even black could be encoded (ffmpeg itself is failing). Step the
+      // schedule past this chunk and let the clock catch up rather than spin.
+      this.cursor = at + sec * 1000
+      await sleep(1000)
+    }
+  }
+
+  /** The read meter for the next encode: real time, plus a burst that tops the lead back up to LEAD_SEC. */
+  private async readrate(): Promise<string[]> {
+    if (!(await detectReadrateBurst())) return ['-readrate', '1.0']
+    // Always explicit, zero included: left out, ffmpeg's own 0.5s default
+    // applies, and the lead creeps up by that much a program.
+    const burst = Math.max(0, Math.min(MAX_BURST_SEC, LEAD_SEC - (this.cursor - Date.now()) / 1000))
+    return ['-readrate', '1.0', '-readrate_initial_burst', burst.toFixed(2)]
+  }
+
+  private async maxLagMs(): Promise<number> {
+    return (await detectReadrateBurst()) ? MAX_LAG_SEC * 1000 : 0
   }
 
   /** Build the playout further ahead if it's running low. False = nothing scheduled. */
@@ -324,14 +461,15 @@ class ChannelSegmenter {
   }
 
   // ── Run one ffmpeg to disk and ingest its segments ─────────────────────────
-  // Resolves once the process exits. `stalled` means our watchdog force-killed it
-  // for producing no segment past the hard deadline — the caller holds the rest
-  // of the slot rather than re-attempting the same wedging input next iteration.
-  private async encodeToMaster(args: string[], label: string, captionFiles: string[] = []): Promise<{ code: number | null; stalled: boolean }> {
+  // Resolves once the process exits, with the cursor moved past everything it
+  // finished. `atMs` is where its first frame sits on the schedule. `stalled`
+  // means our watchdog force-killed it for producing no segment past the hard
+  // deadline.
+  private async encodeToMaster(args: string[], label: string, captionFiles: string[], atMs: number): Promise<EncodeResult> {
     // Recover the child playlist path from the args (hlsOutput just set it as
     // the last positional argument).
     const playlist = args[args.length - 1]
-    const run: Run = { dir: this.workDir, playlist, ingested: 0, firstOfRun: true }
+    const run: Run = { dir: this.workDir, playlist, ingested: 0, firstOfRun: true, startMs: atMs, encodedSec: 0 }
 
     const proc = spawn('ffmpeg', args)
     this.proc = proc
@@ -379,7 +517,9 @@ class ChannelSegmenter {
     clearInterval(watchdog)
     this.ingest(run) // final drain: pick up the last finalized segment
     if (this.proc === proc) this.proc = null
-    if (this.restyled) {
+    this.cursor = atMs + run.encodedSec * 1000
+    const restyled = this.restyled
+    if (restyled) {
       this.restyled = false
       log('info', 'stream', `Ch ${this.n}: channel look changed — re-encoding ${label} from here`, undefined, this.tag)
     }
@@ -401,7 +541,7 @@ class ChannelSegmenter {
     } catch {
       /* dir already gone (stopped) */
     }
-    return { code, stalled }
+    return { code, stalled, restyled, encodedSec: run.encodedSec }
   }
 
   // Move any newly-finalized child segments into the master playlist. A segment
@@ -437,11 +577,13 @@ class ChannelSegmenter {
       }
       this.nextSeq++
       const disc = run.firstOfRun && this.emittedAny
-      const pdt = run.firstOfRun ? new Date().toISOString() : undefined
+      // Stamped with its place on the schedule, not when it happened to finish.
+      const pdt = run.firstOfRun ? new Date(run.startMs).toISOString() : undefined
       run.firstOfRun = false
       this.emittedAny = true
       this.segs.push({ seq, durSec: entries[j].dur, disc, pdt })
       run.ingested++
+      run.encodedSec += entries[j].dur
       this.evict()
       added = true
     }

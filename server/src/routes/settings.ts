@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { getTmdbKey, setTmdbKey, validateKey } from '../tmdb.js'
 import { loadWatermark, sanitizeWatermark } from '../streaming/overlays.js'
 import { prisma } from '../db.js'
+import { DEFAULT_FILLER_KEY, loadDefaultFiller, warmFiller } from '../streaming/filler.js'
 import { MAX_HORIZON_HOURS, MIN_HORIZON_HOURS, horizonHours } from '../playout.js'
 import { NO_AUDIO_PREFERENCE, globalAudioLanguage } from '../audio.js'
 import {
@@ -37,7 +38,25 @@ settingsRouter.get('/', async (_req, res) => {
     hdhrFriendlyName: await friendlyName(),
     playoutHorizonHours: await horizonHours(),
     audioLanguage: await globalAudioLanguage(),
+    defaultFillerId: (await loadDefaultFiller())?.id ?? null,
   })
+})
+
+// The default station ident: the filler a channel with none of its own airs in
+// its breaks and in any slot the stream holds. null clears it (back to the
+// frosted-glass ident built from each channel's logo).
+settingsRouter.post('/default-filler', async (req, res) => {
+  const raw = req.body?.fillerId
+  if (raw == null) {
+    await setSetting(DEFAULT_FILLER_KEY, null)
+    return res.json({ ok: true, defaultFillerId: null })
+  }
+  const filler = await prisma.filler.findUnique({ where: { id: Number(raw) } })
+  if (!filler) return res.status(404).json({ error: 'Filler not found' })
+  await setSetting(DEFAULT_FILLER_KEY, String(filler.id))
+  // Build it for every channel that will fall back to it, off the request.
+  warmFiller().catch(() => {})
+  res.json({ ok: true, defaultFillerId: filler.id })
 })
 
 settingsRouter.post('/watermark', async (req, res) => {

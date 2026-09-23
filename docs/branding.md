@@ -42,9 +42,16 @@ Filler is what plays in the gaps the schedule opens for it:
   ends exactly on schedule — controlled by that block's **filler mode**.
 - Before a **hard-start** block, so it begins exactly on time.
 
-Nothing else creates a filler slot. In particular, the time between blocks on
-a blocks-only channel is dead air (black), and a rotation-only channel never
-plays filler at all — the channel editor warns you when that's the case.
+Nothing else creates a filler slot, and a rotation-only channel never plays
+filler at all — the channel editor warns you when that's the case.
+
+The stream also falls back on the channel's filler (its **station ident**)
+whenever it has nothing else to show, instead of going to black:
+
+- the time between blocks on a blocks-only channel;
+- the rest of a slot whose file turned out shorter than its listing;
+- a program that can't be played at all (see
+  [Troubleshooting](troubleshooting.md#a-program-shows-the-station-ident-instead)).
 
 Configure it per channel on the **Fillers** tab:
 
@@ -53,6 +60,12 @@ Configure it per channel on the **Fillers** tab:
 - **Channel default** — the clips used in any slot where the active block has
   none of its own.
 - **Per-block filler** — a block can override that with its own set.
+
+A channel with no filler of its own uses the **default station ident**, set
+under **Studio → Fillers** from a filler's ⋯ menu (**Make default station
+ident**). With none set, it uses a frosted-glass ident built from the
+channel's logo. A generated default is still branded with each channel's own
+logo, unless the filler pins a logo of its own.
 
 Assign more than one and each gap plays one of them, rotating by start time.
 Fillers come from a shared library that lives under **Studio → Fillers**; the

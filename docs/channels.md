@@ -189,9 +189,10 @@ on schedule — lives on the **Fillers** tab instead, next to the clips it
 governs: **off** (programs may overrun), **between** (filler spread between
 programs), or **end** (one filler stretch at the end).
 
-Blocks-only channels (no rotation) are fine, but note that the time *between*
-blocks is dead air (black), not filler — only the gaps described under
-[Station-ID filler](branding.md#station-id-filler) are filled.
+Blocks-only channels (no rotation) are fine. The time *between* their blocks
+has nothing scheduled, so the channel airs its station ident until the next
+block (see [Station-ID filler](branding.md#station-id-filler)); the guide shows
+the gap as empty.
 
 ## The playout (guide)
 
@@ -214,3 +215,13 @@ Each channel is a continuous MPEG-TS stream at
 — just like real TV. Multiple clients can watch the same channel; each gets
 its own stream. All items are normalized to the channel's encoding profile so
 transitions are seamless.
+
+A channel encodes a few seconds ahead of its schedule. That's what makes
+tuning in quick (the first seconds are encoded in a burst), and it means the
+next program is ready before the current one ends. Every program starts at the
+second the guide says.
+
+If a file can't be played, the channel doesn't retry it endlessly: a program
+that fails on the GPU gets one more try on the CPU, and otherwise the channel
+airs its station ident for the rest of that slot. The next program still
+starts on time. The same goes for a file that ends before its slot does.

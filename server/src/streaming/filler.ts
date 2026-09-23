@@ -781,6 +781,21 @@ export async function generateDraftStill(f: FillerRow, ctx: FillerLogoContext): 
   return out
 }
 
+// The Setting holding the default station ident's filler id.
+export const DEFAULT_FILLER_KEY = 'defaultFillerId'
+
+/**
+ * The default station ident: the filler a channel with none of its own airs in
+ * its breaks, and in any slot the stream has to hold. Null when unset (or its
+ * filler was deleted) — the frosted-glass ident built from the channel's logo.
+ */
+export async function loadDefaultFiller() {
+  const row = await prisma.setting.findUnique({ where: { key: DEFAULT_FILLER_KEY } })
+  const id = Number(row?.value)
+  if (!Number.isInteger(id)) return null
+  return prisma.filler.findUnique({ where: { id } })
+}
+
 /**
  * Pre-build filler at boot so an intermission never blocks on generation: the
  * animated fallback plus every channel/block filler.
@@ -808,12 +823,15 @@ export async function warmFiller(): Promise<void> {
       timeBlocks: { include: { fillerAssignments: assign, collection: true } },
     },
   })
+  const defaultFiller = await loadDefaultFiller()
   for (const ch of channels) {
     const chLogo = await logoFileById(ch.logoId, ch.logoUrl)
     const chFillers = ch.fillerAssignments.map((a) => a.filler)
-    // No assigned filler ⇒ the channel falls back to the frosted-glass ident,
-    // so pre-build that from its logo too (else the first gap stalls on it).
-    if (chFillers.length === 0 && chLogo) await ensureFrostedFiller(chLogo).catch(() => {})
+    // No assigned filler ⇒ the channel falls back to the default station ident,
+    // else the frosted-glass ident from its logo — pre-build whichever it gets
+    // (else the first gap stalls on it).
+    if (chFillers.length === 0 && defaultFiller) await resolveFillerClip(defaultFiller, chLogo).catch(() => {})
+    else if (chFillers.length === 0 && chLogo) await ensureFrostedFiller(chLogo).catch(() => {})
     for (const f of chFillers) await resolveFillerClip(f, chLogo).catch(() => {})
     for (const b of ch.timeBlocks) {
       if (b.fillerAssignments.length === 0) continue

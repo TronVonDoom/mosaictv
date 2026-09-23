@@ -457,11 +457,13 @@ export function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: St
  * Valid black+silence in the channel's format, for filling dead air or a
  * short-file remainder. It must be real, playable output — an empty or
  * unreadable segment would break the playlist's continuity — even when there is
- * nothing to play.
+ * nothing to play. `readrate` meters it like any other item: a generated source
+ * is otherwise produced dozens of times faster than real time.
  */
-export function blackArgs(p: StreamProfile, enc: string, durSec: number, output: FfmpegOutput = { kind: 'mpegts-pipe' }): string[] {
+export function blackArgs(p: StreamProfile, enc: string, durSec: number, output: FfmpegOutput = { kind: 'mpegts-pipe' }, readrate: string[] = []): string[] {
   return [
     '-hide_banner', '-loglevel', 'error', '-nostdin',
+    ...readrate,
     '-f', 'lavfi', '-i', `color=c=black:s=${p.width}x${p.height}:r=${p.fps}`,
     '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo',
     '-t', Math.max(0.5, durSec).toFixed(3),

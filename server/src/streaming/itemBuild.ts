@@ -11,7 +11,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import type { Prisma } from '@prisma/client'
+import type { Filler, Prisma } from '@prisma/client'
 import { dataDir } from '../paths.js'
 import { programLabel } from '../labels.js'
 import { log } from '../logs.js'
@@ -71,6 +71,8 @@ export type BuildItemParams = {
   defaultWm: WatermarkConfig
   logoPath: Map<number, string>
   logoWm: Map<number, WatermarkConfig>
+  /** The default station ident: airs in breaks on a channel with no filler of its own. */
+  defaultFiller: Filler | null
   item: PlayoutItemForBuild
   next: PlayoutItemForBuild | undefined
   /** The next real program, looking past any filler in between — what the
@@ -94,7 +96,7 @@ export type BuildItemParams = {
  * segmenter to spawn rather than streaming them itself.
  */
 export async function buildItemArgs(params: BuildItemParams): Promise<BuiltItem> {
-  const { channelNumber, channel, profile, enc, defaultWm, logoPath, logoWm, item, next, nextProgram, prevKind, offset, segDur, output, readrate, tag } = params
+  const { channelNumber, channel, profile, enc, defaultWm, logoPath, logoWm, defaultFiller, item, next, nextProgram, prevKind, offset, segDur, output, readrate, tag } = params
 
   const active = activeLogo(channel, channel.timeBlocks, logoPath, item.startTime)
   const logo = await localLogo(active.raw)
@@ -121,12 +123,12 @@ export async function buildItemArgs(params: BuildItemParams): Promise<BuiltItem>
   if (item.kind === 'filler' || !mi) {
     const genStart = Date.now()
     // Filler pool: the active block's assigned fillers → the channel's → the
-    // built-in frosted/animated fallback.
+    // default station ident → the built-in frosted/animated fallback.
     const poolBlock = activeBlockAt(channel.timeBlocks, item.startTime)
     const blockPool = poolBlock?.fillerAssignments.map((a) => a.filler) ?? []
     const channelPool = channel.fillerAssignments.map((a) => a.filler)
-    const pool = blockPool.length > 0 ? blockPool : channelPool
-    const src = blockPool.length > 0 ? ' [block]' : channelPool.length > 0 ? ' [channel]' : ''
+    const pool = blockPool.length > 0 ? blockPool : channelPool.length > 0 ? channelPool : defaultFiller ? [defaultFiller] : []
+    const src = blockPool.length > 0 ? ' [block]' : channelPool.length > 0 ? ' [channel]' : defaultFiller ? ' [default]' : ''
     let clip: string | undefined
     let music: string | undefined
     if (pool.length > 0) {

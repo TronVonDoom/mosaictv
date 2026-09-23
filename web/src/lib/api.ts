@@ -202,6 +202,8 @@ export type SettingsInfo = {
   hdhrFriendlyName: string
   playoutHorizonHours: number
   audioLanguage: string
+  /** The filler a channel with none of its own airs in its breaks; null = frosted glass from its logo. */
+  defaultFillerId: number | null
 }
 
 export type MetadataStatus = {
@@ -682,6 +684,11 @@ export const api = {
   metadataStatus: () => request<MetadataStatus>('/api/metadata/status'),
   saveWatermark: (wm: WatermarkConfig) =>
     request<{ ok: boolean; watermark: WatermarkConfig }>('/api/settings/watermark', { method: 'POST', body: JSON.stringify(wm) }),
+  saveDefaultFiller: (fillerId: number | null) =>
+    request<{ ok: boolean; defaultFillerId: number | null }>('/api/settings/default-filler', {
+      method: 'POST',
+      body: JSON.stringify({ fillerId }),
+    }),
   saveStreamMode: (mode: StreamMode) =>
     request<{ ok: boolean; streamMode: StreamMode }>('/api/settings/stream-mode', { method: 'POST', body: JSON.stringify({ mode }) }),
   saveAudioLanguage: (audioLanguage: string) =>
