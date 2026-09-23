@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.9.0 — A control room, not a config file (2026-09-22)
+
+A redesign of the whole web app, and a few features that came with it.
+
+- **A new look throughout.** Self-hosted Inter and JetBrains Mono (nothing
+  fetched from a font CDN, so a LAN with no internet renders the same), a
+  professional icon set, deeper graphite surfaces with a violet accent, and a
+  red tally light for anything live. Every page, dialog and control picked it
+  up from one set of shared components.
+- **A dashboard that shows what's on.** Each live channel is a card over the
+  current program's artwork — its TMDB backdrop, or its poster — with a
+  progress bar, time left and what's next. Click the picture to watch.
+- **A real TV guide.** New **TV Guide** page: every channel on one time axis,
+  with the channel column and time ruler pinned, a red now-line through every
+  row, 12/24/48-hour spans, three zoom levels, and a title that stays readable
+  while a long program scrolls by. Click a program for its details. The
+  dashboard and each channel's Guide tab use the same grid (the old strips each
+  scrolled separately).
+- **Connect a player**, in the top bar: the M3U, XMLTV and HDHomeRun addresses
+  with copy buttons, and step-by-step setup for Jellyfin, Plex, Emby and VLC.
+- **Search your library from anywhere.** The search box (Ctrl/⌘ K) now finds
+  shows and movies as well as pages, channels and settings.
+- **Channels as cards**, filterable by on-air and draft, with watch, schedule,
+  guide and delete in each card's menu. New channels start in a dialog.
+- **Library pages built for browsing.** Library cards are a mosaic of their own
+  posters, with a "Recently added" or "Top rated" shelf beneath. Grids have
+  search and sort (title, newest, recently added, rating) and load as you
+  scroll. Shows open on a full-width backdrop with rating, genres and runtime;
+  the detail dialog leads with the artwork.
+- **Settings in a sidebar**, Studio's logos and fillers as proper cards, and a
+  redesigned first-run checklist.
+- **Styled confirmations** replace the browser's grey pop-ups, and deleting a
+  logo now asks first.
+- **Works on a phone**: the sidebar becomes a drawer and the guide narrows its
+  channel column.
+- **Artwork works offline.** Show posters and backdrops are served through
+  MosaicTV's own TMDB cache instead of loading from image.tmdb.org in the
+  browser.
+- **A failing request can no longer restart the server.** An error thrown in
+  any API handler used to go unhandled, and Node exits on that — dropping every
+  stream. It's now logged and answered with a 500.
+
 ## 0.8.5 — "Coming up next" that shows up (2026-09-22)
 
 - **"Coming up next" works for movies.** The default template,
