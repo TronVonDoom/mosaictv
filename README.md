@@ -26,6 +26,7 @@ simple to run and pleasant to configure.
 
 - 📺 **Real live-TV channels** — tune in mid-program like broadcast TV; every channel resumes where it left off, forever.
 - 🗓 **Scheduling that thinks like a station** — a 24/7 rotation plus day/time blocks with soft or exact-time starts, and five playback orders.
+- 🧩 **Multi-segment episodes, aired as broadcast** — cartoons split into 7-minute shorts play as the half-hour episodes they aired as, even with a short borrowed from another show.
 - 🎬 **Broadcast polish** — station logos and watermarks, generated station-ID filler, and burned-in "coming up next" captions.
 - 🔍 **A library built in** — scanner, TMDB artwork and metadata, show pages and a searchable poster wall.
 - 📡 **Works with what you watch on** — M3U + XMLTV for Jellyfin, Emby, VLC, TiviMate and any IPTV app, and a built-in HDHomeRun tuner for Plex (no Threadfin needed).
@@ -50,10 +51,39 @@ A channel plays **collections** — the programming units you build from whole
 shows, single seasons, individual episodes and movies, plus an optional smart
 filter (by library, type, title or genre). Members show as a poster grid you
 drag into order, with each show's seasons and episode count at a glance.
-**Multi-part airings** keep grouped segments together (two 11-minute cartoons
-make one half-hour airing), in every order.
 
 <img src="docs/screenshots/collections.webp" alt="A channel's collections as a poster grid" width="100%" />
+
+### Multi-segment episodes, aired the way they were broadcast
+
+A lot of classic cartoons were made as shorts. A half-hour of *Dexter's
+Laboratory* is three seven-minute segments, and *2 Stupid Dogs* ran a *Super
+Secret Secret Squirrel* short between its two dog cartoons. Your files store
+each segment as its own episode, so most tools air them as separate programs,
+shuffle them apart and fill the guide with seven-minute slivers.
+
+MosaicTV puts them back together. On any season, **Group broadcast episodes**
+folds the segments that aired together into one **broadcast episode**. The
+segments play back-to-back as a single program and show as one entry in the
+guide. Every playback order and every "play N" turn treats the episode as one
+program, and a block's end or a hard start never splits it. A grouped episode
+never re-airs as loose parts.
+
+- **Suggest groupings** packs consecutive segments into 11-, 22- or 30-minute
+  slots (or a length you choose) as a starting point. Tick, group, reorder or
+  ungroup from there.
+- **Borrow a segment from another show.** Search the whole library and slot a
+  short from a different series into the running order, right where it aired.
+  That show's own page then marks which of its episodes air inside another.
+- **Nothing on disk changes.** Grouping is metadata only: your files keep their
+  names and their real season and episode numbers.
+
+The full walkthrough is in
+[Channels & Scheduling](docs/channels.md#broadcast-episodes-multi-segment-shows).
+
+<img src="docs/screenshots/broadcast-episodes.webp" alt="Dexter's Laboratory season 1, each segment tagged with the broadcast episode it belongs to" width="100%" />
+
+<img src="docs/screenshots/broadcast-episodes-editor.webp" alt="Grouping 2 Stupid Dogs: each broadcast episode is two dog cartoons with a Secret Squirrel short between them" width="100%" />
 
 ### Five playback orders, explained as you pick
 
@@ -199,7 +229,7 @@ in about ten minutes.
 | - | - |
 | 🚀 [Installation](docs/install.md) | Docker run · Portainer · **Unraid template** · Compose |
 | 🏁 [Getting Started](docs/getting-started.md) | First library → first channel → first stream |
-| 🗓 [Channels & Scheduling](docs/channels.md) | Collections, rotations, time blocks, playback orders, the guide |
+| 🗓 [Channels & Scheduling](docs/channels.md) | Collections, multi-segment broadcast episodes, rotations, time blocks, playback orders, the guide |
 | 🎨 [Branding](docs/branding.md) | Logos, watermarks, filler styles, up-next captions |
 | 📡 [Connecting Players](docs/clients.md) | Jellyfin · Emby · Plex · VLC · IPTV apps · casting |
 | ⚡ [Hardware Acceleration](docs/hardware-acceleration.md) | CPU vs NVIDIA, setup per platform, profiles |

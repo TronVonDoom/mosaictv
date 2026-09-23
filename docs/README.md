@@ -10,7 +10,7 @@ plugs into Plex, Jellyfin, Emby, or any IPTV player.
 | ----- | ------------ |
 | [Installation](install.md) | Docker run, Docker Compose, Portainer, Unraid — plus updating and all settings |
 | [Getting Started](getting-started.md) | Zero to your first live channel, step by step |
-| [Channels & Scheduling](channels.md) | Collections, rotations, time blocks, playback orders, the guide |
+| [Channels & Scheduling](channels.md) | Collections, multi-segment broadcast episodes, rotations, time blocks, playback orders, the guide |
 | [Branding: Logos, Watermarks & Filler](branding.md) | On-screen logos, watermark behavior, station-ID filler clips, "coming up next" |
 | [Connecting Players](clients.md) | Jellyfin, Emby, Plex, VLC, and friends — plus shared HLS vs MPEG-TS, and casting |
 | [Hardware Acceleration](hardware-acceleration.md) | CPU vs GPU encoding (NVIDIA/QuickSync/VAAPI/AMF/VideoToolbox), setup per platform, encoding profiles |

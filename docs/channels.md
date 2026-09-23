@@ -52,6 +52,80 @@ order set once — override it per slot when you actually want them to differ.
 **What airs** lists what the collection resolves to, in its order — the
 quickest way to check an arrangement came out the way you meant.
 
+## Broadcast episodes (multi-segment shows)
+
+A lot of classic cartoons were made as shorts and aired several to a
+half-hour. An episode of *Dexter's Laboratory* is three seven-minute segments,
+and *2 Stupid Dogs* ran a *Super Secret Secret Squirrel* short between its two
+dog cartoons. Your files usually store each segment as its own episode, so on
+their own they air as separate seven-minute programs. A **broadcast episode**
+puts them back together.
+
+Grouping belongs to the show, not to a channel: **Library** → the show → a
+season → **Group broadcast episodes**. Every channel that airs the show uses
+it.
+
+### Grouping a season
+
+The editor shows the season as a running order, one row per program:
+
+- **Suggest groupings** packs consecutive episodes, in episode order, into
+  blocks near the **target length**: 11, 22 or 30 minutes, or a custom number.
+  A block keeps growing while it stays within about 10% of the target. The
+  suggestion replaces the whole running order on screen, borrowed shorts
+  included, so run it first and fine-tune after.
+- **Group selected** makes the episodes you've ticked (two or more) into one
+  broadcast episode.
+- Inside a group, **↑ ↓** reorder the segments, **×** takes one out, and
+  **Ungroup** splits it back into single episodes. **Clear all** ungroups the
+  whole season.
+- **Save** stores the season. Nothing is kept until you do, and **Done
+  grouping** asks before discarding unsaved changes.
+
+Grouping is metadata only. Your files keep their names and their real season
+and episode numbers, and nothing on disk changes.
+
+### Borrowing a segment from another show
+
+Some blocks wove in a short from a different series. **+ Add segment** (on a
+group, or on a single episode to start a new group) searches episodes across
+the whole library by title or show name. The chosen episode is added to the
+end of the group; move it into place with the arrows.
+
+A borrowed short plays inside the host show wherever the host airs. The same
+short can be borrowed into more than one show and airs inside each.
+
+### What you'll see
+
+- In the season's episode list, each grouped file is tagged with its place,
+  e.g. *Broadcast ep 3 · 1/3*, and a borrowed short is listed indented
+  beneath the episode it follows (*Woven into broadcast ep 3*).
+- The borrowed show's own page has a banner and a per-episode badge (*Airs in
+  2 Stupid Dogs*) for the episodes that air inside another show.
+- In the guide, a broadcast episode is one program. The XMLTV listing has one
+  entry spanning all its segments, with each segment named in the subtitle
+  and description.
+
+### How it airs
+
+A broadcast episode is scheduled as one program:
+
+- Its segments always play back-to-back, in the order you set.
+- Every playback order moves it as one program, including the shuffles and
+  rotations, and a rotation's "play N" counts it as one of the N.
+- A block that packs programs to its end fits the whole episode or leaves it
+  for later, and a hard start never cuts one in half.
+- A segment that belongs to a group never also airs on its own.
+
+Changes apply the next time a channel builds its schedule. The guide already
+built keeps its old running order until it extends past it; use **Rebuild**
+on the channel's **Guide** tab to apply them now (positions are kept).
+
+A channel counts its place in a show in programs, so grouping a show partway
+through its run moves that place. With three segments to an episode, a
+channel that had aired 30 loose segments picks up at broadcast episode 31
+rather than episode 11. Where you can, group a show before it goes on air.
+
 ## Rotation
 
 The rotation is the channel's 24/7 backbone: an ordered list of collections
