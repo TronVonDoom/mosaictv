@@ -36,6 +36,14 @@ export function tmdbCacheDir(): string {
   return d
 }
 
+// Shrunk copies of local artwork (a poster.jpg on the media share is often a
+// multi-megabyte original) for the web UI's grids. Rebuildable at any time.
+export function thumbsDir(): string {
+  const d = path.join(dataDir(), 'thumbs')
+  fs.mkdirSync(d, { recursive: true })
+  return d
+}
+
 // Legacy http:// logo URLs downloaded for watermarking. Kept under the data
 // dir like everything else the app writes — never the media library, and not
 // the container's /tmp, which is lost on restart.

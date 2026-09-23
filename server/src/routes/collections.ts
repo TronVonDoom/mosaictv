@@ -1,8 +1,77 @@
 import { Router } from 'express'
+import type { CollectionItem } from '@prisma/client'
 import { prisma } from '../db.js'
 import { asPlaybackOrder, collectionCount, resolveCollection } from '../collections.js'
 
 export const collectionsRouter = Router()
+
+/** What the web shows for a member: which item to ask /api/artwork for (and
+ *  as what), plus a year and episode counts for its caption. */
+type MemberMeta = {
+  artId: number | null
+  artType: 'poster' | 'show' | 'season' | null
+  year: number | null
+  episodes: number | null
+  seasons: number | null
+  missing: boolean
+}
+
+/** Artwork and counts for every member, in three queries however many there
+ *  are: the single items by id, and one grouped pass over the shows' episodes. */
+async function memberMeta(items: CollectionItem[]): Promise<Map<number, MemberMeta>> {
+  const out = new Map<number, MemberMeta>()
+  const singleIds = items.filter((i) => i.mediaItemId != null).map((i) => i.mediaItemId as number)
+  const titles = [...new Set(items.filter((i) => i.showTitle).map((i) => i.showTitle as string))]
+  const [singles, groups] = await Promise.all([
+    singleIds.length
+      ? prisma.mediaItem.findMany({
+          where: { id: { in: singleIds } },
+          select: { id: true, type: true, year: true, missing: true, posterPath: true, tmdbPosterPath: true },
+        })
+      : [],
+    titles.length
+      ? prisma.mediaItem.groupBy({
+          by: ['showTitle', 'libraryId', 'season'],
+          where: { type: 'episode', missing: false, showTitle: { in: titles } },
+          _count: { _all: true },
+          _min: { id: true, year: true },
+        })
+      : [],
+  ])
+  const byId = new Map(singles.map((m) => [m.id, m]))
+  for (const it of items) {
+    if (it.mediaItemId != null) {
+      const m = byId.get(it.mediaItemId)
+      out.set(it.id, {
+        artId: m ? m.id : null,
+        // An episode stands in with its show's poster; a movie with its own.
+        artType: !m ? null : m.type === 'episode' ? 'show' : m.posterPath || m.tmdbPosterPath ? 'poster' : null,
+        year: m?.year ?? null,
+        episodes: null,
+        seasons: null,
+        missing: !m || m.missing,
+      })
+      continue
+    }
+    const gs = groups.filter(
+      (g) =>
+        g.showTitle === it.showTitle &&
+        (it.libraryId == null || g.libraryId === it.libraryId) &&
+        (it.kind !== 'season' || g.season === it.season),
+    )
+    const ids = gs.map((g) => g._min.id).filter((x): x is number => x != null)
+    const years = gs.map((g) => g._min.year).filter((x): x is number => x != null)
+    out.set(it.id, {
+      artId: ids.length ? Math.min(...ids) : null,
+      artType: ids.length ? (it.kind === 'season' ? 'season' : 'show') : null,
+      year: years.length ? Math.min(...years) : null,
+      episodes: gs.reduce((n, g) => n + g._count._all, 0),
+      seasons: new Set(gs.map((g) => g.season).filter((x) => x != null && x > 0)).size,
+      missing: gs.length === 0,
+    })
+  }
+  return out
+}
 
 collectionsRouter.get('/', async (req, res) => {
   const channelId = req.query.channelId != null ? Number(req.query.channelId) : undefined
@@ -11,8 +80,13 @@ collectionsRouter.get('/', async (req, res) => {
     orderBy: { createdAt: 'asc' },
     include: { items: { orderBy: { order: 'asc' } } },
   })
+  const meta = await memberMeta(cols.flatMap((c) => c.items))
   const withCounts = await Promise.all(
-    cols.map(async (c) => ({ ...c, itemCount: await collectionCount(c) })),
+    cols.map(async (c) => ({
+      ...c,
+      items: c.items.map((i) => ({ ...i, meta: meta.get(i.id) ?? null })),
+      itemCount: await collectionCount(c),
+    })),
   )
   res.json(withCounts)
 })
