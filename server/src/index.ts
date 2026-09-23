@@ -31,6 +31,7 @@ import { adminRouter } from './routes/admin.js'
 import { assetsRouter } from './routes/assets.js'
 import { profilesRouter } from './routes/profiles.js'
 import { fillersRouter } from './routes/fillers.js'
+import { apiErrorHandler, catchAsyncErrors } from './asyncRoutes.js'
 
 const app = express()
 const PORT = Number(process.env.PORT ?? 8688)
@@ -138,6 +139,17 @@ if (fs.existsSync(publicDir)) {
     res.sendFile(path.join(publicDir, 'index.html'))
   })
 }
+
+// An async handler that throws must answer 500, not take the process down —
+// see asyncRoutes.ts. Wrapped after every route above is registered.
+catchAsyncErrors((app as unknown as { _router?: { stack: Parameters<typeof catchAsyncErrors>[0] } })._router?.stack)
+app.use(apiErrorHandler)
+
+// Background work (builds, sweeps, probes) that rejects without a catch is a
+// bug to log, not a reason to drop every viewer's stream.
+process.on('unhandledRejection', (reason) => {
+  log('error', 'system', 'Unhandled promise rejection', String((reason as Error)?.stack || reason))
+})
 
 // --- Boot -------------------------------------------------------------------
 // One-time migration: turn any legacy single-path library into a folder row.
