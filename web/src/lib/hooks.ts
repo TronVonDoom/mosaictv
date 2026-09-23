@@ -153,3 +153,33 @@ export function useJobStatus<T extends { running: boolean }>(
 
   return { status, start }
 }
+
+/**
+ * The current time, re-read every `intervalMs` — for anything drawn against
+ * the clock (progress bars, the guide's "now" line) that should creep forward
+ * without refetching.
+ */
+export function useNow(intervalMs = 15000): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), intervalMs)
+    return () => window.clearInterval(id)
+  }, [intervalMs])
+  return now
+}
+
+/** Whether a media query matches, kept in step as the window resizes. */
+export function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(query).matches : false,
+  )
+  useEffect(() => {
+    if (!window.matchMedia) return
+    const mq = window.matchMedia(query)
+    const on = () => setMatches(mq.matches)
+    on()
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [query])
+  return matches
+}

@@ -17,16 +17,17 @@ import {
   PageHeader,
   Select,
   Skeleton,
-  Tabs,
   cx,
 } from '../components/ui'
+import Icon from '../components/Icon'
+import { confirmDialog } from '../lib/confirm'
 
 const TABS = [
-  { id: 'metadata', label: 'Metadata', icon: 'browse' },
-  { id: 'streaming', label: 'Streaming', icon: 'channels' },
+  { id: 'metadata', label: 'Metadata', icon: 'sparkles' },
+  { id: 'streaming', label: 'Streaming', icon: 'cast' },
   { id: 'watermark', label: 'Watermark', icon: 'image' },
-  { id: 'encoding', label: 'Encoding', icon: 'clip' },
-  { id: 'maintenance', label: 'Maintenance', icon: 'settings' },
+  { id: 'encoding', label: 'Encoding', icon: 'cpu' },
+  { id: 'maintenance', label: 'Maintenance', icon: 'database' },
 ] as const
 
 type SettingsTab = (typeof TABS)[number]['id']
@@ -80,12 +81,12 @@ function SettingsCard({
   children: ReactNode
 }) {
   return (
-    <Card>
-      <div className="flex items-center gap-3 mb-1">
-        <h2 className="font-semibold">{title}</h2>
+    <Card className="p-6">
+      <div className="flex items-center gap-2.5 mb-1.5">
+        <h3 className="font-semibold text-[15px] tracking-tight">{title}</h3>
         {badge}
       </div>
-      {description && <p className="text-ink-muted text-sm mb-4">{description}</p>}
+      {description && <p className="text-ink-muted text-[13.5px] leading-relaxed mb-5">{description}</p>}
       {children}
     </Card>
   )
@@ -206,9 +207,13 @@ export default function Settings() {
 
   async function resetInstance() {
     if (
-      !confirm(
-        'Wipe ALL libraries, channels, collections, logos and settings back to a clean slate? This cannot be undone — back up first.',
-      )
+      !(await confirmDialog({
+        title: 'Reset MosaicTV to a clean slate?',
+        message:
+          'This wipes ALL libraries, channels, collections, logos and settings. It cannot be undone — download a backup first.',
+        confirmLabel: 'Wipe everything',
+        danger: true,
+      }))
     )
       return
     setResetBusy(true)
@@ -237,15 +242,47 @@ export default function Settings() {
     }
   }
 
+  const current = TABS.find((t) => t.id === tab)!
+
   return (
-    <div className="max-w-3xl">
+    <div>
       <PageHeader
         title="Settings"
         icon="settings"
-        description={DESCRIPTIONS[tab]}
-      >
-        <Tabs tabs={TABS} active={tab} onChange={setTab} />
-      </PageHeader>
+        description="How this MosaicTV instance finds artwork, streams, brands its channels, and keeps itself backed up."
+      />
+
+      <div className="grid gap-8 lg:grid-cols-[228px_minmax(0,1fr)]">
+        {/* Section nav: a rail on desktop, a scrolling strip on small screens. */}
+        <nav aria-label="Settings sections" className="lg:sticky lg:top-20 self-start">
+          <div className="flex lg:flex-col gap-1 overflow-x-auto no-scrollbar -mx-1 px-1">
+            {TABS.map((t) => {
+              const on = t.id === tab
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  aria-current={on ? 'page' : undefined}
+                  className={cx(
+                    'relative flex items-center gap-3 h-10 shrink-0 rounded-lg px-3 text-[13.5px] font-medium text-left transition-colors',
+                    on
+                      ? 'bg-white/[0.07] text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.04)]'
+                      : 'text-ink-muted hover:text-ink-soft hover:bg-white/[0.035]',
+                  )}
+                >
+                  <Icon name={t.icon} size={17} className={on ? 'text-indigo-300' : 'text-ink-faint'} />
+                  {t.label}
+                </button>
+              )
+            })}
+          </div>
+        </nav>
+
+        <div className="min-w-0 max-w-3xl">
+          <div className="mb-5">
+            <h2 className="text-lg font-semibold tracking-tight">{current.label}</h2>
+            <p className="text-[13.5px] text-ink-muted mt-0.5">{DESCRIPTIONS[tab]}</p>
+          </div>
 
       {tab === 'metadata' && (
         <SettingsCard
@@ -535,7 +572,9 @@ export default function Settings() {
             title="Backup"
             description="Everything that makes this instance yours — the database, your logos, and your filler clips — in one archive."
           >
-            <LinkButton href={backupUrl}>Download backup (.tar.gz)</LinkButton>
+            <LinkButton href={backupUrl} icon="download">
+              Download backup (.tar.gz)
+            </LinkButton>
           </SettingsCard>
 
           <SettingsCard
@@ -562,6 +601,8 @@ export default function Settings() {
           </SettingsCard>
         </div>
       )}
+        </div>
+      </div>
     </div>
   )
 }

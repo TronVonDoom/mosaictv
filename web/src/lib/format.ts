@@ -74,3 +74,43 @@ export function posterGradient(seed: string): string {
   const h2 = (h + 45) % 360
   return `linear-gradient(150deg, hsl(${h} 45% 32%), hsl(${h2} 50% 18%))`
 }
+
+/** A wall-clock time, "7:44 PM". */
+export function formatClock(t: string | number | Date): string {
+  return new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+/** Time left, "42 min left" / "1 hr 5 min left" / "Ending". */
+export function formatRemaining(ms: number): string {
+  const min = Math.round(ms / 60000)
+  if (min <= 0) return 'Ending'
+  if (min < 60) return `${min} min left`
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return m ? `${h} hr ${m} min left` : `${h} hr left`
+}
+
+/** A span of minutes for a program's length, "1 hr 45 min" / "22 min". */
+export function formatRuntime(ms: number): string {
+  const min = Math.round(ms / 60000)
+  if (min < 60) return `${min} min`
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return m ? `${h} hr ${m} min` : `${h} hr`
+}
+
+/** "Good morning" / "Good afternoon" / "Good evening", by local time. */
+export function greeting(d = new Date()): string {
+  const h = d.getHours()
+  return h < 5 ? 'Good evening' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
+}
+
+/** A library's total runtime at a glance: "22h 5m", or "403 days" once it's
+ *  past a few days — nobody reads "9667h 48m". */
+export function formatLongDuration(seconds: number | null): string {
+  if (!seconds || seconds <= 0) return '—'
+  const hours = seconds / 3600
+  if (hours < 72) return formatDuration(seconds)
+  const days = hours / 24
+  return days >= 365 ? `${(days / 365).toFixed(1)} years` : `${Math.round(days)} days`
+}

@@ -3,7 +3,8 @@ import { api, logoImageUrl, type Logo, type WatermarkConfig } from '../lib/api'
 import WatermarkFields from './WatermarkFields'
 import { toast } from '../lib/toast'
 import { errorMessage } from '../lib/errors'
-import { Banner, Button, Card, Field, Input, Modal, buttonClass } from './ui'
+import { Badge, Banner, Button, Card, EmptyState, Field, IconButton, Input, Menu, Modal } from './ui'
+import { confirmDialog } from '../lib/confirm'
 
 /** The logo library: upload an image, then tune the watermark it renders as.
  *  Lives under Studio → Logos; it had its own route until that page absorbed it. */
@@ -82,8 +83,15 @@ export default function LogoManager() {
     replaceRef.current?.click()
   }
 
-  async function del(id: number) {
-    await api.deleteLogo(id).catch(() => {})
+  async function del(l: Logo) {
+    const ok = await confirmDialog({
+      title: `Delete the “${l.name}” logo?`,
+      message: 'Channels, blocks and collections using it fall back to their next logo — or none.',
+      confirmLabel: 'Delete logo',
+      danger: true,
+    })
+    if (!ok) return
+    await api.deleteLogo(l.id).catch(() => {})
     refresh()
   }
 
@@ -101,53 +109,77 @@ export default function LogoManager() {
 
       <Card className="p-5 mb-6">
         <form onSubmit={upload} className="flex flex-wrap gap-3 items-end">
-          <Field label="Name" className="flex-1 min-w-40">
+          <Field label="Name" className="flex-1 min-w-48">
             <Input placeholder="Nick @ Night" value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
-          <Field label="Image (PNG/JPG/WEBP)">
-            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="text-sm text-ink-muted file:mr-3 file:rounded-lg file:border-0 file:bg-raised file:px-3 file:py-2 file:text-ink file:text-sm" />
+          <Field label="Image" hint="PNG with transparency looks best on screen.">
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="h-9 text-[13px] text-ink-muted file:mr-3 file:h-9 file:rounded-lg file:border file:border-edge-strong file:bg-raised file:px-3 file:text-ink-soft file:text-[13px] file:font-medium hover:file:bg-overlay file:cursor-pointer cursor-pointer"
+            />
           </Field>
-          <Button type="submit" size="lg" disabled={busy}>
-            {busy ? 'Uploading…' : 'Upload'}
+          <Button type="submit" icon="upload" loading={busy}>
+            Upload logo
           </Button>
         </form>
       </Card>
 
       {logos.length === 0 ? (
-        <div className="text-ink-faint text-sm">No logos yet.</div>
+        <EmptyState
+          icon="image"
+          title="No logos yet"
+          description="Upload a channel logo above. It's used in players' guides and as the on-screen watermark."
+        />
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-4">
           {logos.map((l) => (
-            <Card key={l.id} className="overflow-hidden">
-              <div className="aspect-video flex items-center justify-center p-4 bg-[repeating-conic-gradient(#1e293b_0_25%,#0f172a_0_50%)] bg-[length:20px_20px]">
-                <img src={logoImageUrl(l)} alt={l.name} className="max-h-full max-w-full object-contain" />
-              </div>
-              <div className="flex items-center gap-2 px-3 py-2">
-                <span className="text-sm truncate flex-1" title={l.name}>{l.name}</span>
-                <button onClick={() => del(l.id)} className="text-ink-faint hover:text-rose-400 text-sm" aria-label="Delete">×</button>
-              </div>
-              <div className="px-3 pb-2 flex items-center justify-between">
-                <span className="text-[11px] text-ink-faint">
-                  {l.watermark.mode === 'none'
-                    ? 'watermark off'
-                    : `${l.watermark.mode} · ${l.watermark.position}${l.watermark.constrainToMedia ? ' · media-fit' : ''}`}
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => pickReplacement(l.id)}
-                    disabled={busy}
-                    title="Swap the image, keeping this logo's name, watermark and every channel using it"
-                    className={buttonClass('subtle', 'sm', 'text-xs px-2 py-0.5')}
-                  >
-                    Replace
-                  </button>
-                  <button
-                    onClick={() => setEditing(l)}
-                    className={buttonClass('secondary', 'sm', 'text-xs px-2 py-0.5')}
-                  >
-                    Watermark
-                  </button>
+            <Card key={l.id} className="group overflow-hidden flex flex-col">
+              <button
+                onClick={() => setEditing(l)}
+                title="Watermark settings"
+                className="relative aspect-video flex items-center justify-center p-5 bg-[repeating-conic-gradient(#171b26_0_25%,#0e1118_0_50%)] bg-[length:18px_18px] border-b border-edge"
+              >
+                <img
+                  src={logoImageUrl(l)}
+                  alt={l.name}
+                  className="max-h-full max-w-full object-contain drop-shadow-[0_4px_12px_rgb(0_0_0/0.6)] transition-transform duration-300 group-hover:scale-105"
+                />
+              </button>
+              <div className="p-3.5 flex-1 flex flex-col gap-2.5">
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13.5px] font-medium truncate" title={l.name}>
+                      {l.name}
+                    </div>
+                    <div className="mt-1">
+                      {l.watermark.mode === 'none' ? (
+                        <Badge>Watermark off</Badge>
+                      ) : (
+                        <Badge tone="accent" title={l.watermark.constrainToMedia ? 'Fitted to the picture, not the frame' : undefined}>
+                          {l.watermark.mode === 'permanent' ? 'Always on' : 'Intermittent'} · {l.watermark.position}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  <Menu
+                    items={[
+                      {
+                        label: 'Replace image',
+                        icon: 'upload',
+                        disabled: busy,
+                        hint: 'keeps settings',
+                        onSelect: () => pickReplacement(l.id),
+                      },
+                      'divider',
+                      { label: 'Delete logo', icon: 'trash', danger: true, onSelect: () => del(l) },
+                    ]}
+                  />
                 </div>
+                <Button variant="secondary" size="sm" icon="sliders" onClick={() => setEditing(l)} className="mt-auto w-full">
+                  Watermark settings
+                </Button>
               </div>
             </Card>
           ))}
@@ -196,15 +228,16 @@ function WatermarkEditor({
 
   return (
     <Modal onClose={onClose} panelClassName="w-full max-w-2xl p-5 max-h-[90vh] overflow-auto">
-      <div className="flex items-center gap-3 mb-4">
-          <div className="w-16 h-10 rounded flex items-center justify-center bg-[repeating-conic-gradient(#1e293b_0_25%,#0f172a_0_50%)] bg-[length:14px_14px] shrink-0">
-            <img src={logoImageUrl(logo)} alt={logo.name} className="max-h-full max-w-full object-contain" />
-          </div>
-          <div className="min-w-0">
-            <h2 className="font-semibold truncate">{logo.name}</h2>
-            <p className="text-xs text-ink-faint">Watermark settings for this logo</p>
-          </div>
+      <div className="flex items-center gap-3 mb-5">
+        <div className="w-16 h-10 rounded-lg flex items-center justify-center bg-[repeating-conic-gradient(#171b26_0_25%,#0e1118_0_50%)] bg-[length:12px_12px] border border-edge shrink-0">
+          <img src={logoImageUrl(logo)} alt={logo.name} className="max-h-[80%] max-w-[85%] object-contain" />
         </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="font-semibold text-[15px] truncate">{logo.name}</h2>
+          <p className="text-[13px] text-ink-muted">Watermark settings for this logo</p>
+        </div>
+        <IconButton icon="close" label="Close" size="sm" onClick={onClose} />
+      </div>
 
       {err && <Banner className="mb-3">{err}</Banner>}
 
@@ -214,8 +247,8 @@ function WatermarkEditor({
         <Button variant="secondary" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={save} size="lg" disabled={saving}>
-          {saving ? 'Saving…' : 'Save watermark'}
+        <Button onClick={save} loading={saving}>
+          Save watermark
         </Button>
       </div>
     </Modal>

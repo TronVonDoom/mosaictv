@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import {
   api,
   artworkUrl,
@@ -10,11 +10,13 @@ import {
   type SeasonGroup,
   type ShowDetail,
 } from '../lib/api'
-import { formatDuration, formatSize } from '../lib/format'
+import { formatDuration, formatSize, posterGradient } from '../lib/format'
 import MediaDetailModal from '../components/MediaDetailModal'
 import PosterCard from '../components/PosterCard'
 import AiringsEditor from '../components/AiringsEditor'
-import { Badge, Banner, Button, cx } from '../components/ui'
+import Icon from '../components/Icon'
+import { Badge, Banner, Breadcrumbs, Button, Skeleton, cx } from '../components/ui'
+import { confirmDialog } from '../lib/confirm'
 
 function seasonLabel(season: number | null): string {
   return season == null ? 'Unsorted' : `Season ${season}`
@@ -125,8 +127,17 @@ export default function ShowView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [airings, current?.season, current?.episodes])
 
-  const leaveGrouping = () => {
-    if (editorDirty && !window.confirm('You have unsaved groupings. Leave without saving?')) return
+  const leaveGrouping = async () => {
+    if (
+      editorDirty &&
+      !(await confirmDialog({
+        title: 'Leave without saving?',
+        message: 'Your broadcast-episode groupings for this season have unsaved changes.',
+        confirmLabel: 'Discard changes',
+        danger: true,
+      }))
+    )
+      return
     setGrouping(false)
     setEditorDirty(false)
   }
@@ -138,56 +149,92 @@ export default function ShowView() {
       .catch(() => {})
   }, [id])
 
+  const posterSrc =
+    detail?.artItemId != null
+      ? artworkUrl(detail.artItemId, 'show')
+      : detail?.tmdbPosterPath
+        ? tmdbImage(detail.tmdbPosterPath)
+        : null
+  const backdropSrc = detail?.hasBackdrop && detail.artItemId != null ? artworkUrl(detail.artItemId, 'backdrop') : null
+  const totalRuntime = detail
+    ? detail.seasons.reduce((a, se) => a + se.episodes.reduce((b, e) => b + (e.durationSec ?? 0), 0), 0)
+    : 0
+  const genres = detail?.genres ? detail.genres.split(',').map((g) => g.trim()).filter(Boolean) : []
+
   return (
     <div>
-      <div className="flex items-center gap-2 text-sm text-ink-faint mb-1 flex-wrap">
-        <Link to="/library" className="hover:text-indigo-300">
-          Library
-        </Link>
-        <span>/</span>
-        <Link to={`/library/${id}`} className="hover:text-indigo-300">
-          {libraryName ?? '…'}
-        </Link>
-        <span>/</span>
-        {current ? (
-          <button onClick={() => setOpenSeason(undefined)} className="hover:text-indigo-300">
-            {showTitle}
-          </button>
-        ) : (
-          <span className="text-ink-soft">{showTitle}</span>
-        )}
-        {current && (
-          <>
-            <span>/</span>
-            <span className="text-ink-soft">{seasonLabel(current.season)}</span>
-          </>
-        )}
-      </div>
-
-      <h1 className="text-2xl font-bold mb-6">
-        {showTitle}
-        {detail?.year && (
-          <span className="text-ink-faint text-base font-normal ml-2">({detail.year})</span>
-        )}
-        {detail && (
-          <span className="text-ink-faint text-base font-normal ml-2">
-            · {detail.seasons.length} season{detail.seasons.length === 1 ? '' : 's'} ·{' '}
-            {detail.episodeCount} episodes
-          </span>
-        )}
-      </h1>
-
-      {detail && (detail.rating != null || detail.genres || detail.overview) && (
-        <div className="mb-6 max-w-3xl space-y-1.5">
-          {(detail.rating ? detail.rating > 0 : false) && (
-            <div className="text-sm text-amber-300">
-              ⭐ {detail.rating!.toFixed(1)}
-              {detail.genres && <span className="text-ink-faint"> · {detail.genres}</span>}
-            </div>
-          )}
-          {detail.overview && <p className="text-sm text-ink-soft">{detail.overview}</p>}
+      {/* Hero: the show's backdrop, full-bleed under the top bar. */}
+      <section className="relative -mx-4 sm:-mx-6 lg:-mx-8 -mt-7 mb-8 overflow-hidden border-b border-edge/60">
+        <div className="absolute inset-0" style={{ background: posterGradient(showTitle) }}>
+          {backdropSrc ? (
+            <img src={backdropSrc} alt="" className="w-full h-full object-cover opacity-50 fade-in" />
+          ) : posterSrc ? (
+            <img src={posterSrc} alt="" className="w-full h-full object-cover blur-3xl scale-125 opacity-40" />
+          ) : null}
+          <div className="absolute inset-0 bg-gradient-to-t from-canvas via-canvas/75 to-canvas/25" />
+          <div className="absolute inset-0 bg-gradient-to-r from-canvas/95 via-canvas/55 to-transparent" />
         </div>
-      )}
+
+        <div className="relative px-4 sm:px-6 lg:px-8 pt-6 pb-8">
+          <Breadcrumbs
+            items={[
+              { label: 'Library', to: '/library' },
+              { label: libraryName ?? '…', to: `/library/${id}` },
+              current ? { label: showTitle, onClick: () => setOpenSeason(undefined) } : { label: showTitle },
+              ...(current ? [{ label: seasonLabel(current.season) }] : []),
+            ]}
+          />
+          <div className="mt-6 flex items-end gap-7 flex-wrap sm:flex-nowrap">
+            <div
+              className="hidden sm:block w-40 lg:w-48 shrink-0 aspect-[2/3] rounded-xl overflow-hidden shadow-[0_30px_60px_-20px_rgb(0_0_0/0.9)] ring-1 ring-white/15"
+              style={{ background: posterGradient(showTitle) }}
+            >
+              {posterSrc && <img src={posterSrc} alt="" className="w-full h-full object-cover" />}
+            </div>
+            <div className="min-w-0 flex-1 pb-1">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">TV Series</div>
+              <h1 className="mt-1 text-[34px] sm:text-[40px] font-semibold tracking-[-0.03em] leading-[1.05] text-white">
+                {showTitle}
+              </h1>
+              {detail ? (
+                <div className="mt-3 flex items-center gap-x-3 gap-y-2 flex-wrap text-[13.5px] text-ink-soft">
+                  {detail.rating != null && detail.rating > 0 && (
+                    <span className="inline-flex items-center gap-1 font-semibold text-amber-300">
+                      <Icon name="star" size={14} className="fill-current" /> {detail.rating.toFixed(1)}
+                    </span>
+                  )}
+                  {detail.year && <span className="tabular-nums">{detail.year}</span>}
+                  <span className="text-ink-ghost">•</span>
+                  <span>
+                    {detail.seasons.length} season{detail.seasons.length === 1 ? '' : 's'}
+                  </span>
+                  <span className="text-ink-ghost">•</span>
+                  <span className="tabular-nums">{detail.episodeCount.toLocaleString()} episodes</span>
+                  <span className="text-ink-ghost">•</span>
+                  <span className="tabular-nums">{formatDuration(totalRuntime)}</span>
+                </div>
+              ) : (
+                <Skeleton className="h-4 w-72 mt-3" />
+              )}
+              {genres.length > 0 && (
+                <div className="mt-3 flex gap-1.5 flex-wrap">
+                  {genres.map((g) => (
+                    <span
+                      key={g}
+                      className="rounded-full border border-white/15 bg-white/[0.06] backdrop-blur px-2.5 py-0.5 text-[12px] text-ink-soft"
+                    >
+                      {g}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {detail?.overview && (
+                <p className="mt-4 max-w-3xl text-[14px] leading-relaxed text-ink-soft line-clamp-4">{detail.overview}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
 
       {appearances.length > 0 && (
         <Banner tone="accent" className="mb-6 max-w-3xl">
@@ -198,17 +245,26 @@ export default function ShowView() {
       )}
 
       {!detail ? (
-        <div className="text-ink-faint text-sm">Loading…</div>
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(148px,1fr))] gap-x-5 gap-y-7">
+          {Array.from({ length: 6 }, (_, i) => (
+            <Skeleton key={i} className="aspect-[2/3] rounded-xl" />
+          ))}
+        </div>
       ) : current ? (
         // --- Episodes within a chosen season ---
         <div>
           <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-            <button
-              onClick={() => setOpenSeason(undefined)}
-              className="text-sm text-indigo-300 hover:text-indigo-200 inline-flex items-center gap-1"
-            >
-              ← All seasons
-            </button>
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" icon="back" onClick={() => setOpenSeason(undefined)}>
+                All seasons
+              </Button>
+              <h2 className="text-lg font-semibold tracking-tight">
+                {seasonLabel(current.season)}
+                <span className="ml-2 text-[13px] font-normal text-ink-faint tabular-nums">
+                  {current.episodes.length} episodes
+                </span>
+              </h2>
+            </div>
             <div className="flex items-center gap-2">
               {!grouping && groupInfo.size > 0 && (
                 <Badge tone="accent">
@@ -235,7 +291,7 @@ export default function ShowView() {
               onDirtyChange={setEditorDirty}
             />
           ) : (
-          <div className="rounded-xl border border-edge overflow-hidden divide-y divide-edge/60">
+          <div className="rounded-2xl border border-edge surface-card overflow-hidden divide-y divide-edge/60">
             {current.episodes.map((ep) => {
               const g = groupInfo.get(ep.id)
               const woven = foreignSegs.get(ep.id)
@@ -245,16 +301,16 @@ export default function ShowView() {
               <button
                 onClick={() => setSelectedId(ep.id)}
                 className={cx(
-                  'w-full flex items-center gap-4 px-4 py-3 hover:bg-surface/60 text-left transition-colors',
-                  g && 'border-l-2 border-indigo-500 bg-indigo-500/5',
+                  'group w-full flex items-center gap-4 px-4 py-3 hover:bg-white/[0.03] text-left transition-colors',
+                  g && 'border-l-2 border-indigo-500 bg-indigo-500/[0.04]',
                 )}
               >
-                <div className="w-10 text-center text-ink-faint font-mono text-sm shrink-0">
+                <div className="w-10 h-10 shrink-0 grid place-items-center rounded-lg bg-sunken border border-edge font-mono text-[13px] font-semibold text-ink-muted tabular-nums group-hover:text-indigo-300 group-hover:border-indigo-500/40 transition-colors">
                   {ep.episode != null ? String(ep.episode).padStart(2, '0') : '—'}
                 </div>
                 <div className={'flex-1 min-w-0 ' + (ep.missing ? 'opacity-50' : '')}>
                   <div className="truncate text-ink flex items-center gap-2">
-                    <span className="truncate">{ep.title}</span>
+                    <span className="truncate text-[14px] font-medium">{ep.title}</span>
                     {g && (
                       <Badge tone="accent" className="shrink-0">
                         Broadcast ep {g.groupNo} · {g.index}/{g.size}
@@ -266,16 +322,21 @@ export default function ShowView() {
                       </Badge>
                     )}
                   </div>
-                  <div className="text-xs text-ink-faint">
+                  <div className="text-xs text-ink-faint mt-0.5">
                     {ep.width && ep.height ? `${ep.width}×${ep.height}` : ''}
                     {ep.videoCodec ? ` · ${ep.videoCodec}` : ''}
                     {ep.sizeBytes ? ` · ${formatSize(ep.sizeBytes)}` : ''}
                     {ep.missing ? ' · missing' : ''}
                   </div>
                 </div>
-                <div className="text-sm text-ink-muted shrink-0">
+                <div className="text-[13px] text-ink-muted shrink-0 tabular-nums">
                   {formatDuration(ep.durationSec)}
                 </div>
+                <Icon
+                  name="chevronRight"
+                  size={16}
+                  className="shrink-0 text-ink-ghost group-hover:text-ink-muted transition-colors"
+                />
               </button>
               {woven?.map(({ seg, groupNo }) => (
                 <button
@@ -306,7 +367,7 @@ export default function ShowView() {
         </div>
       ) : (
         // --- Season tiles ---
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-4 gap-y-5">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(148px,1fr))] gap-x-5 gap-y-7">
           {detail.seasons.map((s) => {
             const totalDur = s.episodes.reduce((a, e) => a + (e.durationSec ?? 0), 0)
             const posterEp = s.episodes.find((e) => e.seasonPosterPath)

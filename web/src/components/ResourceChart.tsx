@@ -225,10 +225,10 @@ export default function ResourceChart() {
               <g>
                 <line x1={x(hs.ts)} x2={x(hs.ts)} y1={CPU_TOP} y2={AXIS_Y} stroke={AXIS_TEXT} strokeWidth={1} opacity={0.5} />
                 {hs.cpuPct >= 0 && (
-                  <circle cx={x(hs.ts)} cy={cpuY(hs.cpuPct)} r={4} fill={LINE} stroke="#0f172a" strokeWidth={2} />
+                  <circle cx={x(hs.ts)} cy={cpuY(hs.cpuPct)} r={4} fill={LINE} stroke="#10131b" strokeWidth={2} />
                 )}
                 {hs.memBytes >= 0 && (
-                  <circle cx={x(hs.ts)} cy={memY(hs.memBytes)} r={4} fill={LINE} stroke="#0f172a" strokeWidth={2} />
+                  <circle cx={x(hs.ts)} cy={memY(hs.memBytes)} r={4} fill={LINE} stroke="#10131b" strokeWidth={2} />
                 )}
               </g>
             )}
@@ -247,7 +247,7 @@ export default function ResourceChart() {
       </div>
 
       {/* --- readout for the hovered moment --- */}
-      <div className={cx('mt-3 min-h-[3.25rem] rounded-lg border border-edge bg-canvas/40 px-3 py-2 text-xs', !hs && 'text-ink-faint')}>
+      <div className={cx('mt-3 min-h-[3.25rem] rounded-xl border border-edge bg-sunken/60 px-3 py-2 text-xs', !hs && 'text-ink-faint')}>
         {hs ? (
           <>
             <div className="flex flex-wrap gap-x-4 text-ink-soft">

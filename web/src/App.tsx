@@ -9,6 +9,7 @@ import Channels from './pages/Channels'
 import ChannelEditor from './pages/ChannelEditor'
 import Studio from './pages/Studio'
 import Logs from './pages/Logs'
+import Guide from './pages/Guide'
 
 /**
  * Rewrite the leading segment of the current path and redirect there, keeping
@@ -25,6 +26,7 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<Dashboard />} />
+        <Route path="guide" element={<Guide />} />
 
         <Route path="channels" element={<Channels />} />
         <Route path="channels/:id" element={<ChannelEditor />} />

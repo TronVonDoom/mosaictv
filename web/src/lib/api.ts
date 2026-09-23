@@ -80,6 +80,8 @@ export type Show = {
   totalDurationSec: number
   libraryId: number
   posterItemId: number | null
+  /** An episode to request the show's (TMDB) poster by, via /api/artwork. */
+  artItemId?: number
   tmdbPosterPath: string | null
   overview: string | null
   rating: number | null
@@ -100,6 +102,9 @@ export type ShowDetail = {
   genres: string | null
   rating: number | null
   tmdbPosterPath: string | null
+  /** Whether the show has a TMDB backdrop, and an episode to request it by. */
+  hasBackdrop?: boolean
+  artItemId?: number | null
   seasons: SeasonGroup[]
 }
 
@@ -443,6 +448,8 @@ export type PlayoutEntry = {
   stopTime: string
   kind: string
   title: string | null
+  /** Shared by the segments of one multi-part airing; null for a lone item. */
+  groupKey?: string | null
   mediaItem: {
     id: number
     title: string
@@ -458,6 +465,34 @@ export type PlayoutEntry = {
 }
 
 export type Playout = { now: string; items: PlayoutEntry[] }
+
+/** One program as the "what's on" views show it (see server/src/nowPlaying.ts).
+ *  A multi-part airing arrives as a single unit. */
+export type NowUnit = {
+  kind: 'program' | 'filler'
+  startTime: string
+  stopTime: string
+  mediaItemId: number | null
+  type: string | null
+  title: string
+  subtitle: string | null
+  year: number | null
+  overview: string | null
+  genres: string | null
+  rating: number | null
+  art: 'poster' | 'show' | null
+  hasBackdrop: boolean
+  parts: number
+}
+export type ChannelNow = {
+  channelId: number
+  number: number | null
+  viewers: number
+  now: NowUnit | null
+  next: NowUnit[]
+}
+export type LibrarySample = { items: { id: number; title: string; art: 'poster' | 'show' }[] }
+export type MediaSort = 'title' | 'year' | 'added' | 'rating'
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 export type LogCategory = 'stream' | 'ffmpeg' | 'playout' | 'system'
@@ -522,6 +557,7 @@ export const api = {
   health: () => request<Health>('/api/health'),
   stats: () => request<Stats>('/api/stats'),
   libraries: () => request<Library[]>('/api/libraries'),
+  librarySample: (id: number, limit = 12) => request<LibrarySample>(`/api/libraries/${id}/sample?limit=${limit}`),
   addLibrary: (data: { name: string; kind: LibraryKind; folders: string[] }) =>
     request<Library>('/api/libraries', { method: 'POST', body: JSON.stringify(data) }),
   deleteLibrary: (id: number) =>
@@ -542,6 +578,7 @@ export const api = {
     type?: string
     libraryId?: number
     q?: string
+    sort?: MediaSort
   }) => {
     const qs = new URLSearchParams()
     if (params.page) qs.set('page', String(params.page))
@@ -549,6 +586,7 @@ export const api = {
     if (params.type) qs.set('type', params.type)
     if (params.libraryId) qs.set('libraryId', String(params.libraryId))
     if (params.q) qs.set('q', params.q)
+    if (params.sort && params.sort !== 'title') qs.set('sort', params.sort)
     return request<MediaPage>(`/api/media?${qs.toString()}`)
   },
   mediaItem: (id: number) => request<MediaItemDetail>(`/api/media/${id}`),
@@ -735,6 +773,7 @@ export const api = {
 
   // --- channels ---
   channels: () => request<Channel[]>('/api/channels'),
+  channelsNow: () => request<ChannelNow[]>('/api/channels/now'),
   addChannel: (data: { number?: number | null; name: string; group?: string | null; logoId?: number | null }) =>
     request<Channel>('/api/channels', { method: 'POST', body: JSON.stringify(data) }),
   channel: (id: number) => request<ChannelDetail>(`/api/channels/${id}`),
@@ -832,7 +871,7 @@ export function tmdbImage(path: string, size: 'w200' | 'w342' | 'w500' | 'origin
 // URL for a local artwork file, or null if the item has none of that type.
 export function artworkUrl(
   id: number,
-  type: 'poster' | 'show' | 'season',
+  type: 'poster' | 'show' | 'season' | 'backdrop',
 ): string {
   return `/api/artwork/${id}?type=${type}`
 }

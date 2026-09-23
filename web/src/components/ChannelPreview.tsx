@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
-import { Modal } from './ui'
+import ChannelLogo from './ChannelLogo'
+import Icon from './Icon'
+import type { NowUnit } from '../lib/api'
+import { IconButton, LiveBadge, Modal } from './ui'
 
 type Props = {
   number: number
   name: string
-  nowPlaying?: string | null
+  logoId?: number | null
+  /** What's airing: a display unit from /channels/now, or a plain label. */
+  nowPlaying?: NowUnit | string | null
   onClose: () => void
 }
 
@@ -25,7 +30,7 @@ const MAX_RECONNECTS = 6
 // and fetches ahead, which smooths over the fact that the segmenter delivers one
 // ~4s segment at a time (a continuous-TS player with no buffer starves between
 // segments and stutters). Opening this counts as a real viewer until it closes.
-export default function ChannelPreview({ number, name, nowPlaying, onClose }: Props) {
+export default function ChannelPreview({ number, name, logoId = null, nowPlaying, onClose }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -36,12 +41,6 @@ export default function ChannelPreview({ number, name, nowPlaying, onClose }: Pr
   const [mutedFallback, setMutedFallback] = useState(false)
   const [reconnecting, setReconnecting] = useState(false)
   const url = `${window.location.origin}/iptv/channel/${number}/index.m3u8`
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
 
   useEffect(() => {
     const video = videoRef.current
@@ -197,45 +196,53 @@ export default function ChannelPreview({ number, name, nowPlaying, onClose }: Pr
     }
   }, [url])
 
+  const airing =
+    typeof nowPlaying === 'string'
+      ? nowPlaying
+      : nowPlaying
+        ? [nowPlaying.title, nowPlaying.subtitle].filter(Boolean).join(' · ')
+        : null
+
   return (
-    <Modal onClose={onClose} panelClassName="w-full max-w-3xl overflow-hidden">
-        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-edge">
-          <span className="text-xs font-mono text-indigo-300 shrink-0">{number}</span>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium truncate">{name}</div>
-            {nowPlaying && <div className="text-xs text-ink-faint truncate">▶ {nowPlaying}</div>}
+    <Modal onClose={onClose} panelClassName="w-full max-w-5xl overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-edge">
+        <ChannelLogo logoId={logoId} name={name} size={38} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[13px] font-semibold text-indigo-300 tabular-nums">{number}</span>
+            <span className="text-[15px] font-semibold truncate">{name}</span>
+            <LiveBadge />
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-edge-strong hover:border-ink-faint px-2.5 py-1 text-xs shrink-0"
-          >
-            Close
-          </button>
+          {airing && <div className="text-[12.5px] text-ink-muted truncate mt-0.5">{airing}</div>}
         </div>
+        <IconButton icon="close" label="Close preview" onClick={onClose} />
+      </div>
 
-        <div className="bg-black aspect-video flex items-center justify-center relative">
-          {error ? (
-            <div className="text-center p-6">
-              <div className="text-sm text-rose-300 mb-2">{error}</div>
-              <code className="text-xs text-ink-faint break-all">{url}</code>
-            </div>
-          ) : (
-            <>
-              <video ref={videoRef} controls playsInline className="w-full h-full" />
-              {reconnecting && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-xs text-ink-faint pointer-events-none">
-                  Reconnecting…
-                </div>
-              )}
-            </>
-          )}
-        </div>
+      <div className="bg-black aspect-video flex items-center justify-center relative">
+        {error ? (
+          <div className="text-center p-6 max-w-md">
+            <Icon name="warning" size={28} className="mx-auto mb-3 text-rose-400" />
+            <div className="text-sm text-rose-200 mb-3">{error}</div>
+            <code className="text-xs text-ink-faint break-all font-mono">{url}</code>
+          </div>
+        ) : (
+          <>
+            <video ref={videoRef} controls playsInline className="w-full h-full" />
+            {reconnecting && (
+              <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/55 text-[13px] text-ink-soft pointer-events-none">
+                <Icon name="refresh" size={15} className="animate-spin" /> Reconnecting…
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
-        <div className="px-4 py-2 text-xs text-ink-faint border-t border-edge">
-          {mutedFallback
-            ? 'Started muted — the browser blocked autoplay with sound. Unmute on the player.'
-            : 'Live preview. This tunes in as a real viewer until you close it.'}
-        </div>
+      <div className="flex items-center gap-2 px-4 py-2.5 text-[12px] text-ink-faint border-t border-edge">
+        <Icon name="info" size={13} className="shrink-0" />
+        {mutedFallback
+          ? 'Started muted — the browser blocked autoplay with sound. Unmute on the player.'
+          : 'Live preview. It counts as a real viewer until you close it.'}
+      </div>
     </Modal>
   )
 }

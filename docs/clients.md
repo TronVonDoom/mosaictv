@@ -5,7 +5,8 @@ MosaicTV speaks the two standards every IPTV-capable player understands:
 - **M3U playlist** — `http://YOUR-SERVER:8688/iptv/channels.m3u`
 - **XMLTV guide (EPG)** — `http://YOUR-SERVER:8688/iptv/xmltv.xml`
 
-(Both URLs are shown, copyable, at the top of the **Channels** page.)
+(Both URLs — plus the HDHomeRun tuner address — are one click away under
+**Connect a player** in the top bar, with copy buttons and per-player steps.)
 
 Tune in mid-program and a channel picks up at the right spot, just like real TV.
 

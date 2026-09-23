@@ -34,8 +34,12 @@ simple to run and pleasant to configure.
 - 📡 **Standard M3U + XMLTV output** — works with Jellyfin and Emby directly,
   Plex via Threadfin, VLC, TiviMate, and any IPTV player.
 - 🔍 **Library management built in** — Plex-style scanner (incremental,
-  ffprobe-backed) for TV, movies, and music videos; TMDB posters & metadata,
-  local artwork support, a poster-wall browser.
+  ffprobe-backed) for TV, movies, and music videos; TMDB posters, backdrops &
+  metadata, local artwork support, a searchable poster-wall browser.
+- 🕹 **A control room, not a config file** — a live dashboard of what every
+  channel is airing over its artwork, a full TV-guide grid, search across
+  pages, channels and your whole library, and one-click player setup. Works on
+  a phone too.
 - ⚙️ **Per-channel encoding profiles** — resolution, fps, bitrate ladder,
   deinterlacing, subtitle burn-in, loudness normalization; **GPU encoding** on
   NVIDIA, Intel QuickSync, VAAPI, AMD AMF or Apple VideoToolbox, each verified

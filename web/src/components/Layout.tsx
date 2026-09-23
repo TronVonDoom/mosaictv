@@ -1,25 +1,28 @@
-import { useEffect, useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import Icon, { type IconName } from './Icon'
 import ToastContainer from './ToastContainer'
 import CommandPalette from './CommandPalette'
-import { api } from '../lib/api'
+import ConnectPlayers from './ConnectPlayers'
+import ConfirmHost from './ConfirmHost'
+import { api, type Health } from '../lib/api'
 import { usePolling } from '../lib/hooks'
+import { Button, IconButton, Kbd, cx } from './ui'
 
 /** Mac gets ⌘K, everyone else Ctrl-K — label it to match the actual keyboard. */
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
 const PALETTE_HINT = IS_MAC ? '⌘K' : 'Ctrl K'
 
-// Six destinations in three groups, rather than seven flat peers. The grouping
-// answers the question the old flat list couldn't: "Browse" and "Libraries"
-// were two names for one idea, and nothing said whether Logs was a feature or
-// plumbing. Icon colours still flow violet→rose down the rail.
+// Seven destinations in three groups. The grouping answers "is this a feature
+// or plumbing?" at a glance: Broadcast is what airs, Content is what it's made
+// of, System keeps it running.
 type NavItem = { to: string; label: string; icon: IconName; end?: boolean }
 const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
   {
     heading: 'Broadcast',
     items: [
       { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
+      { to: '/guide', label: 'TV Guide', icon: 'guide' },
       { to: '/channels', label: 'Channels', icon: 'channels' },
     ],
   },
@@ -41,25 +44,253 @@ const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
 
 const COLLAPSE_KEY = 'mosaictv.navCollapsed'
 
-function navLinkClass(collapsed: boolean) {
-  return ({ isActive }: { isActive: boolean }) =>
-    'flex items-center gap-3 rounded-lg py-2.5 text-base transition-colors ' +
-    (collapsed ? 'justify-center px-0' : 'px-3.5') +
-    ' ' +
-    (isActive
-      ? 'bg-gradient-to-r from-violet-500/20 to-cyan-500/10 text-white ring-1 ring-violet-500/30'
-      : 'text-ink-muted hover:bg-raised/60 hover:text-ink-soft')
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+type Live = { channels: number; viewers: number }
+
+function Sidebar({
+  collapsed,
+  onToggle,
+  live,
+  version,
+  className,
+  onNavigate,
+}: {
+  collapsed: boolean
+  onToggle?: () => void
+  live: Live | null
+  version: string | null
+  className?: string
+  onNavigate?: () => void
+}) {
+  return (
+    <aside
+      className={cx(
+        'flex flex-col h-full border-r border-edge bg-[#090b10]/95 transition-[width] duration-200',
+        collapsed ? 'w-[72px]' : 'w-[248px]',
+        className,
+      )}
+    >
+      {/* Brand */}
+      <Link
+        to="/"
+        onClick={onNavigate}
+        className={cx('flex items-center gap-2.5 h-16 shrink-0', collapsed ? 'justify-center px-0' : 'px-5')}
+        title="MosaicTV"
+      >
+        <img src="/logo-icon.png" alt="" className="w-8 h-8 shrink-0 drop-shadow-[0_4px_12px_rgb(139_92_246/0.45)]" />
+        {!collapsed && (
+          <span className="flex items-baseline gap-2 min-w-0">
+            <span className="text-[17px] font-semibold tracking-[-0.02em] text-ink">
+              Mosaic<span className="text-gradient-brand">TV</span>
+            </span>
+            {version && /^\d/.test(version) && (
+              <span className="text-[10.5px] font-medium text-ink-ghost tabular-nums">v{version}</span>
+            )}
+          </span>
+        )}
+      </Link>
+
+      {/* Navigation */}
+      <nav className={cx('flex-1 overflow-y-auto pb-4 space-y-5', collapsed ? 'px-3' : 'px-3')}>
+        {NAV_GROUPS.map((group) => (
+          <div key={group.heading}>
+            {collapsed ? (
+              <div className="mx-auto my-2 h-px w-6 bg-edge" />
+            ) : (
+              <div className="px-2.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-ghost">
+                {group.heading}
+              </div>
+            )}
+            <div className="space-y-0.5">
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  onClick={onNavigate}
+                  title={collapsed ? item.label : undefined}
+                  className={({ isActive }) =>
+                    cx(
+                      'group relative flex items-center gap-3 h-9 rounded-lg text-[13.5px] font-medium transition-colors',
+                      collapsed ? 'justify-center' : 'px-2.5',
+                      isActive
+                        ? 'bg-white/[0.07] text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.04)]'
+                        : 'text-ink-muted hover:text-ink-soft hover:bg-white/[0.035]',
+                    )
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && (
+                        <span className="absolute -left-3 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-gradient-to-b from-indigo-400 to-sky-400" />
+                      )}
+                      <Icon
+                        name={item.icon}
+                        size={18}
+                        className={cx(
+                          'shrink-0 transition-colors',
+                          isActive ? 'text-indigo-300' : 'text-ink-faint group-hover:text-ink-muted',
+                        )}
+                      />
+                      {!collapsed && item.label}
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      {/* On-air status — "is it actually broadcasting?" answered from anywhere. */}
+      <div className={cx('shrink-0 border-t border-edge', collapsed ? 'p-3' : 'p-3')}>
+        {live && (
+          <Link
+            to="/guide"
+            onClick={onNavigate}
+            title={
+              live.channels > 0
+                ? `${live.channels} channel${live.channels === 1 ? '' : 's'} on air · ${live.viewers} watching`
+                : 'Nothing on air'
+            }
+            className={cx(
+              'flex items-center gap-3 rounded-xl border transition-colors',
+              collapsed ? 'justify-center p-2.5' : 'px-3 py-2.5',
+              live.channels > 0
+                ? 'border-live/25 bg-live/[0.06] hover:bg-live/[0.1]'
+                : 'border-edge bg-surface/60 hover:bg-surface',
+            )}
+          >
+            <span className={cx('flex items-end gap-[3px] h-4 shrink-0', live.channels === 0 && 'opacity-40')}>
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  className={cx('w-[3px] h-4 rounded-full', live.channels > 0 ? 'bg-live eq-bar' : 'bg-ink-ghost scale-y-50 origin-bottom')}
+                />
+              ))}
+            </span>
+            {!collapsed && (
+              <span className="min-w-0 leading-tight">
+                <span className={cx('block text-[13px] font-semibold', live.channels > 0 ? 'text-ink' : 'text-ink-muted')}>
+                  {live.channels > 0 ? `${live.channels} channel${live.channels === 1 ? '' : 's'} live` : 'Nothing on air'}
+                </span>
+                <span className="block text-[11.5px] text-ink-faint">
+                  {live.viewers > 0 ? `${live.viewers} watching now` : 'No one watching'}
+                </span>
+              </span>
+            )}
+          </Link>
+        )}
+        {onToggle && (
+          <button
+            onClick={onToggle}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className={cx(
+              'mt-2 flex items-center gap-2.5 h-8 w-full rounded-lg text-[12.5px] text-ink-faint hover:text-ink-soft hover:bg-white/[0.035] transition-colors',
+              collapsed ? 'justify-center' : 'px-2.5',
+            )}
+          >
+            <Icon name={collapsed ? 'expand' : 'collapse'} size={16} />
+            {!collapsed && 'Collapse'}
+          </button>
+        )}
+      </div>
+    </aside>
+  )
+}
+
+/** Server status in the top bar: a dot, and the details on click. */
+function HealthButton({ health, reachable }: { health: Health | null; reachable: boolean | null }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false)
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  const ok = reachable === true && (health?.ffmpeg ?? true)
+  const tone =
+    reachable === null
+      ? { dot: 'bg-amber-400', label: 'Connecting…' }
+      : !reachable
+        ? { dot: 'bg-rose-500', label: 'Server unreachable' }
+        : ok
+          ? { dot: 'bg-emerald-400', label: 'All systems normal' }
+          : { dot: 'bg-amber-400', label: 'ffmpeg missing' }
+
+  const uptime = (s: number) => {
+    const d = Math.floor(s / 86400)
+    const h = Math.floor((s % 86400) / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    return d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}m`
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-2 h-8 rounded-lg px-2.5 text-[12.5px] text-ink-muted hover:text-ink hover:bg-white/[0.05] transition-colors"
+        aria-expanded={open}
+      >
+        <span className="relative flex w-2 h-2">
+          {ok && <span className={cx('absolute inset-0 rounded-full pulse-live', tone.dot)} />}
+          <span className={cx('relative w-2 h-2 rounded-full', tone.dot)} />
+        </span>
+        <span className="hidden md:inline">{tone.label}</span>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-64 rounded-xl border border-edge-strong bg-overlay/95 backdrop-blur p-3 shadow-2xl shadow-black/60 modal-in z-50">
+          <div className="text-[13px] font-semibold text-ink mb-2">{tone.label}</div>
+          {health ? (
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[12.5px]">
+              <dt className="text-ink-faint">Version</dt>
+              <dd className="text-ink-soft tabular-nums">v{health.version}</dd>
+              <dt className="text-ink-faint">Uptime</dt>
+              <dd className="text-ink-soft tabular-nums">{uptime(health.uptimeSeconds)}</dd>
+              <dt className="text-ink-faint">Node</dt>
+              <dd className="text-ink-soft tabular-nums">{health.node}</dd>
+              <dt className="text-ink-faint">ffmpeg</dt>
+              <dd className={health.ffmpeg ? 'text-emerald-300' : 'text-rose-300'}>
+                {health.ffmpeg ? 'Available' : 'Not found'}
+              </dd>
+            </dl>
+          ) : (
+            <p className="text-[12.5px] text-ink-muted">The MosaicTV server isn't answering. Is the container running?</p>
+          )}
+          <Link
+            to="/logs"
+            onClick={() => setOpen(false)}
+            className="mt-3 flex items-center justify-between rounded-lg px-2 py-1.5 -mx-1 text-[12.5px] text-indigo-300 hover:bg-white/[0.05]"
+          >
+            Open logs <Icon name="chevronRight" size={14} />
+          </Link>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function Layout() {
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  const [collapsed, setCollapsed] = useState(
-    () => typeof window !== 'undefined' && localStorage.getItem(COLLAPSE_KEY) === '1',
-  )
+  const location = useLocation()
+  const [collapsed, setCollapsed] = useState(readCollapsed)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [connectOpen, setConnectOpen] = useState(false)
   // How many channels are actually on air, so the rail can say so at a glance
   // instead of making the user open the Dashboard to find out.
-  const [live, setLive] = useState<{ channels: number; viewers: number } | null>(null)
-  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [live, setLive] = useState<Live | null>(null)
+  const [health, setHealth] = useState<Health | null>(null)
+  const [reachable, setReachable] = useState<boolean | null>(null)
 
   // ⌘K / Ctrl-K from anywhere. Bound on the window rather than a focus trap so
   // it works while a form field has focus — which is most of the time.
@@ -74,191 +305,113 @@ export default function Layout() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  // The mobile drawer closes itself on navigation.
+  useEffect(() => setMobileOpen(false), [location.pathname])
+
   const loadLive = () =>
     api
       .channels()
       .then((cs) => {
         const onAir = cs.filter((c) => c.number != null)
-        setLive({
-          channels: onAir.length,
-          viewers: onAir.reduce((n, c) => n + c.viewers, 0),
-        })
+        setLive({ channels: onAir.length, viewers: onAir.reduce((n, c) => n + c.viewers, 0) })
       })
       .catch(() => setLive(null))
+  const loadHealth = () =>
+    api
+      .health()
+      .then((h) => {
+        setHealth(h)
+        setReachable(true)
+      })
+      .catch(() => setReachable(false))
 
   useEffect(() => {
     loadLive()
+    loadHealth()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   usePolling(loadLive, 10000)
+  usePolling(loadHealth, 30000)
 
   useEffect(() => {
-    localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0')
+    try {
+      localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0')
+    } catch {
+      /* private mode — the preference just won't stick */
+    }
   }, [collapsed])
 
-  const iptvLinks: { href: string; label: string; icon: IconName }[] = [
-    { href: `${origin}/iptv/channels.m3u`, label: 'M3U playlist', icon: 'm3u' },
-    { href: `${origin}/iptv/xmltv.xml`, label: 'XMLTV guide', icon: 'xmltv' },
-  ]
-
   return (
-    <div className="min-h-screen text-ink flex bg-canvas bg-[radial-gradient(1000px_600px_at_8%_-10%,rgba(139,92,246,0.10),transparent_60%),radial-gradient(900px_600px_at_100%_0%,rgba(34,211,238,0.06),transparent_55%)]">
-      <aside
-        className={
-          'relative shrink-0 border-r border-edge bg-surface/40 flex flex-col transition-[width] duration-200 ' +
-          (collapsed ? 'w-[76px]' : 'w-64')
-        }
-      >
-        <button
-          onClick={() => setCollapsed((c) => !c)}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="absolute top-1/2 -right-3 -translate-y-1/2 z-10 flex items-center justify-center w-6 h-6 rounded-full border border-edge-strong bg-raised text-ink-muted hover:text-ink hover:border-indigo-500 transition-colors shadow shadow-black/30"
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={'transition-transform duration-200 ' + (collapsed ? 'rotate-180' : '')}
-          >
-            <path d="M15 5l-7 7 7 7" />
-          </svg>
-        </button>
+    <div className="min-h-screen text-ink bg-canvas app-backdrop">
+      {/* Desktop rail */}
+      <div className={cx('hidden lg:block fixed inset-y-0 left-0 z-40', collapsed ? 'w-[72px]' : 'w-[248px]')}>
+        <Sidebar
+          collapsed={collapsed}
+          onToggle={() => setCollapsed((c) => !c)}
+          live={live}
+          version={health?.version ?? null}
+        />
+      </div>
 
-        <div className="h-1 bg-gradient-brand" />
-        <div className="px-4 py-5 border-b border-edge flex items-center justify-center overflow-hidden">
-          <img
-            src={collapsed ? '/logo-icon.png' : '/logo-wide.png'}
-            alt="MosaicTV"
-            className={collapsed ? 'w-9 h-9' : 'w-full max-w-[210px]'}
-          />
+      {/* Mobile drawer */}
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] fade-in" onClick={() => setMobileOpen(false)} />
+          <div className="absolute inset-y-0 left-0 drawer-in shadow-2xl shadow-black/70">
+            <Sidebar
+              collapsed={false}
+              live={live}
+              version={health?.version ?? null}
+              onNavigate={() => setMobileOpen(false)}
+            />
+          </div>
         </div>
+      )}
 
-        {/* A visible entry point for the palette — a shortcut nobody discovers
-            is a shortcut nobody uses. */}
-        <div className="px-3 pt-3">
-          <button
-            onClick={() => setPaletteOpen(true)}
-            title={`Search (${PALETTE_HINT})`}
-            aria-label="Search"
-            className={
-              'w-full flex items-center gap-2 rounded-lg border border-edge bg-canvas/60 text-ink-faint hover:border-edge-strong hover:text-ink-muted transition-colors ' +
-              (collapsed ? 'justify-center py-2 px-0' : 'px-3 py-2')
-            }
-          >
-            <Icon name="browse" size={16} />
-            {!collapsed && (
-              <>
-                <span className="text-sm">Search…</span>
-                <kbd className="ml-auto text-[10px] border border-edge-strong rounded px-1.5 py-0.5">
-                  {PALETTE_HINT}
-                </kbd>
-              </>
-            )}
-          </button>
-        </div>
+      <div className={cx('flex flex-col min-h-screen transition-[padding] duration-200', collapsed ? 'lg:pl-[72px]' : 'lg:pl-[248px]')}>
+        <header className="sticky top-0 z-30 glass border-b border-edge/70">
+          <div className="flex items-center gap-3 h-14 px-4 sm:px-6 lg:px-8">
+            <IconButton icon="menu" label="Open menu" className="lg:hidden -ml-1.5" onClick={() => setMobileOpen(true)} />
+            <Link to="/" className="lg:hidden shrink-0 flex items-center gap-2 mr-1">
+              <img src="/logo-icon.png" alt="MosaicTV" className="w-7 h-7 shrink-0" />
+            </Link>
 
-        <nav className="flex-1 p-3 space-y-4 overflow-y-auto">
-          {NAV_GROUPS.map((group) => (
-            <div key={group.heading} className="space-y-1.5">
-              {!collapsed && (
-                <div className="px-3.5 text-[10px] uppercase tracking-wider text-ink-ghost">
-                  {group.heading}
-                </div>
-              )}
-              {group.items.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.end}
-                  title={collapsed ? item.label : undefined}
-                  className={navLinkClass(collapsed)}
-                >
-                  <Icon name={item.icon} size={22} colored />
-                  {!collapsed && item.label}
-                </NavLink>
-              ))}
-            </div>
-          ))}
-        </nav>
-
-        {/* On-air status. Always visible, so "is it actually broadcasting?" is
-            answered from anywhere in the app. */}
-        {live && (
-          <div className={'px-3 pb-2 ' + (collapsed ? 'flex justify-center' : '')}>
-            <div
-              className={
-                'flex items-center gap-2 rounded-lg border px-3 py-2 ' +
-                (live.channels > 0
-                  ? 'border-emerald-500/25 bg-emerald-500/5'
-                  : 'border-edge bg-surface/40')
-              }
-              title={
-                live.channels > 0
-                  ? `${live.channels} channel${live.channels === 1 ? '' : 's'} on air · ${live.viewers} viewer${live.viewers === 1 ? '' : 's'}`
-                  : 'No channels on air'
-              }
+            {/* A visible entry point for the palette — a shortcut nobody
+                discovers is a shortcut nobody uses. */}
+            <button
+              onClick={() => setPaletteOpen(true)}
+              className="group flex items-center gap-2.5 h-9 flex-1 min-w-0 max-w-md rounded-lg border border-edge bg-surface/70 px-3 text-left text-[13px] text-ink-faint hover:border-edge-strong hover:text-ink-muted transition-colors"
             >
-              <span className="relative flex w-2 h-2 shrink-0">
-                {live.channels > 0 && (
-                  <span className="pulse-live absolute inset-0 rounded-full bg-emerald-400" />
-                )}
-                <span
-                  className={
-                    'relative w-2 h-2 rounded-full ' +
-                    (live.channels > 0 ? 'bg-emerald-400' : 'bg-ink-ghost')
-                  }
-                />
+              <Icon name="search" size={16} className="shrink-0" />
+              <span className="flex-1 truncate">
+                <span className="sm:hidden">Search…</span>
+                <span className="hidden sm:inline">Search channels, shows, settings…</span>
               </span>
-              {!collapsed && (
-                <span className="text-xs text-ink-muted truncate">
-                  {live.channels > 0 ? (
-                    <>
-                      <span className="text-emerald-300 font-medium">{live.channels} on air</span>
-                      {live.viewers > 0 && ` · ${live.viewers} watching`}
-                    </>
-                  ) : (
-                    'Nothing on air'
-                  )}
-                </span>
-              )}
+              <span className="hidden sm:inline-flex">
+                <Kbd>{PALETTE_HINT}</Kbd>
+              </span>
+            </button>
+
+            <div className="ml-auto shrink-0 flex items-center gap-1.5">
+              <HealthButton health={health} reachable={reachable} />
+              <Button variant="secondary" size="sm" icon="cast" onClick={() => setConnectOpen(true)}>
+                <span className="hidden sm:inline">Connect a player</span>
+                <span className="sm:hidden">Connect</span>
+              </Button>
             </div>
           </div>
-        )}
+        </header>
 
-        <div className="p-3 border-t border-edge space-y-0.5">
-          {!collapsed && (
-            <div className="px-3 pb-1 text-[10px] uppercase tracking-wider text-ink-ghost">IPTV</div>
-          )}
-          {iptvLinks.map((l) => (
-            <a
-              key={l.href}
-              href={l.href}
-              target="_blank"
-              rel="noreferrer"
-              title={collapsed ? l.label : undefined}
-              className={
-                'flex items-center gap-3 rounded-lg py-1.5 text-sm text-ink-muted hover:bg-raised/60 hover:text-ink-soft transition-colors ' +
-                (collapsed ? 'justify-center px-0' : 'px-3')
-              }
-            >
-              <Icon name={l.icon} size={16} /> {!collapsed && l.label}
-            </a>
-          ))}
-        </div>
-      </aside>
+        <main className="flex-1 overflow-x-clip">
+          <div key={location.pathname} className="max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 py-7 fade-in">
+            <Outlet context={{ openConnect: () => setConnectOpen(true) }} />
+          </div>
+        </main>
+      </div>
 
-      <main className="flex-1 overflow-x-auto">
-        <div className="max-w-[1800px] mx-auto px-6 py-8">
-          <Outlet />
-        </div>
-      </main>
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} onConnect={() => setConnectOpen(true)} />
+      {connectOpen && <ConnectPlayers onClose={() => setConnectOpen(false)} />}
+      <ConfirmHost />
       <ToastContainer />
     </div>
   )

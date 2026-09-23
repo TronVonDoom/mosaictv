@@ -1,19 +1,94 @@
-// Custom line-icon set for MosaicTV. Stroke-based; by default drawn with
-// currentColor so each icon inherits its text color. Pass `colored` to stroke
-// it with the icon's own identity color (a single solid hue per icon, drawn
-// from the brand mosaic palette) — uniform weight, distinct colors. No external
-// icon dependency — CSP-safe and consistent with the theme.
+// MosaicTV's icon vocabulary. The glyphs come from Lucide (bundled SVG
+// components — nothing is fetched at runtime, so it stays CSP-safe and works
+// offline); this module owns the *names* the app speaks in, so a page asks for
+// "channels" rather than knowing which drawing that is today.
+//
+// Icons draw in currentColor by default. `colored` strokes an icon with its
+// identity hue instead — used sparingly, for the tinted tiles on page headers,
+// empty states and stat tiles, never for navigation.
+
+import type { LucideIcon } from 'lucide-react'
+import {
+  Activity,
+  AlertTriangle,
+  ArrowLeft,
+  ArrowUpDown,
+  CalendarRange,
+  Captions,
+  Cast,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Clapperboard,
+  Clock3,
+  Command,
+  Copy,
+  Cpu,
+  Database,
+  Download,
+  Ellipsis,
+  ExternalLink,
+  Eye,
+  Film,
+  Filter,
+  FolderOpen,
+  Gauge,
+  Globe,
+  HardDrive,
+  Hash,
+  Image,
+  Info,
+  KeyRound,
+  LayoutDashboard,
+  LayoutGrid,
+  Layers,
+  LibraryBig,
+  Link2,
+  List,
+  ListVideo,
+  Menu,
+  MonitorPlay,
+  Music2,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Pencil,
+  Play,
+  Plus,
+  RadioTower,
+  RefreshCw,
+  ScrollText,
+  Search,
+  Server,
+  Settings2,
+  Shuffle,
+  SkipForward,
+  SlidersHorizontal,
+  Sparkles,
+  Star,
+  Trash2,
+  Tv,
+  Upload,
+  Users,
+  Wand2,
+  X,
+  Zap,
+} from 'lucide-react'
 
 export type IconName =
+  // Navigation / places
   | 'dashboard'
-  | 'browse'
   | 'channels'
+  | 'guide'
   | 'libraries'
+  | 'browse'
   | 'media'
   | 'logs'
   | 'settings'
   | 'm3u'
   | 'xmltv'
+  // Media kinds
   | 'show'
   | 'movie'
   | 'clip'
@@ -22,145 +97,171 @@ export type IconName =
   | 'image'
   | 'clock'
   | 'upnext'
+  // Actions
+  | 'play'
+  | 'plus'
+  | 'search'
+  | 'edit'
+  | 'trash'
+  | 'more'
+  | 'external'
+  | 'copy'
+  | 'check'
+  | 'close'
+  | 'back'
+  | 'refresh'
+  | 'upload'
+  | 'download'
+  | 'filter'
+  | 'sort'
+  | 'chevronRight'
+  | 'chevronLeft'
+  | 'chevronDown'
+  | 'collapse'
+  | 'expand'
+  | 'menu'
+  // Status & misc
+  | 'live'
+  | 'cast'
+  | 'users'
+  | 'eye'
+  | 'star'
+  | 'info'
+  | 'warning'
+  | 'success'
+  | 'sparkles'
+  | 'bolt'
+  | 'cpu'
+  | 'server'
+  | 'disk'
+  | 'database'
+  | 'activity'
+  | 'gauge'
+  | 'link'
+  | 'grid'
+  | 'list'
+  | 'layers'
+  | 'shuffle'
+  | 'hash'
+  | 'globe'
+  | 'captions'
+  | 'wand'
+  | 'key'
+  | 'command'
+  | 'calendar'
+  | 'sliders'
+  | 'tv'
 
-// Each icon's identity color — one solid hue per icon, spanning the brand
-// mosaic palette so the set reads as a cohesive spectrum. The sidebar nav is
-// ordered so these flow violet→rose down the rail.
-const COLOR: Record<IconName, string> = {
-  dashboard: '#a855f7', // violet
-  browse: '#818cf8', // indigo
-  channels: '#3b82f6', // blue
-  libraries: '#22d3ee', // cyan
-  media: '#34d399', // green
-  logs: '#fbbf24', // gold
-  settings: '#fb7185', // rose
-  show: '#3b82f6', // blue
-  movie: '#a855f7', // violet
-  clip: '#22d3ee', // cyan
-  folder: '#fbbf24', // gold
-  audio: '#f472b6', // pink
-  image: '#34d399', // green
-  clock: '#818cf8', // indigo
-  upnext: '#fb7185', // rose
-  m3u: '#34d399', // green
-  xmltv: '#22d3ee', // cyan
+const GLYPH: Record<IconName, LucideIcon> = {
+  dashboard: LayoutDashboard,
+  channels: RadioTower,
+  guide: CalendarRange,
+  libraries: LibraryBig,
+  browse: Film,
+  media: Wand2,
+  logs: ScrollText,
+  settings: Settings2,
+  m3u: ListVideo,
+  xmltv: CalendarRange,
+  show: Tv,
+  movie: Clapperboard,
+  clip: Film,
+  folder: FolderOpen,
+  audio: Music2,
+  image: Image,
+  clock: Clock3,
+  upnext: SkipForward,
+  play: Play,
+  plus: Plus,
+  search: Search,
+  edit: Pencil,
+  trash: Trash2,
+  more: Ellipsis,
+  external: ExternalLink,
+  copy: Copy,
+  check: Check,
+  close: X,
+  back: ArrowLeft,
+  refresh: RefreshCw,
+  upload: Upload,
+  download: Download,
+  filter: Filter,
+  sort: ArrowUpDown,
+  chevronRight: ChevronRight,
+  chevronLeft: ChevronLeft,
+  chevronDown: ChevronDown,
+  collapse: PanelLeftClose,
+  expand: PanelLeftOpen,
+  menu: Menu,
+  live: RadioTower,
+  cast: Cast,
+  users: Users,
+  eye: Eye,
+  star: Star,
+  info: Info,
+  warning: AlertTriangle,
+  success: CheckCircle2,
+  sparkles: Sparkles,
+  bolt: Zap,
+  cpu: Cpu,
+  server: Server,
+  disk: HardDrive,
+  database: Database,
+  activity: Activity,
+  gauge: Gauge,
+  link: Link2,
+  grid: LayoutGrid,
+  list: List,
+  layers: Layers,
+  shuffle: Shuffle,
+  hash: Hash,
+  globe: Globe,
+  captions: Captions,
+  wand: Wand2,
+  key: KeyRound,
+  command: Command,
+  calendar: CalendarRange,
+  sliders: SlidersHorizontal,
+  tv: MonitorPlay,
 }
 
-const PATHS: Record<IconName, React.ReactNode> = {
-  // 2×2 mosaic tiles — a nod to the brand mark.
-  dashboard: (
-    <>
-      <rect x="3" y="3" width="7" height="7" rx="1.5" />
-      <rect x="14" y="3" width="7" height="7" rx="1.5" />
-      <rect x="3" y="14" width="7" height="7" rx="1.5" />
-      <rect x="14" y="14" width="7" height="7" rx="1.5" />
-    </>
-  ),
-  // Film strip.
-  browse: (
-    <>
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4" />
-    </>
-  ),
-  // Broadcast: signal arcs radiating from a center dot.
-  channels: (
-    <>
-      <circle cx="12" cy="12" r="1.6" />
-      <path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7" />
-      <path d="M6 6a9 9 0 0 0 0 12M18 6a9 9 0 0 1 0 12" />
-    </>
-  ),
-  // Folder.
-  libraries: <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
-  // Image / picture.
-  media: (
-    <>
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <circle cx="8.5" cy="9.5" r="1.6" />
-      <path d="M4 17l4.5-4.5L13 17M14 15l2.5-2.5L20 16" />
-    </>
-  ),
-  // Document with lines.
-  logs: (
-    <>
-      <path d="M6 3h9l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
-      <path d="M14 3v4h4M8 12h8M8 16h8M8 8h3" />
-    </>
-  ),
-  // Sliders.
-  settings: (
-    <>
-      <path d="M4 7h10M18 7h2M4 12h2M10 12h10M4 17h7M15 17h5" />
-      <circle cx="16" cy="7" r="2" />
-      <circle cx="8" cy="12" r="2" />
-      <circle cx="13" cy="17" r="2" />
-    </>
-  ),
-  // Playlist with a play cue.
-  m3u: (
-    <>
-      <path d="M4 6h11M4 10h11M4 14h7" />
-      <path d="M15 13.5v6l5-3z" />
-    </>
-  ),
-  // Guide grid / calendar.
-  xmltv: (
-    <>
-      <rect x="3" y="4" width="18" height="17" rx="2" />
-      <path d="M3 9h18M8 4V2.5M16 4V2.5M8 13h3M13 13h3M8 17h3M13 17h3" />
-    </>
-  ),
-  // TV set — a show.
-  show: (
-    <>
-      <rect x="3" y="7" width="18" height="13" rx="2" />
-      <path d="M12 7l-4-4M12 7l4-4M9 20h6" />
-    </>
-  ),
-  // Clapperboard — a movie.
-  movie: (
-    <>
-      <rect x="3" y="6" width="18" height="14" rx="1.5" />
-      <path d="M3 10h18M7 6l-1.5 4M12 6l-1.5 4M17 6l-1.5 4" />
-    </>
-  ),
-  // Film frame with sprockets — a clip / other.
-  clip: (
-    <>
-      <rect x="4" y="4" width="16" height="16" rx="2" />
-      <path d="M4 8h2M4 12h2M4 16h2M18 8h2M18 12h2M18 16h2" />
-    </>
-  ),
-  folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
-  // Music note.
-  audio: (
-    <>
-      <path d="M9 18V5l11-2v13" />
-      <circle cx="6.5" cy="18" r="2.5" />
-      <circle cx="17.5" cy="16" r="2.5" />
-    </>
-  ),
-  image: (
-    <>
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <circle cx="8.5" cy="9.5" r="1.6" />
-      <path d="M4 17l4.5-4.5L13 17M14 15l2.5-2.5L20 16" />
-    </>
-  ),
-  clock: (
-    <>
-      <circle cx="12" cy="12" r="8" />
-      <path d="M12 8v4l3 2" />
-    </>
-  ),
-  // Skip-to-next — "coming up next".
-  upnext: (
-    <>
-      <path d="M5 5l9 7-9 7z" />
-      <path d="M18 5v14" />
-    </>
-  ),
+// Identity hues, a notch lighter than the brand's own so they sit comfortably
+// on dark tiles. Anything not listed draws in the brand violet.
+const COLOR: Partial<Record<IconName, string>> = {
+  dashboard: '#a78bfa',
+  channels: '#60a5fa',
+  guide: '#38bdf8',
+  libraries: '#22d3ee',
+  browse: '#818cf8',
+  media: '#34d399',
+  logs: '#fbbf24',
+  settings: '#fb7185',
+  show: '#60a5fa',
+  movie: '#c084fc',
+  clip: '#22d3ee',
+  folder: '#fbbf24',
+  audio: '#f472b6',
+  image: '#34d399',
+  clock: '#818cf8',
+  upnext: '#fb7185',
+  m3u: '#34d399',
+  xmltv: '#22d3ee',
+  live: '#ff5b6b',
+  users: '#fb7185',
+  star: '#fbbf24',
+  warning: '#fbbf24',
+  success: '#34d399',
+  cpu: '#38bdf8',
+  server: '#2dd4bf',
+  disk: '#a78bfa',
+  database: '#818cf8',
+  activity: '#34d399',
+  sparkles: '#c084fc',
+}
+
+/** The identity hue for an icon — for tinting the tile it sits on. */
+export function iconColor(name: IconName): string {
+  return COLOR[name] ?? '#a78bfa'
 }
 
 export default function Icon({
@@ -168,26 +269,22 @@ export default function Icon({
   size = 18,
   className,
   colored = false,
+  strokeWidth = 1.75,
 }: {
   name: IconName
   size?: number
   className?: string
   colored?: boolean
+  strokeWidth?: number
 }) {
+  const Glyph = GLYPH[name]
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke={colored ? COLOR[name] : 'currentColor'}
-      strokeWidth={1.7}
-      strokeLinecap="round"
-      strokeLinejoin="round"
+    <Glyph
+      size={size}
+      strokeWidth={strokeWidth}
+      color={colored ? iconColor(name) : 'currentColor'}
       className={className}
       aria-hidden="true"
-    >
-      {PATHS[name]}
-    </svg>
+    />
   )
 }

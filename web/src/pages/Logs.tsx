@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, logsDownloadUrl, type LogCategory, type LogEntry, type LogLevel } from '../lib/api'
 import { copyText } from '../lib/clipboard'
 import { usePolling } from '../lib/hooks'
-import { Button, LinkButton, PageHeader, Select } from '../components/ui'
+import { Button, InfoHint, LinkButton, PageHeader, Select } from '../components/ui'
+import { confirmDialog } from '../lib/confirm'
 
 const LEVELS: { value: LogLevel | 'all'; label: string }[] = [
   { value: 'all', label: 'All levels' },
@@ -116,7 +117,15 @@ export default function Logs() {
   }
 
   async function clearAll() {
-    if (!confirm('Clear all logs? This wipes the in-memory buffer and the log file.')) return
+    if (
+      !(await confirmDialog({
+        title: 'Clear all logs?',
+        message: 'This wipes the in-memory buffer and the log file.',
+        confirmLabel: 'Clear logs',
+        danger: true,
+      }))
+    )
+      return
     await api.clearLogs().catch(() => {})
     stickToBottom.current = true
     refresh()
@@ -127,16 +136,25 @@ export default function Logs() {
       <PageHeader
         title="Logs"
         icon="logs"
-        description="FFmpeg errors, stream connect/disconnect events, playout builds, periodic container load, and other diagnostics. Lines raised while serving a viewer are tagged with that stream (e.g. V3 Plex) — click a tag to follow just that one. Copy or download these when reporting a problem."
+        description={
+          <>
+            Stream, ffmpeg, playout and system events — what to copy when reporting a problem.{' '}
+            <InfoHint>
+              Lines raised while serving a viewer are tagged with that stream (e.g. V3 Plex) — click a tag to
+              follow just that one. Copy and Download always take the whole log, debug lines included,
+              whatever the filters show.
+            </InfoHint>
+          </>
+        }
         actions={
           <>
-            <Button variant="secondary" size="sm" onClick={copyAll} title="Copies the entire log, including debug lines — filters don't apply">
-              {copied ? 'Copied ✓' : 'Copy all'}
+            <Button variant="secondary" size="sm" icon={copied ? 'check' : 'copy'} onClick={copyAll} title="Copies the entire log, including debug lines — filters don't apply">
+              {copied ? 'Copied' : 'Copy all'}
             </Button>
-            <LinkButton size="sm" href={logsDownloadUrl} title="Downloads the entire log, including debug lines — filters don't apply">
+            <LinkButton size="sm" icon="download" href={logsDownloadUrl} title="Downloads the entire log, including debug lines — filters don't apply">
               Download
             </LinkButton>
-            <Button variant="danger" size="sm" onClick={clearAll}>
+            <Button variant="danger" size="sm" icon="trash" onClick={clearAll}>
               Clear
             </Button>
           </>

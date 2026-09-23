@@ -151,7 +151,7 @@ export default function CollectionManager({
       {error && <Banner className="mb-4">{error}</Banner>}
 
       {/* Create */}
-      <form onSubmit={add} className="flex flex-wrap gap-2 items-end border border-edge rounded-lg p-3 mb-4 bg-canvas/40">
+      <form onSubmit={add} className="flex flex-wrap gap-2 items-end border border-edge rounded-xl p-4 mb-4 bg-sunken/60">
         <label className="flex flex-col gap-1 text-sm flex-1 min-w-40">
           <span className="text-ink-muted">New collection</span>
           <Input placeholder="Nick Jr." value={name} onChange={(e) => setName(e.target.value)} />

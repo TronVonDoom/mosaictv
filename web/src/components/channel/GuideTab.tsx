@@ -2,9 +2,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, type Playout } from '../../lib/api'
 import { errorMessage } from '../../lib/errors'
 import { programLabel } from '../../lib/format'
-import TimelineView from '../TimelineView'
-import { Button, Card, EmptyState, InfoHint, Skeleton, cx } from '../ui'
+import { useNow } from '../../lib/hooks'
+import GuideGrid from '../GuideGrid'
+import MediaDetailModal from '../MediaDetailModal'
+import { Button, Card, EmptyState, InfoHint, LiveBadge, Segmented, Skeleton, cx } from '../ui'
 import type { ChannelTabProps } from './types'
+import { confirmDialog } from '../../lib/confirm'
 
 function fmtClock(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -33,6 +36,8 @@ export default function GuideTab({
   const [building, setBuilding] = useState(false)
   // The configured horizon, so the button names the depth it will build.
   const [horizon, setHorizon] = useState<number | null>(null)
+  const [detailId, setDetailId] = useState<number | null>(null)
+  const nowMs = useNow(30000)
 
   const hasSchedule = ch.rotationItems.length > 0 || ch.timeBlocks.length > 0
 
@@ -76,12 +81,15 @@ export default function GuideTab({
   const depth = horizon == null ? '' : horizon % 24 === 0 ? `${horizon / 24}d` : `${horizon}h`
   const buildLabel = building ? 'Building…' : depth ? `Build ${depth}` : 'Build'
 
-  const reset = (hard = false) => {
+  const reset = async (hard = false) => {
     if (
       hard &&
-      !confirm(
-        'Restart every show/rotation from the beginning? This loses all saved playback positions on this channel.',
-      )
+      !(await confirmDialog({
+        title: 'Restart every show from episode 1?',
+        message: 'Every collection on this channel starts over from the beginning. Saved playback positions are lost.',
+        confirmLabel: 'Restart from S1E1',
+        danger: true,
+      }))
     )
       return
     return run(async () => {
@@ -94,22 +102,16 @@ export default function GuideTab({
     <Card>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <h2 className="font-semibold">Guide preview</h2>
-          <div className="flex rounded-lg border border-edge-strong overflow-hidden text-xs">
-            {(['timeline', 'list'] as const).map((v) => (
-              <button
-                key={v}
-                onClick={() => setView(v)}
-                aria-pressed={view === v}
-                className={cx(
-                  'px-2.5 py-1 capitalize transition-colors',
-                  view === v ? 'bg-indigo-500/20 text-indigo-200' : 'text-ink-muted hover:text-ink-soft',
-                )}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
+          <h2 className="font-semibold text-[15px] tracking-tight">Guide</h2>
+          <Segmented
+            size="sm"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: 'timeline', label: 'Timeline', icon: 'guide' },
+              { value: 'list', label: 'List', icon: 'list' },
+            ]}
+          />
           <InfoHint>
             The guide is generated ahead of time, as far out as the schedule horizon in Settings.
             It's what the XMLTV feed publishes and what the channel actually plays.
@@ -117,15 +119,15 @@ export default function GuideTab({
         </div>
 
         <div className="flex gap-2">
-          <Button onClick={build} disabled={building || !hasSchedule}>
+          <Button icon="bolt" onClick={build} disabled={building || !hasSchedule} loading={building}>
             {buildLabel}
           </Button>
           <Button
             variant="secondary"
+            icon="refresh"
             onClick={() => reset(false)}
             disabled={building || !hasSchedule}
             title="Clears the schedule and rebuilds — shows continue where they left off"
-            className="hover:border-amber-500/60 hover:text-amber-300"
           >
             Rebuild
           </Button>
@@ -160,26 +162,36 @@ export default function GuideTab({
           }
         />
       ) : view === 'timeline' ? (
-        <TimelineView playout={playout} />
+        <GuideGrid
+          channels={[{ id: ch.id, number: ch.number, name: ch.name, logoId: ch.logoId }]}
+          guides={{ [ch.id]: playout }}
+          nowMs={nowMs}
+          hours={24}
+          pxPerMin={5.5}
+          rowHeight={80}
+          onSelect={(e) => e.mediaItem && setDetailId(e.mediaItem.id)}
+        />
       ) : (
-        <div className="divide-y divide-edge/60">
+        <div className="rounded-xl border border-edge bg-sunken/40 divide-y divide-edge/60 overflow-hidden">
           {playout.items.slice(0, 60).map((it, i) => {
             const isNow =
               new Date(it.startTime) <= new Date(playout.now) &&
               new Date(it.stopTime) > new Date(playout.now)
             return (
-              <div
+              <button
                 key={it.id}
-                className={cx('flex items-center gap-3 py-2 text-sm', isNow && 'text-indigo-200')}
+                type="button"
+                disabled={!it.mediaItem}
+                onClick={() => it.mediaItem && setDetailId(it.mediaItem.id)}
+                className={cx(
+                  'w-full flex items-center gap-3 px-4 py-2.5 text-left text-[13.5px] transition-colors enabled:hover:bg-white/[0.03]',
+                  isNow && 'bg-indigo-500/[0.07] text-ink',
+                )}
               >
-                <span className="font-mono text-xs text-ink-faint w-16 shrink-0 tabular-nums">
+                <span className="text-[12.5px] text-ink-faint w-[4.5rem] shrink-0 tabular-nums">
                   {fmtClock(it.startTime)}
                 </span>
-                {isNow && (
-                  <span className="text-[10px] bg-indigo-500/20 text-indigo-300 rounded px-1.5 py-0.5 shrink-0">
-                    NOW
-                  </span>
-                )}
+                {isNow && <LiveBadge label="Now" />}
                 <span
                   className={cx(
                     'flex-1 min-w-0 truncate',
@@ -197,11 +209,12 @@ export default function GuideTab({
                   )}
                 </span>
                 {i === 0 && !isNow && <span className="text-[10px] text-ink-ghost shrink-0">next</span>}
-              </div>
+              </button>
             )
           })}
         </div>
       )}
+      {detailId != null && <MediaDetailModal id={detailId} onClose={() => setDetailId(null)} />}
     </Card>
   )
 }

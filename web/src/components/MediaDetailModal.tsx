@@ -1,132 +1,140 @@
 import { useEffect, useState } from 'react'
 import Icon from './Icon'
-import {
-  api,
-  artworkUrl,
-  tmdbImage,
-  type MediaItemDetail,
-} from '../lib/api'
+import { api, artworkUrl, tmdbImage, type MediaItemDetail } from '../lib/api'
 import { episodeCode, formatDuration, formatSize, posterGradient } from '../lib/format'
-import { Modal } from './ui'
+import { Badge, IconButton, Modal, Skeleton } from './ui'
 
-function Row({ label, value }: { label: string; value: string }) {
+function Spec({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex gap-3 py-1.5 border-b border-edge/60 last:border-0">
-      <span className="text-ink-faint text-xs uppercase tracking-wide w-24 shrink-0 pt-0.5">
-        {label}
-      </span>
-      <span className="text-sm text-ink break-words min-w-0">{value}</span>
+    <div className="min-w-0">
+      <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">{label}</dt>
+      <dd className={`mt-0.5 text-[13px] text-ink-soft break-words ${mono ? 'font-mono text-[12px]' : ''}`}>{value}</dd>
     </div>
   )
 }
 
-export default function MediaDetailModal({
-  id,
-  onClose,
-}: {
-  id: number
-  onClose: () => void
-}) {
+/** The detail view for one file — a movie, an episode, a clip: its artwork,
+ *  what TMDB knows about it, and what's on disk. */
+export default function MediaDetailModal({ id, onClose }: { id: number; onClose: () => void }) {
   const [item, setItem] = useState<MediaItemDetail | null>(null)
+  const [backdropOk, setBackdropOk] = useState(true)
 
   useEffect(() => {
     setItem(null)
+    setBackdropOk(true)
     api.mediaItem(id).then(setItem).catch(() => {})
   }, [id])
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
   const isEpisode = item?.type === 'episode'
   const sxe = (item && episodeCode(item)) || null
+  const poster = !item
+    ? null
+    : item.posterPath
+      ? artworkUrl(item.id, 'poster')
+      : item.showPosterPath || isEpisode
+        ? artworkUrl(item.id, 'show')
+        : item.tmdbPosterPath
+          ? artworkUrl(item.id, 'poster')
+          : null
+  // Episodes use their show's backdrop; the route resolves that server-side.
+  const wantBackdrop = !!item && backdropOk && (item.tmdbBackdropPath != null || isEpisode)
+  const genres = item?.genres ? item.genres.split(',').map((g) => g.trim()).filter(Boolean) : []
 
   return (
-    <Modal onClose={onClose} panelClassName="max-w-2xl w-full p-6">
-        {!item ? (
-          <div className="text-ink-muted text-sm py-10 text-center">Loading…</div>
-        ) : (
-          <div className="flex flex-col sm:flex-row gap-5">
-            <div
-              className="w-28 sm:w-32 shrink-0 aspect-[2/3] rounded-lg self-center sm:self-start flex items-center justify-center text-4xl overflow-hidden relative"
-              style={{ background: posterGradient(item.showTitle || item.title) }}
-            >
-              {item.posterPath ? (
-                <img src={artworkUrl(item.id, 'poster')} alt={item.title} className="absolute inset-0 w-full h-full object-cover" />
-              ) : item.showPosterPath ? (
-                <img src={artworkUrl(item.id, 'show')} alt={item.title} className="absolute inset-0 w-full h-full object-cover" />
-              ) : item.tmdbPosterPath ? (
-                <img src={tmdbImage(item.tmdbPosterPath)} alt={item.title} className="absolute inset-0 w-full h-full object-cover" />
-              ) : (
-                <Icon
-                  name={item.type === 'movie' ? 'movie' : item.type === 'episode' ? 'show' : 'clip'}
-                  size={40}
-                  colored
-                />
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  {isEpisode && item.showTitle && (
-                    <div className="text-ink-muted text-sm">{item.showTitle}</div>
-                  )}
-                  <h2 className="text-xl font-semibold">
-                    {sxe && <span className="text-ink-faint mr-2">{sxe}</span>}
-                    {item.title}
-                    {item.year && !isEpisode && (
-                      <span className="text-ink-faint font-normal"> ({item.year})</span>
-                    )}
-                  </h2>
-                </div>
-                <button
-                  onClick={onClose}
-                  className="text-ink-faint hover:text-ink text-xl leading-none"
-                  aria-label="Close"
-                >
-                  ×
-                </button>
-              </div>
-              {item.missing && (
-                <div className="mt-2 text-xs text-amber-400">
-                  ⚠ File is missing (not found on last scan)
-                </div>
-              )}
-              {(item.rating || item.genres) && (
-                <div className="mt-2 text-sm">
-                  {item.rating ? <span className="text-amber-300">⭐ {item.rating.toFixed(1)}</span> : null}
-                  {item.genres && (
-                    <span className="text-ink-faint">
-                      {item.rating ? ' · ' : ''}
-                      {item.genres}
-                    </span>
-                  )}
-                </div>
-              )}
-              {item.overview && (
-                <p className="mt-3 text-sm text-ink-soft leading-relaxed">{item.overview}</p>
-              )}
-              <div className="mt-4">
-                <Row label="Library" value={item.library.name} />
-                <Row label="Type" value={item.type} />
-                <Row label="Duration" value={formatDuration(item.durationSec)} />
-                <Row
-                  label="Resolution"
-                  value={item.width && item.height ? `${item.width}×${item.height}` : '—'}
-                />
-                <Row
-                  label="Codecs"
-                  value={[item.videoCodec, item.audioCodec].filter(Boolean).join(' / ') || '—'}
-                />
-                <Row label="Container" value={item.container || '—'} />
-                <Row label="Size" value={formatSize(item.sizeBytes)} />
-                <Row label="Path" value={item.path} />
-              </div>
-            </div>
-          </div>
+    <Modal onClose={onClose} panelClassName="w-full max-w-3xl overflow-hidden">
+      {/* Backdrop banner */}
+      <div className="relative h-52 sm:h-60" style={{ background: posterGradient(item?.showTitle || item?.title || 'x') }}>
+        {wantBackdrop && (
+          <img
+            src={artworkUrl(item!.id, 'backdrop')}
+            alt=""
+            onError={() => setBackdropOk(false)}
+            className="absolute inset-0 w-full h-full object-cover fade-in"
+          />
         )}
+        {!wantBackdrop && poster && (
+          <img src={poster} alt="" className="absolute inset-0 w-full h-full object-cover blur-2xl scale-125 opacity-50" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/40 to-black/20" />
+        <IconButton
+          icon="close"
+          label="Close"
+          onClick={onClose}
+          className="absolute top-3 right-3 bg-black/45 backdrop-blur-md text-white hover:bg-black/65 hover:text-white"
+        />
+      </div>
+
+      <div className="relative px-6 pb-6 -mt-24 flex flex-col sm:flex-row gap-6">
+        <div
+          className="w-32 sm:w-40 shrink-0 aspect-[2/3] rounded-xl overflow-hidden self-center sm:self-start shadow-[0_24px_48px_-16px_rgb(0_0_0/0.9)] ring-1 ring-white/15 grid place-items-center"
+          style={{ background: posterGradient(item?.showTitle || item?.title || 'x') }}
+        >
+          {poster ? (
+            <img src={poster} alt="" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
+          ) : item?.tmdbPosterPath ? (
+            <img src={tmdbImage(item.tmdbPosterPath)} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <Icon name={item?.type === 'movie' ? 'movie' : item?.type === 'episode' ? 'show' : 'clip'} size={36} className="text-white/60" />
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0 sm:pt-20">
+          {!item ? (
+            <div className="space-y-3 pt-2">
+              <Skeleton className="h-6 w-2/3" />
+              <Skeleton className="h-4 w-1/3" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          ) : (
+            <>
+              {isEpisode && item.showTitle && (
+                <div className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-muted">{item.showTitle}</div>
+              )}
+              <h2 className="text-[22px] font-semibold tracking-tight leading-tight">
+                {item.title}
+                {item.year && !isEpisode && <span className="text-ink-faint font-normal"> ({item.year})</span>}
+              </h2>
+              <div className="mt-2 flex items-center gap-2 flex-wrap text-[13px] text-ink-muted">
+                {sxe && <Badge tone="accent">{sxe}</Badge>}
+                {item.rating ? (
+                  <span className="inline-flex items-center gap-1 font-semibold text-amber-300">
+                    <Icon name="star" size={13} className="fill-current" /> {item.rating.toFixed(1)}
+                  </span>
+                ) : null}
+                <span className="tabular-nums">{formatDuration(item.durationSec)}</span>
+                {item.height ? <Badge>{item.height >= 2000 ? '4K' : `${item.height}p`}</Badge> : null}
+                {item.missing && (
+                  <Badge tone="warn" dot>
+                    Missing on disk
+                  </Badge>
+                )}
+              </div>
+              {genres.length > 0 && (
+                <div className="mt-3 flex gap-1.5 flex-wrap">
+                  {genres.map((g) => (
+                    <span key={g} className="rounded-full border border-edge-strong bg-raised/60 px-2.5 py-0.5 text-[11.5px] text-ink-soft">
+                      {g}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {item.overview && <p className="mt-4 text-[13.5px] text-ink-soft leading-relaxed">{item.overview}</p>}
+
+              <dl className="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-x-5 gap-y-3.5 rounded-xl border border-edge bg-sunken/60 p-4">
+                <Spec label="Library" value={item.library.name} />
+                <Spec label="Resolution" value={item.width && item.height ? `${item.width}×${item.height}` : '—'} />
+                <Spec label="Codecs" value={[item.videoCodec, item.audioCodec].filter(Boolean).join(' / ') || '—'} />
+                <Spec label="Container" value={item.container || '—'} />
+                <Spec label="Size" value={formatSize(item.sizeBytes)} />
+                <Spec label="Type" value={item.type} />
+                <div className="col-span-2 sm:col-span-3">
+                  <Spec label="Path" value={item.path} mono />
+                </div>
+              </dl>
+            </>
+          )}
+        </div>
+      </div>
     </Modal>
   )
 }

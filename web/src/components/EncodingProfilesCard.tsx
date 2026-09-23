@@ -3,6 +3,7 @@ import { api, type EncodingProfile, type ProfileFields, type ProfileInput } from
 import { toast } from '../lib/toast'
 import { errorMessage } from '../lib/errors'
 import { Banner, Card, Field, Input, Section, Select } from './ui'
+import { confirmDialog } from '../lib/confirm'
 
 const RES = [
   { label: '480p', width: 854, height: 480 },
@@ -93,7 +94,15 @@ export default function EncodingProfilesCard() {
     }
   }
   async function del(id: number) {
-    if (!confirm('Delete this profile? Channels using it fall back to the built-in default.')) return
+    if (
+      !(await confirmDialog({
+        title: 'Delete this profile?',
+        message: 'Channels using it fall back to the built-in default.',
+        confirmLabel: 'Delete profile',
+        danger: true,
+      }))
+    )
+      return
     await api.deleteProfile(id).catch(() => {})
     if (editingId === id) startNew()
     refresh()
@@ -129,7 +138,7 @@ export default function EncodingProfilesCard() {
       )}
 
       {form && (
-        <div className="rounded-lg border border-edge bg-canvas/40 p-4">
+        <div className="rounded-xl border border-edge bg-sunken/60 p-4">
           <div className="text-sm font-medium mb-3">{editingId ? 'Edit profile' : 'New profile'}</div>
           <div className="space-y-3">
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">

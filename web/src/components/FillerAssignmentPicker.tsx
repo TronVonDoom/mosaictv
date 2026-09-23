@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { api, type Filler, type FillerOwner } from '../lib/api'
 import { toast } from '../lib/toast'
 import FillerEditor, { fillerSummary, fillerStyleLabel } from './FillerEditor'
-import { Modal } from './ui'
+import { Button, Modal } from './ui'
 
 // Assign fillers from the global library (managed under Media) to a channel
 // (its default gap filler) or a time block. Checking a box assigns it; "+ New"
@@ -50,19 +50,16 @@ export default function FillerAssignmentPicker({ owner, hint }: { owner: FillerO
   }
 
   return (
-    <div className="rounded-lg border border-edge bg-canvas/40 p-3">
+    <div className="rounded-xl border border-edge bg-sunken/60 p-4">
       <div className="flex items-center justify-between gap-2 mb-2">
         <span className="text-sm font-medium">
           Assigned fillers {hint && <span className="text-xs text-ink-faint font-normal">({hint})</span>}
         </span>
         <div className="flex items-center gap-3 shrink-0">
           {!creating && (
-            <button
-              onClick={() => setCreating(true)}
-              className="text-xs rounded border border-edge-strong hover:border-indigo-500 hover:text-indigo-300 px-2 py-0.5"
-            >
-              + New filler
-            </button>
+            <Button variant="secondary" size="sm" icon="plus" onClick={() => setCreating(true)}>
+              New filler
+            </Button>
           )}
           <Link to="/studio#fillers" className="text-xs text-indigo-300 hover:text-indigo-200">Manage library →</Link>
         </div>
