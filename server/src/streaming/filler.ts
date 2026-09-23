@@ -786,11 +786,12 @@ export async function generateDraftStill(f: FillerRow, ctx: FillerLogoContext): 
  * animated fallback plus every channel/block filler.
  */
 export async function warmFiller(): Promise<void> {
-  // Sweep any caption files a hard crash left behind (a clean exit removes each
-  // after its segment), plus any orphaned still previews (never meant to last).
+  // Sweep any caption or info-card files a hard crash left behind (a clean exit
+  // removes each after its segment), plus any orphaned still previews (never
+  // meant to last).
   try {
     for (const f of fs.readdirSync(dataDir())) {
-      if (/^caption-.*\.txt$/.test(f)) fs.rmSync(path.join(dataDir(), f), { force: true })
+      if (/^caption-.*\.txt$|^card-.*\.png$/.test(f)) fs.rmSync(path.join(dataDir(), f), { force: true })
     }
     for (const f of fs.readdirSync(previewsDir())) fs.rmSync(path.join(previewsDir(), f), { force: true })
   } catch {

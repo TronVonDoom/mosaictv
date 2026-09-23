@@ -26,9 +26,9 @@ RUN npm run build
 # without. Trixie ships 7.1. The build stages stay where they are; only
 # compiled JS crosses from them, and this is the stage ffmpeg comes from.
 FROM node:22-trixie-slim AS runtime
-# ffmpeg = streaming pipeline (later); openssl = required by Prisma;
-# fonts-dejavu-core = a known TTF on disk so ffmpeg's drawtext (burned-in
-# "coming up next" / schedule text) has a font to render with.
+# ffmpeg = streaming pipeline; openssl = required by Prisma;
+# fonts-dejavu-core = the fallback for any glyph the on-screen info cards'
+# bundled Inter faces (server/assets/fonts) don't have.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ffmpeg openssl ca-certificates fonts-dejavu-core \
   && rm -rf /var/lib/apt/lists/*
@@ -42,8 +42,10 @@ RUN npm ci --omit=dev
 COPY server/prisma ./prisma
 RUN npx prisma generate
 
-# Compiled backend + built frontend
+# Compiled backend + built frontend, and the fonts the info cards render with
+# (card.ts finds them at ../../assets from dist/streaming)
 COPY --from=server-build /server/dist ./dist
+COPY server/assets ./assets
 COPY --from=web-build /web/dist ./public
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh

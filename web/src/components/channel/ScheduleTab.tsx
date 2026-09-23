@@ -368,12 +368,12 @@ export default function ScheduleTab({
             </label>
             {blk.comingUp ? (
               <div className="mt-3">
-                <ComingUpFields cfg={blk.comingUp} onChange={(c) => setBlk({ ...blk, comingUp: c })} />
+                <ComingUpFields cfg={blk.comingUp} onChange={(c) => setBlk({ ...blk, comingUp: c })} channelId={channelId} />
               </div>
             ) : (
               <p className="text-xs text-ink-faint mt-1">
                 Uses the channel's setting from the General tab. Check this to give the block its own —
-                including turning the caption off for this block only.
+                including turning the card off for this block only.
               </p>
             )}
           </Section>

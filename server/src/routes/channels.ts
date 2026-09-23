@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { prisma } from '../db.js'
 import { MAX_HORIZON_HOURS, buildPlayout, horizonHours, prunePlayout, resetPlayout } from '../playout.js'
 import { sanitizeComingUp } from '../streaming/overlays.js'
+import { comingUpPreview } from '../streaming/cardPreview.js'
 import { restyleSegmenter, segmenterViewers } from '../streaming/segmenter.js'
 import { activeBlockAt } from '../streaming/logo.js'
 import { asOrderSetting } from '../collections.js'
@@ -151,6 +152,20 @@ channelsRouter.patch('/:id', async (req, res) => {
     res.json(c)
   } catch {
     res.status(409).json({ error: 'Update failed — is that channel number already in use?' })
+  }
+})
+
+// POST /api/channels/:id/coming-up/preview { comingUp } -> PNG of the up-next
+// card this channel's next program would get, as it airs, for the settings
+// form. Takes the unsaved settings, so it follows the form as you edit.
+channelsRouter.post('/:id/coming-up/preview', async (req, res) => {
+  try {
+    const cfg = sanitizeComingUp({ ...(req.body?.comingUp ?? {}), enabled: true })
+    const png = await comingUpPreview(Number(req.params.id), cfg)
+    res.setHeader('Cache-Control', 'no-store')
+    res.type('image/png').send(png)
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : 'Preview failed' })
   }
 })
 

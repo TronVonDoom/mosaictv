@@ -19,7 +19,7 @@ import type { ChannelTabProps } from './types'
 const offComingUp = (): ComingUpConfig => ({ ...DEFAULT_COMINGUP, enabled: false })
 
 /** Identity and output: number, name, group, logo, encoding profile, and the
- *  channel-wide "coming up next" caption. */
+ *  channel-wide "coming up next" card. */
 export default function GeneralTab({ channelId, ch, guard, drafts }: ChannelTabProps) {
   const [profiles, setProfiles] = useState<EncodingProfile[]>([])
   const savedForm = () => ({
@@ -34,7 +34,7 @@ export default function GeneralTab({ channelId, ch, guard, drafts }: ChannelTabP
   const savedCu = () => parseComingUp(ch.comingUp) ?? offComingUp()
   const [form, setForm, clearFormDraft] = useDraft(drafts, 'general.form', savedForm)
   const [cu, setCu, clearCuDraft] = useDraft<ComingUpConfig>(drafts, 'general.comingUp', savedCu)
-  // A caption that's switched off saves as nothing, so its hidden fields don't
+  // A card that's switched off saves as nothing, so its hidden fields don't
   // count as a change.
   const cuValue = (c: ComingUpConfig) => (c.enabled ? JSON.stringify(c) : null)
   const dirty =
@@ -179,18 +179,18 @@ export default function GeneralTab({ channelId, ch, guard, drafts }: ChannelTabP
 
         <Section title="Coming up next" className="mt-5">
           <p className="text-ink-muted text-sm mb-3">
-            Burns a caption naming the next programme over the current one, across this channel's
-            rotation and blocks alike.{' '}
+            A card naming the next program slides in over the current one — its poster, title,
+            episode and start time — across this channel's rotation and blocks alike.{' '}
             <InfoHint>
-              A time block can override this on the Schedule tab. The caption never shows over filler;
-              it names the programme after the break instead. Saving applies it to what's on air right
-              away.
+              A time block can override this on the Schedule tab. The card never shows over filler; it
+              names the program after the break instead, and a broadcast episode gets one card near its
+              end. Saving applies it to what's on air right away.
             </InfoHint>
           </p>
-          <ComingUpFields cfg={cu} onChange={setCu} />
+          <ComingUpFields cfg={cu} onChange={setCu} channelId={channelId} />
         </Section>
 
-        {/* Below everything it saves: the caption fields grow the form well past
+        {/* Below everything it saves: the card fields grow the form well past
             the fold, and a Save above them read as "already applied". */}
         <div className="mt-5 flex items-center justify-end gap-3">
           {dirty && <Badge tone="warn">Unsaved changes</Badge>}

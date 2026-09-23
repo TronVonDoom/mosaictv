@@ -26,7 +26,7 @@ Channel
   (default: built-in 720p30). See [Hardware Acceleration](hardware-acceleration.md).
 - **Logo** — shown in players' guides, and doubles as the default on-screen
   watermark. See [Branding](branding.md).
-- **Coming up next** — optional burned-in caption naming the next program.
+- **Coming up next** — an optional card naming the next program, with its poster.
 
 ## Collections
 
@@ -181,7 +181,7 @@ Per block:
   - **hard** — the block starts exactly on time; the gap before it is filled
     with filler so the previous program doesn't overrun.
 - **Logo override** — a different on-screen watermark while the block airs.
-- **"Coming up next" override** — per-block caption settings, including
+- **"Coming up next" override** — per-block card settings, including
   turning it off for just this block.
 
 A block's **filler mode** — how leftover time inside it is handled so it ends

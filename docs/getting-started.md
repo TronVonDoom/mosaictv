@@ -127,8 +127,9 @@ VLC. Full player-by-player instructions: [Connecting Players](clients.md).
 - **Station-ID filler** — fill the gaps between programs with generated
   station-ID clips or your own bumpers, per channel and per block.
   → [Branding](branding.md)
-- **"Coming up next" captions** — burn a caption naming the next program, per
-  channel or per block. Channel **General** tab.
+- **"Up next" cards** — a card naming the next program, with its poster, slides
+  in near the end of each one, per channel or per block. Channel **General**
+  tab. → [Branding](branding.md#up-next-cards)
 - **Encoding profiles** — resolution/fps/bitrate/GPU per channel under
   **Settings**. → [Hardware Acceleration](hardware-acceleration.md)
 - **Backups** — **Settings → Maintenance → Download backup**.

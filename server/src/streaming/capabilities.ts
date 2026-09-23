@@ -1,4 +1,4 @@
-// What THIS host's ffmpeg can actually do — encoders, GPU decode, drawtext,
+// What THIS host's ffmpeg can actually do — encoders, GPU decode,
 // and the newer readrate options — plus the encoder argument construction that
 // depends on the answer. Everything here is probed at most once and cached, so
 // the streaming path never pays for detection twice.
@@ -206,48 +206,9 @@ export function nvdecIfReady(codec: string, graceMs = 400): Promise<boolean> {
  */
 export async function warmCapabilities(): Promise<void> {
   await detectReadrateBurst()
-  await detectTextOverlay()
   const enc = await resolveEncoder('auto')
   if (enc !== 'h264_nvenc') return
   for (const codec of Object.keys(SAMPLE_ENCODERS)) await canNvdecCodec(codec)
-}
-
-// ---- Text overlay support ---------------------------------------------------
-// Burned-in text (coming-up-next, song chyron) needs drawtext, which is only
-// present when ffmpeg was built with libfreetype, plus a font file on disk.
-// Both are detected ONCE; if either is missing, text overlays are silently
-// skipped — a missing caption must never fail an encode and black out the
-// stream. fonts-dejavu-core (installed in the image) provides these paths.
-const FONT_REGULAR = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
-const FONT_BOLD = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
-export type TextSupport = { font: string; fontBold: string }
-let textCache: TextSupport | null | undefined
-export function detectTextOverlay(): Promise<TextSupport | null> {
-  if (textCache !== undefined) return Promise.resolve(textCache)
-  return new Promise((resolve) => {
-    const font = fs.existsSync(FONT_REGULAR) ? FONT_REGULAR : undefined
-    const fontBold = fs.existsSync(FONT_BOLD) ? FONT_BOLD : font
-    if (!font) {
-      log('warn', 'ffmpeg', 'No DejaVu font on disk — on-screen text overlays disabled')
-      return resolve((textCache = null))
-    }
-    let out = ''
-    const p = spawn('ffmpeg', ['-hide_banner', '-filters'])
-    p.stdout.on('data', (d) => (out += d))
-    p.on('error', () => {
-      log('warn', 'ffmpeg', 'Could not probe ffmpeg filters — text overlays disabled')
-      resolve((textCache = null))
-    })
-    p.on('close', () => {
-      if (/\bdrawtext\b/.test(out)) {
-        log('info', 'ffmpeg', 'Text overlay (drawtext) available')
-        resolve((textCache = { font, fontBold: fontBold as string }))
-      } else {
-        log('warn', 'ffmpeg', 'ffmpeg lacks the drawtext filter (no libfreetype) — text overlays disabled')
-        resolve((textCache = null))
-      }
-    })
-  })
 }
 
 // ---- Encoder arguments ------------------------------------------------------
