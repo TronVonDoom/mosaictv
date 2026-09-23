@@ -1,5 +1,60 @@
 # Changelog
 
+## 0.11.0 — In your order (2026-09-23)
+
+Rotations that follow your arrangement and keep each show's place, clearer
+playback orders, a smoother and deeper frosted glass, notifications, and
+casting from the preview.
+
+- **Rotate shows follows your arrangement.** It used to take the shows A–Z,
+  whatever order you'd dragged them into, so a rotation arranged Doug, Rugrats,
+  Hey Arnold! aired Doug, Hey Arnold!, Rugrats. It now goes in the order you
+  set, with shows pulled in by a smart filter after yours, A–Z.
+- **Each show keeps its own place in a rotation.** A rotation used to track one
+  shared counter, so adding a show sent every other show back several episodes
+  (and removing one skipped them ahead). Now a new show starts at episode 1
+  while the rest carry on, a removed show resumes where it was if you add it
+  back, and reordering only changes whose turn is next. Existing rotations
+  carry on from exactly where each show is.
+- **Clearer playback orders.** The five choices have plain names and a line
+  each on what they do, and the collection settings preview the first
+  airings as you pick:
+  - **Your order** (was "hand-picked order") — as arranged, each show's full
+    run before the next.
+  - **Release order** (was "in order") — oldest first: movies by year, each
+    show's episodes in order. Its shows now follow your arrangement rather than
+    A–Z.
+  - **Rotate shows** — one episode from each show in turn, in your order.
+  - **Rotate shows, mixed** (replaces "shuffle shows") — every show gets one
+    episode per round, each round in a new random order, never the same show
+    twice running. The old "shuffle shows" played a random show's entire run
+    before moving on.
+  - **Shuffle** — unchanged.
+- **"What airs" previews the collection's actual order.** It always showed the
+  collection in "in order", whatever it was set to.
+- **Frosted-glass fillers scroll smoothly.** The logos behind the glass moved
+  in a stutter — still for one frame, two pixels the next — because the scene
+  was composited in a colour format that snaps every position to an even
+  pixel. It's composited at full colour now, and the rows glide an even
+  distance every frame.
+- **Drifting lights instead of the rotating background.** Out-of-focus lights
+  rise slowly behind the glass at three depths — small and faint far back,
+  large ones drifting in front of the logo rows — for a sense of depth and
+  movement. The background colours no longer spin.
+- **The divider is optional.** Frosted glass no longer draws the seam between
+  the two halves unless you tick **Divider between the halves**. Existing
+  frosted fillers regenerate in the new look, without the divider.
+- **Click a filler's still to enlarge it.**
+- **Notifications.** A bell in the top bar follows background work — filler
+  generation, library scans and metadata fetches — with live progress, and
+  pops up a message when each finishes, wherever you are in the app.
+- **Cast from the channel preview.** A Cast button sends the channel to a
+  Chromecast or Google TV from Chrome or Edge, and to AirPlay from Safari.
+  Chrome only casts from an HTTPS page; on plain http the button explains
+  what's needed.
+- **"Connect a player" is now "Live TV setup"**, so it no longer looks like
+  a casting button.
+
 ## 0.10.1 — Frosted glass that looks like glass (2026-09-23)
 
 - **Frosted glass that looks like glass.** The frosted-glass filler was
