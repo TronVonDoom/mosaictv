@@ -24,6 +24,7 @@ function fillerData(body: Record<string, unknown>) {
     durationSec: Math.max(5, Math.min(600, Number(body?.durationSec) || 30)),
     resolution: RESOLUTIONS.includes(String(body?.resolution)) ? String(body.resolution) : '1080p',
     logoScale: Math.max(0.4, Math.min(2, Number.isFinite(scale) ? scale : 1)),
+    divider: body?.divider === true || body?.divider === 'true',
   }
 }
 
@@ -105,6 +106,7 @@ fillersRouter.post('/preview', async (req, res) => {
         logoId: d.logoId,
         resolution: d.resolution,
         logoScale: d.logoScale,
+        divider: d.divider,
       },
       ctx,
     )
@@ -143,7 +145,7 @@ async function dropAsset(assetId: number | null): Promise<void> {
 
 // Everything that changes how the clip renders. `name` is only a label, so
 // renaming a filler shouldn't throw away a clip that's still correct.
-const RENDER_FIELDS = ['style', 'assetId', 'audioAssetId', 'logoId', 'durationMode', 'durationSec', 'resolution', 'logoScale'] as const
+const RENDER_FIELDS = ['style', 'assetId', 'audioAssetId', 'logoId', 'durationMode', 'durationSec', 'resolution', 'logoScale', 'divider'] as const
 
 fillersRouter.patch('/:id', async (req, res) => {
   const id = Number(req.params.id)
@@ -197,7 +199,7 @@ fillersRouter.delete('/:id', async (req, res) => {
 // job the server owns, so navigating away — or reloading — must be able to pick
 // it back up. Finished jobs linger briefly so a returning page still learns how
 // they ended, then age out.
-type GenState = { percent: number; done: boolean; error?: string; assetId?: number; finishedAt?: number }
+type GenState = { percent: number; done: boolean; error?: string; assetId?: number; startedAt: number; finishedAt?: number }
 const genJobs = new Map<number, GenState>()
 const GEN_KEEP_MS = 10 * 60_000
 
@@ -206,6 +208,12 @@ function pruneGenJobs(): void {
   for (const [id, s] of genJobs) {
     if (s.done && now - (s.finishedAt ?? 0) > GEN_KEEP_MS) genJobs.delete(id)
   }
+}
+
+/** Generation jobs the server knows about, running or recently finished (for /api/activity). */
+export function fillerJobs(): (GenState & { fillerId: number })[] {
+  pruneGenJobs()
+  return [...genJobs].map(([fillerId, s]) => ({ fillerId, ...s }))
 }
 
 // Save a freshly-built clip as a Media asset (kind "filler"), reusing the
@@ -237,7 +245,8 @@ fillersRouter.post('/:id/generate', async (req, res) => {
   if (genJobs.get(id)?.done === false) return res.json({ started: true }) // already running
 
   const ctx = ownerFilter(req)
-  genJobs.set(id, { percent: 0, done: false })
+  const startedAt = Date.now()
+  genJobs.set(id, { percent: 0, done: false, startedAt })
   const name = filler.name?.trim() || `${filler.style} filler`
   ;(async () => {
     try {
@@ -247,12 +256,13 @@ fillersRouter.post('/:id/generate', async (req, res) => {
       })
       if (!r?.clip || !fs.existsSync(r.clip)) throw new Error('Generation produced no clip — check the Logs.')
       const assetId = await registerGeneratedAsset(id, name, r.clip, filler.generatedAssetId)
-      genJobs.set(id, { percent: 100, done: true, assetId, finishedAt: Date.now() })
+      genJobs.set(id, { percent: 100, done: true, assetId, startedAt, finishedAt: Date.now() })
     } catch (e) {
       genJobs.set(id, {
         percent: 100,
         done: true,
         error: e instanceof Error ? e.message : 'Generation failed',
+        startedAt,
         finishedAt: Date.now(),
       })
     }

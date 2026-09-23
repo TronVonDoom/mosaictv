@@ -16,6 +16,21 @@ export const iptvRouter = Router()
 
 const clientIp = (req: Request) => (req.socket.remoteAddress ?? '') || undefined
 
+// Casting hands the TV the channel's HLS address, and the TV's own web player
+// fetches it cross-origin — so the playlist and segments carry CORS headers.
+// They're read-only and already open to any player on the network; the M3U
+// and XMLTV stay same-origin.
+const HLS_PATH = /^\/channel\/\d+\/(index\.m3u8|seg_\d+\.ts)$/
+iptvRouter.use((req, res, next) => {
+  if (!HLS_PATH.test(req.path)) return next()
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  if (req.method !== 'OPTIONS') return next()
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', req.header('Access-Control-Request-Headers') ?? 'Range')
+  res.setHeader('Access-Control-Max-Age', '86400')
+  res.status(204).end()
+})
+
 // Live stream (per-client MPEG-TS): GET /iptv/channel/1.ts — a thin -c copy
 // wrapper over the channel's shared HLS segmenter.
 iptvRouter.get(/^\/channel\/(\d+)\.ts$/, (req, res) => {

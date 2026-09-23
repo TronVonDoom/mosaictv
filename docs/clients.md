@@ -6,9 +6,22 @@ MosaicTV speaks the two standards every IPTV-capable player understands:
 - **XMLTV guide (EPG)** — `http://YOUR-SERVER:8688/iptv/xmltv.xml`
 
 (Both URLs — plus the HDHomeRun tuner address — are one click away under
-**Connect a player** in the top bar, with copy buttons and per-player steps.)
+**Live TV setup** in the top bar, with copy buttons and per-player steps.)
 
 Tune in mid-program and a channel picks up at the right spot, just like real TV.
+
+## Casting from the preview
+
+A channel's live preview (click its picture) has a **Cast** button:
+
+- **Chrome / Edge → Chromecast or Google TV.** Chrome only allows casting from
+  a page opened over **HTTPS** (or `localhost`), so it works once MosaicTV is
+  served over HTTPS — Tailscale's `tailscale serve` or a reverse proxy with a
+  real certificate both do it. The TV plays the channel's stream itself, so it
+  must be able to reach that same address. On plain `http://` the button
+  explains this instead; Chrome's own menu (⋮ → Cast…) can still mirror the tab.
+- **Safari → AirPlay.** No HTTPS needed; the preview plays Safari's native
+  stream so it can be handed to an Apple TV.
 
 ---
 

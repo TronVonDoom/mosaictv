@@ -149,21 +149,39 @@ function pulseGraph(dims: Dims, scale: number): string {
 // The frosted scene is built at half size (see frostedGraph).
 const frostedBackDims = (dims: Dims): Dims => ({ w: Math.round(dims.w / 4) * 2, h: Math.round(dims.h / 4) * 2 })
 
+// A fixed pseudo-random sequence, so every render lays the lights out the same.
+function seeded(seed: number): () => number {
+  let s = seed >>> 0
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0
+    return s / 2 ** 32
+  }
+}
+
+// Out-of-focus lights drifting upward behind the glass, at three depths: far
+// ones small, faint and slow; near ones large and quicker, passing in front of
+// the logo rows. Their parallax is what gives the scene depth.
+const ORB_COLORS = ['0x8b5cf6', '0x6366f1', '0x22d3ee', '0xec4899', '0xa78bfa', '0x38bdf8']
+const ORB_DEPTHS = [
+  { n: 8, size: [50, 90], alpha: [0.3, 0.45], rise: [5, 8] }, // far
+  { n: 5, size: [110, 170], alpha: [0.3, 0.42], rise: [10, 15] }, // mid
+  { n: 3, size: [230, 320], alpha: [0.16, 0.24], rise: [18, 26] }, // near, in front of the rows
+]
+
 // Frosted-glass scene: rows of the channel + MosaicTV logos scrolling opposite
-// ways behind two panes of frosted glass. In front, the channel logo is
-// centered on the left pane and the MosaicTV logo on the right, each floating
-// on a soft shadow.
+// ways behind frosted glass, with lights drifting up behind them. In front, the
+// channel logo is centered on the left and the MosaicTV logo on the right, each
+// floating on a soft shadow; `divider` adds a seam between the two halves.
 //
 // The glass is what makes it read as glass rather than a blur: a light frost
 // that leaves the logos behind recognisable, a more heavily frosted band behind
 // the foreground logos (like the etched strip on a glass door), a fixed ripple
 // the rows slide through, a glow where bright shapes scatter light, a fine
-// grain, reflections and a sweeping glint on the surface, and a seam between
-// the panes with a shadowed groove and one lit edge.
+// grain, reflections and a sweeping glint on the surface.
 //
-// Inputs: [0] the background gradient at frostedBackDims, [1] the channel logo
-// and [2] the MosaicTV mark, each a single frame.
-function frostedGraph(dims: Dims, scale: number): string {
+// Inputs: [0] the background gradient at frostedBackDims (only its first frame
+// is used), [1] the channel logo and [2] the MosaicTV mark, each a single frame.
+function frostedGraph(dims: Dims, scale: number, divider: boolean): string {
   const { w: W, h: H } = dims
   const k = H / 720
   const f = (n: number) => n.toFixed(2)
@@ -171,6 +189,10 @@ function frostedGraph(dims: Dims, scale: number): string {
   // The scene behind the glass is built at half size: it's frosted anyway, so
   // the upscale is invisible, and it's a quarter of the work per frame. The
   // seam, grain and foreground logos are drawn at full size.
+  //
+  // It's composited in 4:4:4. In 4:2:0 the overlay filter rounds every position
+  // to an even pixel, so a row moving one pixel a frame stood still one frame
+  // and jumped two the next: the scroll looked jagged.
   const { w, h } = frostedBackDims(dims)
   const kh = h / 720
   const rowH = Math.round(90 * kh)
@@ -188,11 +210,45 @@ function frostedGraph(dims: Dims, scale: number): string {
   const cellChain = `scale=${cellW}:${rowH}:force_original_aspect_ratio=decrease,pad=${cellW}:${rowH}:(ow-iw)/2:(oh-ih)/2:color=black@0,format=rgba,loop=loop=${nTile - 1}:size=1,tile=${nTile}x1`
 
   // Everything that doesn't move is drawn once and repeated. Layers are
-  // converted to the frame's own format before they repeat, so the overlays
-  // never convert per frame either.
+  // converted to the format they're composited in before they repeat, so the
+  // overlays never convert per frame either.
   const loop = `loop=loop=-1:size=1,setpts=N/(${FPS}*TB)`
   const still = (src: string) => `${src},trim=end_frame=1,${loop}`
   const plane = (pw: number, ph: number, c = 'black') => `color=c=${c}:s=${pw}x${ph}:r=${FPS}:d=1`
+  const back = 'overlay=format=yuv444'
+
+  // The lights: one soft disc per light, drawn once, drifting up and swaying.
+  const rnd = seeded(7)
+  const between = ([lo, hi]: number[]) => lo + (hi - lo) * rnd()
+  const orbs = ORB_DEPTHS.map((depth, di) =>
+    Array.from({ length: depth.n }, (_, i) => {
+      const d = Math.round((between(depth.size) * kh) / 2) * 2
+      const r = d / 2
+      const color = ORB_COLORS[Math.floor(rnd() * ORB_COLORS.length)]
+      const a = between(depth.alpha)
+      // A soft disc with a slightly brighter rim, like a lens's out-of-focus light.
+      const disc =
+        `st(0,hypot(X-${r},Y-${r}));` +
+        `${Math.round(255 * a)}*min(1,0.8*clip((${r}-ld(0))/${f(r * 0.4)},0,1)+0.35*exp(-pow((ld(0)-${f(r * 0.8)})/${f(r * 0.12)},2)))`
+      const [cr, cg, cb] = [2, 4, 6].map((o) => parseInt(color.slice(o, o + 2), 16))
+      const sprite = still(`${plane(d, d)},format=rgba,geq=r=${cr}:g=${cg}:b=${cb}:a='${disc}',format=yuva444p`)
+      const x0 = Math.round(rnd() * (w - d))
+      const y0 = Math.round(rnd() * (h + d))
+      const rise = f(between(depth.rise) * kh)
+      const sway = f((8 + rnd() * 14) * kh)
+      const period = f(9 + rnd() * 8)
+      const phase = f(rnd() * 6.28)
+      return {
+        label: `orb${di}_${i}`,
+        sprite,
+        pos: `x='${x0}+${sway}*sin(2*PI*t/${period}+${phase})':y='mod(${y0}-${rise}*t,H+h)-h'`,
+      }
+    }),
+  )
+  const [farOrbs, midOrbs, nearOrbs] = orbs
+  // Chain a list of overlays from `from` to `to`.
+  const layer = (list: { label: string; pos: string }[], from: string, to: string) =>
+    list.map((o, i) => `[${i === 0 ? from : `${to}${i}`}][${o.label}]${back}:${o.pos}[${i === list.length - 1 ? to : `${to}${i + 1}`}]`)
 
   // Refraction maps: a blurred-noise luma plane around 128 (no shift). Chroma
   // stays at 128, so colour moves with the brightness rather than fringing.
@@ -200,7 +256,7 @@ function frostedGraph(dims: Dims, scale: number): string {
   // hence the (kh/k)² to keep the ripple the same at any resolution.
   const map = (seed: number) =>
     still(
-      `${plane(w, h)},format=yuv420p,lutyuv=y=128:u=128:v=128,noise=c0s=100:c0_seed=${seed},` +
+      `${plane(w, h)},format=yuv444p,lutyuv=y=128:u=128:v=128,noise=c0s=100:c0_seed=${seed},` +
         `gblur=sigma=${f(3 * kh)}:planes=1,lutyuv=y='128+(val-128)*${f(0.12 * (kh / k) ** 2)}'`,
     )
 
@@ -225,24 +281,24 @@ function frostedGraph(dims: Dims, scale: number): string {
   ].join('+')
   const shade = `40*pow(max(0,abs(X/W-0.5)*2-0.55)/0.45,2)+34*pow(max(0,abs(Y/H-0.5)*2-0.5)/0.5,2)`
   // Shade first, light over it, folded into one colour + alpha.
-  const layer = (sh: string, li: string) => {
+  const shaded = (sh: string, li: string) => {
     const pre = `st(0,min(1,(${sh})/255));st(1,min(1,(${li})/255));st(2,1-(1-ld(0))*(1-ld(1)))`
     const lum = `${pre};if(gt(ld(2),0),255*ld(1)/ld(2),0)`
     return `format=rgba,geq=r='${lum}':g='${lum}':b='${lum}':a='${pre};255*ld(2)'`
   }
   // The grain lives in the layer's alpha: a fixed, full-size speckle of light.
   const surface = still(
-    `${plane(Math.round(W / 8) * 2, Math.round(H / 8) * 2)},${layer(shade, light)},` +
+    `${plane(Math.round(W / 8) * 2, Math.round(H / 8) * 2)},${shaded(shade, light)},` +
       `scale=${W}:${H}:flags=bicubic,format=yuva420p,noise=c3s=5:c3_seed=7`,
   )
 
-  // The seam between the panes, lit from the top-left: a shadowed groove with
-  // one bright edge. It only varies across, so it's drawn one pixel tall.
+  // The divider between the halves, lit from the top-left: a shadowed groove
+  // with one bright edge. It only varies across, so it's drawn one pixel tall.
   const sw = Math.round((40 * k) / 2) * 2
   const c = sw / 2
   const seam = still(
     `${plane(sw, 1)},` +
-      layer(
+      shaded(
         `110*exp(-pow((X-${c}+${f(2.5 * k)})/${f(2.2 * k)},2))+16*exp(-pow((X-${c})/${f(12 * k)},2))`,
         `120*exp(-pow((X-${c}-${f(0.5 * k)})/${f(0.7 * k)},2))+22*exp(-pow((X-${c}-${f(2 * k)})/${f(3 * k)},2))`,
       ) +
@@ -260,7 +316,7 @@ function frostedGraph(dims: Dims, scale: number): string {
   )
 
   // Foreground logos. Each sits in a box that is a fraction of its own
-  // half-panel so a short wide logo is held instead of swelling to the seam,
+  // half-panel so a short wide logo is held instead of swelling to the middle,
   // while a tall logo is bounded by the height. `scale` grows the channel
   // logo's box only — the MosaicTV mark stays put.
   const sh = Math.max(3, Math.round(7 * k))
@@ -268,33 +324,36 @@ function frostedGraph(dims: Dims, scale: number): string {
   const shadowOf = `colorchannelmixer=rr=0:gg=0:bb=0:aa=0.55,pad=iw+${sh * 6}:ih+${sh * 6}:${sh * 3}:${sh * 3}:color=black@0,gblur=sigma=${sh}`
 
   return [
-    `[0:v]format=yuv420p[bg]`,
+    // The backdrop: the gradient's first frame, held still.
+    `[0:v]trim=end_frame=1,format=yuv444p,${loop}[base]`,
+    ...orbs.flat().map((o) => `${o.sprite}[${o.label}]`),
+    ...layer([...farOrbs, ...midOrbs], 'base', 'deep'),
     `[1:v]split=2[chA][chFg]`,
     `[2:v]split=2[mzA][mzFg]`,
-    `[chA]${cellChain},format=yuva420p,${loop},split=3[ch0][ch1][ch2]`,
-    `[mzA]${cellChain},format=yuva420p,${loop},split=2[mz0][mz1]`,
-    `[bg][ch0]overlay=${leftX}:y=${y(0)}[r0]`,
-    `[r0][mz0]overlay=${rightX}:y=${y(1)}[r1]`,
-    `[r1][ch1]overlay=${leftX}:y=${y(2)}[r2]`,
-    `[r2][mz1]overlay=${rightX}:y=${y(3)}[r3]`,
-    `[r3][ch2]overlay=${leftX}:y=${y(4)}[rows]`,
+    `[chA]${cellChain},format=yuva444p,${loop},split=3[ch0][ch1][ch2]`,
+    `[mzA]${cellChain},format=yuva444p,${loop},split=2[mz0][mz1]`,
+    `[deep][ch0]${back}:${leftX}:y=${y(0)}[r0]`,
+    `[r0][mz0]${back}:${rightX}:y=${y(1)}[r1]`,
+    `[r1][ch1]${back}:${leftX}:y=${y(2)}[r2]`,
+    `[r2][mz1]${back}:${rightX}:y=${y(3)}[r3]`,
+    `[r3][ch2]${back}:${leftX}:y=${y(4)}[r4]`,
+    ...layer(nearOrbs, 'r4', 'rows'),
     // The frost: light everywhere, heavy in the band; then the ripple, and a
     // glow from the heavy frost screened over the brightness only.
     `${map(11)}[mx]`,
     `${map(29)}[my]`,
-    `${still(`${plane(w, h)},format=yuv420p,geq=lum='255*${band}':cb='255*${band}':cr='255*${band}'`)}[bm]`,
+    `${still(`${plane(w, h)},format=yuv444p,geq=lum='255*${band}':cb='255*${band}':cr='255*${band}'`)}[bm]`,
     `[rows]split=2[d0][d1]`,
     `[d0]gblur=sigma=${f(4.2 * kh)}[lite]`,
     `[d1]gblur=sigma=${f(13 * kh)},split=2[heavy][glow]`,
     `[lite][heavy][bm]maskedmerge[f0]`,
     `[f0][mx][my]displace=edge=smear[f1]`,
-    `[f1][glow]blend=c0_mode=screen:c0_opacity=0.3:c1_mode=normal:c2_mode=normal,scale=${W}:${H}:flags=bicubic[frost]`,
-    // The surface, the seam and the glint, at full size.
+    `[f1][glow]blend=c0_mode=screen:c0_opacity=0.3:c1_mode=normal:c2_mode=normal,scale=${W}:${H}:flags=bicubic,format=yuv420p[frost]`,
+    // The surface, the divider and the glint, at full size.
     `${surface}[surf]`,
-    `${seam}[seam]`,
     `${glint}[glint]`,
     `[frost][surf]overlay=0:0[g1]`,
-    `[g1][seam]overlay=x=${W / 2 - c}:y=0[g2]`,
+    ...(divider ? [`${seam}[seam]`, `[g1][seam]overlay=x=${W / 2 - c}:y=0[g2]`] : [`[g1]null[g2]`]),
     `[g2][glint]overlay=x='-${gw}+mod(t*${v},${v * 8})':y=0[g3]`,
     `[chFg]${logoBox(W * 0.3 * scale, 180 * k * scale)},format=rgba,split=2[chl][chs0]`,
     `[mzFg]${logoBox(W * 0.28, 120 * k)},format=rgba,split=2[mzl][mzs0]`,
@@ -351,6 +410,7 @@ function spotlightGraph(dims: Dims, dur: number, scale: number): string {
 
 // Build the StyleBuild for a generated style. `logoFile` brands the logo styles;
 // `mzLogo` is the bundled MosaicTV mark (required by frosted/spotlight).
+// `divider` draws the seam between frosted's two halves.
 function buildStyle(
   style: string,
   dims: Dims,
@@ -358,6 +418,7 @@ function buildStyle(
   scale: number,
   logoFile: string | undefined,
   mzLogo: string | undefined,
+  divider = false,
 ): StyleBuild | null {
   if (style === 'retro') return retroBuild(dims, dur)
   if (style === 'vintage') return vintageBuild(dims, dur)
@@ -370,7 +431,7 @@ function buildStyle(
   }
   if (style === 'frosted' && logoFile && mzLogo) {
     // The logos go in as single frames — the graph draws them once and repeats.
-    return { inputs: [...gradientInput(frostedBackDims(dims), dur, '0.04', 'c0=0x0b1020:c1=0x2a1150:c2=0x10233f:c3=0x0e2f3a', FPS), '-i', logoFile, '-i', mzLogo], filter: frostedGraph(dims, scale), tone: 90, vol: 0.04 }
+    return { inputs: [...gradientInput(frostedBackDims(dims), dur, '0.04', 'c0=0x0b1020:c1=0x2a1150:c2=0x10233f:c3=0x0e2f3a', FPS), '-i', logoFile, '-i', mzLogo], filter: frostedGraph(dims, scale, divider), tone: 90, vol: 0.04 }
   }
   if (style === 'spotlight' && logoFile && mzLogo) {
     return { inputs: [...gradientInput(dims, dur, '0.035', 'c0=0x0a0e1c:c1=0x1b1436:c2=0x0c1a2e:c3=0x141026'), '-loop', '1', '-i', logoFile, '-loop', '1', '-i', mzLogo], filter: spotlightGraph(dims, dur, scale), tone: 92, vol: 0.04 }
@@ -429,7 +490,7 @@ function mosaictvLogoFile(): string | undefined {
 
 // Bump these when the generators change so persisted clips regenerate.
 const FILLER_VERSION = 5
-const FROSTED_VERSION = 7
+const FROSTED_VERSION = 8
 const THEME_VERSION = 2
 
 // Resolve an Asset id to its on-disk file (or undefined).
@@ -501,7 +562,7 @@ export async function ensureAnimatedFiller(
   })
 }
 
-/** Frosted-glass filler, cached by logo + duration + resolution + logo scale + baked audio. */
+/** Frosted-glass filler, cached by logo + duration + resolution + logo scale + divider + baked audio. */
 export async function ensureFrostedFiller(
   logoFile: string,
   dur = 30,
@@ -510,6 +571,7 @@ export async function ensureFrostedFiller(
   dims: Dims = RESOLUTIONS['1080p'],
   scale = 1,
   fillerId = 0,
+  divider = false,
 ): Promise<string | undefined> {
   const d = clampDur(dur)
   const s = clampScale(scale)
@@ -518,10 +580,10 @@ export async function ensureFrostedFiller(
     log('warn', 'system', 'Frosted filler unavailable (bundled MosaicTV logo not found — expected in production only) — falling back to animated')
     return undefined
   }
-  const out = cacheName('frosted', fillerId, `${fileKey(logoFile)}:${d}:${dimKey(dims)}:${s}:${fileKey(audioFile)}:v${FROSTED_VERSION}`)
+  const out = cacheName('frosted', fillerId, `${fileKey(logoFile)}:${d}:${dimKey(dims)}:${s}:${divider ? 'div' : ''}:${fileKey(audioFile)}:v${FROSTED_VERSION}`)
   if (fs.existsSync(out)) return out
   log('info', 'system', `Generating frosted-glass filler for ${path.basename(logoFile)} (${d}s ${dimKey(dims)}${audioFile ? ' + audio' : ''})…`)
-  const build = buildStyle('frosted', dims, d, s, logoFile, mzLogo)!
+  const build = buildStyle('frosted', dims, d, s, logoFile, mzLogo, divider)!
   const clip = await generateToCache(out, (tmp) => runFfmpeg(assembleVideo(build, d, audioFile, tmp), onProgress, d))
   if (!clip) log('warn', 'system', 'Frosted filler generation failed — falling back to animated')
   return clip
@@ -582,6 +644,7 @@ type FillerRow = {
   logoId: number | null
   resolution: string
   logoScale: number
+  divider: boolean
 }
 
 const THEMED = new Set(['frosted', 'spotlight', 'logowall', 'pulse', 'retro', 'vintage'])
@@ -621,7 +684,7 @@ export async function resolveFillerClip(f: FillerRow, logoFile: string | undefin
     return { clip: await ensureAnimatedFiller(dur, audioFile, onProgress, dims, f.id) }
   }
   if (f.style === 'frosted' && logoFile) {
-    const clip = await ensureFrostedFiller(logoFile, dur, audioFile, onProgress, dims, scale, f.id)
+    const clip = await ensureFrostedFiller(logoFile, dur, audioFile, onProgress, dims, scale, f.id, f.divider)
     return { clip: clip ?? (await ensureAnimatedFiller(dur, audioFile, onProgress, dims, f.id)) }
   }
   if (THEMED.has(f.style)) {
@@ -650,7 +713,7 @@ export async function generateFillerStill(f: FillerRow, logoFile: string | undef
   }
   const mzLogo = mosaictvLogoFile()
   const build =
-    (f.style !== 'custom' ? buildStyle(f.style, dims, STILL_DUR, scale, logoFile, mzLogo) : null) ??
+    (f.style !== 'custom' ? buildStyle(f.style, dims, STILL_DUR, scale, logoFile, mzLogo, f.divider) : null) ??
     animatedBuild(dims, STILL_DUR)
   await runFfmpeg(assembleStill(build, out))
 }

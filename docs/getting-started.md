@@ -85,9 +85,10 @@ library.
 On the **Schedule** tab:
 
 - **Rotation** — the 24/7 default. An ordered list of collections that loops
-  forever. Each entry plays **1 or N** items per turn, **in order**,
-  **rotate shows** (round-robin S01E01 of each show, then S01E02…), or
-  **shuffle**.
+  forever. Each entry plays **1 or N** items per turn, in the collection's
+  order: **Your order**, **Release order**, **Rotate shows** (one episode of
+  each show in turn, in your arrangement), **Rotate shows, mixed**, or
+  **Shuffle**.
 - **Time blocks** (optional) — day/time slots that override the rotation, e.g.
   *Weekdays 18:00–21:00 → Cartoons*. Click the weekly grid to add one. Blocks
   can have their own playback order, filler, logo, and "coming up next"
@@ -106,7 +107,7 @@ starts every show over.
 
 ## 8. Watch!
 
-**Connect a player** (in the top bar, and on **Channels**) has your two URLs,
+**Live TV setup** (in the top bar, and on **Channels**) has your two URLs,
 with copy buttons:
 
 - **M3U**: `http://YOUR-SERVER:8688/iptv/channels.m3u`

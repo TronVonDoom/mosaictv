@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
+import CastButton from './CastButton'
 import ChannelLogo from './ChannelLogo'
 import Icon from './Icon'
-import type { NowUnit } from '../lib/api'
-import { IconButton, LiveBadge, Modal } from './ui'
+import { logoImageUrl, type NowUnit } from '../lib/api'
+import { Button, IconButton, LiveBadge, Modal } from './ui'
+import { stopCasting } from '../lib/cast'
 
 type Props = {
   number: number
@@ -40,13 +42,25 @@ export default function ChannelPreview({ number, name, logoId = null, nowPlaying
   const [error, setError] = useState<string | null>(null)
   const [mutedFallback, setMutedFallback] = useState(false)
   const [reconnecting, setReconnecting] = useState(false)
+  // The TV the channel is cast to; the preview here pauses while it plays there.
+  const [castingTo, setCastingTo] = useState<string | null>(null)
   const url = `${window.location.origin}/iptv/channel/${number}/index.m3u8`
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    if (castingTo) video.pause()
+    else if (video.paused && video.readyState > 0) video.play().catch(() => {})
+  }, [castingTo])
 
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
 
     const canNativeHls = video.canPlayType('application/vnd.apple.mpegurl') !== ''
+    // Safari plays HLS natively, and only a native stream can be sent to an
+    // AirPlay device, so it's preferred there even where hls.js would work.
+    const preferNative = canNativeHls && 'WebKitPlaybackTargetAvailabilityEvent' in window
     if (!Hls.isSupported() && !canNativeHls) {
       setError('This browser cannot play HLS (no Media Source Extensions). Try the stream URL in VLC.')
       return
@@ -103,7 +117,7 @@ export default function ChannelPreview({ number, name, logoId = null, nowPlaying
 
       // Safari (and iOS) play HLS natively and manage their own buffer — hand the
       // playlist straight to the element and let the browser do the work.
-      if (!Hls.isSupported() && canNativeHls) {
+      if ((!Hls.isSupported() || preferNative) && canNativeHls) {
         video.src = url
         attemptAutoplay()
         return
@@ -215,6 +229,14 @@ export default function ChannelPreview({ number, name, logoId = null, nowPlaying
           </div>
           {airing && <div className="text-[12.5px] text-ink-muted truncate mt-0.5">{airing}</div>}
         </div>
+        <CastButton
+          videoRef={videoRef}
+          url={url}
+          title={`${number} · ${name}`}
+          subtitle={airing ?? undefined}
+          imageUrl={logoId != null ? `${window.location.origin}${logoImageUrl(logoId)}` : undefined}
+          onCastingChange={setCastingTo}
+        />
         <IconButton icon="close" label="Close preview" onClick={onClose} />
       </div>
 
@@ -228,6 +250,15 @@ export default function ChannelPreview({ number, name, logoId = null, nowPlaying
         ) : (
           <>
             <video ref={videoRef} controls playsInline className="w-full h-full" />
+            {castingTo && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 text-center">
+                <Icon name="cast" size={30} className="text-indigo-300" />
+                <div className="text-[15px] font-medium text-ink">Playing on {castingTo}</div>
+                <Button variant="secondary" size="sm" onClick={stopCasting}>
+                  Stop casting
+                </Button>
+              </div>
+            )}
             {reconnecting && (
               <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/55 text-[13px] text-ink-soft pointer-events-none">
                 <Icon name="refresh" size={15} className="animate-spin" /> Reconnecting…

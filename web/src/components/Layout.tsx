@@ -4,6 +4,7 @@ import Icon, { type IconName } from './Icon'
 import ToastContainer from './ToastContainer'
 import CommandPalette from './CommandPalette'
 import ConnectPlayers from './ConnectPlayers'
+import NotificationBell from './NotificationBell'
 import ConfirmHost from './ConfirmHost'
 import { api, type Health } from '../lib/api'
 import { usePolling } from '../lib/hooks'
@@ -402,9 +403,10 @@ export default function Layout() {
 
             <div className="ml-auto shrink-0 flex items-center gap-1.5">
               <HealthButton health={health} reachable={reachable} />
-              <Button variant="secondary" size="sm" icon="cast" onClick={() => setConnectOpen(true)}>
-                <span className="hidden sm:inline">Connect a player</span>
-                <span className="sm:hidden">Connect</span>
+              <NotificationBell />
+              <Button variant="secondary" size="sm" icon="link" onClick={() => setConnectOpen(true)}>
+                <span className="hidden sm:inline">Live TV setup</span>
+                <span className="sm:hidden">Live TV</span>
               </Button>
             </div>
           </div>

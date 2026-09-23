@@ -120,7 +120,7 @@ export default function CommandPalette({
     }))
 
     const actions: Command[] = [
-      { id: 'connect', label: 'Connect a player', icon: 'cast', group: 'Actions', keywords: 'm3u xmltv hdhomerun plex jellyfin emby vlc iptv playlist url', run: onConnect },
+      { id: 'connect', label: 'Live TV setup', icon: 'link', group: 'Actions', keywords: 'connect player m3u xmltv hdhomerun plex jellyfin emby vlc iptv playlist url', run: onConnect },
       {
         id: 'm3u',
         label: 'Open M3U playlist',

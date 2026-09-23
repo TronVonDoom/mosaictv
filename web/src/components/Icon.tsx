@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowUpDown,
+  Bell,
   CalendarRange,
   Captions,
   Cast,
@@ -101,6 +102,7 @@ export type IconName =
   // Actions
   | 'play'
   | 'pause'
+  | 'bell'
   | 'plus'
   | 'search'
   | 'edit'
@@ -175,6 +177,7 @@ const GLYPH: Record<IconName, LucideIcon> = {
   upnext: SkipForward,
   play: Play,
   pause: Pause,
+  bell: Bell,
   plus: Plus,
   search: Search,
   edit: Pencil,

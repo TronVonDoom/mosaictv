@@ -79,7 +79,7 @@ composites the channel's (or block's) logo into an animated station-ID loop:
 
 | Style | Look | Uses your logo |
 | ----- | ---- | -------------- |
-| `frosted` | Two panes of frosted glass: rows of logos glide behind, still recognisable through the frost, with a more heavily frosted band behind your logo, which floats in front on a soft shadow. Light plays across the glass as it runs | ✅ |
+| `frosted` | Frosted glass: rows of logos glide behind it, still recognisable through the frost, with out-of-focus lights drifting up at different depths. A more heavily frosted band sits behind your logo, which floats in front on a soft shadow, and light plays across the glass as it runs. Tick **Divider between the halves** for a lit glass seam between your logo and the MosaicTV mark | ✅ |
 | `custom` | **Your own clip** — bumpers, ident reels, anything | your call |
 
 Earlier builds also offered `logowall`, `pulse`, `animated`, `retro` and

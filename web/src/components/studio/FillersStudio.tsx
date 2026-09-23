@@ -30,6 +30,7 @@ const draftOf = (f: Filler): FillerInput => ({
   durationSec: f.durationSec,
   resolution: f.resolution,
   logoScale: f.logoScale,
+  divider: f.divider,
 })
 
 /** A clip's first second as its thumbnail; plays muted while hovered. */

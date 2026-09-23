@@ -278,6 +278,8 @@ export type Filler = {
   durationSec: number
   resolution: FillerResolution
   logoScale: number
+  /** Frosted glass: a divider between the two halves. */
+  divider: boolean
   order: number
 }
 export type FillerInput = {
@@ -290,6 +292,7 @@ export type FillerInput = {
   durationSec: number
   resolution: FillerResolution
   logoScale: number
+  divider?: boolean
 }
 export type FillerGenStatus = { percent?: number; done?: boolean; error?: string; assetId?: number; idle?: boolean }
 export type FillerGenJob = { fillerId: number; percent: number; done: boolean; error: string | null }
@@ -543,6 +546,28 @@ export type MetricsResponse = {
   markers: MetricMarker[]
 }
 
+/** Background work the server is doing, for the notification bell (see /api/activity). */
+export type Activity = {
+  id: string
+  kind: 'filler' | 'scan' | 'metadata'
+  title: string
+  detail: string | null
+  state: 'running' | 'done' | 'error'
+  progress: number | null
+  startedAt: string
+  finishedAt: string | null
+  href: string
+}
+
+// Starting background work tells the notification bell to look now, rather
+// than at its next idle poll.
+export const ACTIVITY_EVENT = 'mosaictv:activity'
+const pokeActivity = <T,>(p: Promise<T>): Promise<T> =>
+  p.then((r) => {
+    window.dispatchEvent(new Event(ACTIVITY_EVENT))
+    return r
+  })
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
@@ -579,7 +604,7 @@ export const api = {
   removeFolder: (libraryId: number, folderId: number) =>
     request<void>(`/api/libraries/${libraryId}/folders/${folderId}`, { method: 'DELETE' }),
   startScan: (libraryId: number, force = false) =>
-    request<{ started: boolean }>(`/api/scan/${libraryId}${force ? '?force=1' : ''}`, { method: 'POST' }),
+    pokeActivity(request<{ started: boolean }>(`/api/scan/${libraryId}${force ? '?force=1' : ''}`, { method: 'POST' })),
   scanStatus: () => request<ScanStatus>('/api/scan/status'),
   media: (params: {
     page?: number
@@ -649,9 +674,11 @@ export const api = {
       body: JSON.stringify({ apiKey }),
     }),
   startMetadata: (libraryId: number, force = false) =>
-    request<{ started: boolean }>(`/api/metadata/${libraryId}${force ? '?force=1' : ''}`, {
-      method: 'POST',
-    }),
+    pokeActivity(
+      request<{ started: boolean }>(`/api/metadata/${libraryId}${force ? '?force=1' : ''}`, {
+        method: 'POST',
+      }),
+    ),
   metadataStatus: () => request<MetadataStatus>('/api/metadata/status'),
   saveWatermark: (wm: WatermarkConfig) =>
     request<{ ok: boolean; watermark: WatermarkConfig }>('/api/settings/watermark', { method: 'POST', body: JSON.stringify(wm) }),
@@ -702,9 +729,10 @@ export const api = {
       filterGenre?: string | null
     },
   ) => request<Collection>(`/api/collections/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  collectionPreview: (id: number, order = 'chronological') =>
+  // No order = what the collection plays by default.
+  collectionPreview: (id: number, order?: string) =>
     request<{ count: number; order: string; sample: MediaItem[] }>(
-      `/api/collections/${id}/preview?order=${encodeURIComponent(order)}`,
+      `/api/collections/${id}/preview${order ? `?order=${encodeURIComponent(order)}` : ''}`,
     ),
   searchMedia: (q: string) =>
     request<{ results: MediaSearchResult[] }>(`/api/collections/search?q=${encodeURIComponent(q)}`),
@@ -742,9 +770,10 @@ export const api = {
   // same filler renders differently everywhere it's assigned.
   generateFillerClip: (id: number, owner?: FillerOwner) => {
     const qs = owner?.channelId != null ? `?channelId=${owner.channelId}` : owner?.timeBlockId != null ? `?timeBlockId=${owner.timeBlockId}` : ''
-    return request<{ started: boolean }>(`/api/fillers/${id}/generate${qs}`, { method: 'POST' })
+    return pokeActivity(request<{ started: boolean }>(`/api/fillers/${id}/generate${qs}`, { method: 'POST' }))
   },
   fillerGenStatus: (id: number) => request<FillerGenStatus>(`/api/fillers/${id}/generate/status`),
+  activity: () => request<Activity[]>('/api/activity'),
   // Render a single still frame of a draft (unsaved) filler, branded with the
   // owner's logo, and hand back the image as a Blob (turn it into an object URL
   // for an <img>). Nothing is stored server-side, so previews never pile up.

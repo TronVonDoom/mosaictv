@@ -87,8 +87,8 @@ export default function ConnectPlayers({ onClose }: { onClose: () => void }) {
   return (
     <Modal onClose={onClose} panelClassName="w-full max-w-2xl">
       <ModalHeader
-        icon="cast"
-        title="Connect a player"
+        icon="link"
+        title="Live TV setup"
         subtitle="Point Jellyfin, Plex, Emby or any IPTV app at these addresses."
         onClose={onClose}
       />

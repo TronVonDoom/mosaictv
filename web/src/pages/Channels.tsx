@@ -199,8 +199,8 @@ export default function Channels() {
         description="Every channel you run, what it's airing, and the guide your players see."
         actions={
           <>
-            <Button variant="secondary" icon="cast" onClick={openConnect}>
-              Connect a player
+            <Button variant="secondary" icon="link" onClick={openConnect}>
+              Live TV setup
             </Button>
             <Button icon="plus" onClick={() => setCreating(true)}>
               New channel

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, type Asset, type Filler, type FillerInput, type FillerOwner } from '../lib/api'
 import { errorMessage } from '../lib/errors'
+import Icon from './Icon'
+import Lightbox from './Lightbox'
 import LogoPicker from './LogoPicker'
 import { Banner, Button, Field, Input, Section, Select } from './ui'
 
@@ -14,6 +16,7 @@ export const emptyFillerDraft: FillerInput = {
   durationSec: 30,
   resolution: '1080p',
   logoScale: 1,
+  divider: false,
 }
 
 // Styles whose generated clip is branded with a logo — the only ones for which
@@ -56,7 +59,7 @@ export function fillerSummary(f: Filler): string {
 
 // The render-affecting inputs that change how a still looks — when any of these
 // change, an existing still preview no longer matches and is cleared.
-const stillKey = (d: FillerInput) => `${d.style}:${d.assetId}:${d.logoId}:${d.logoScale}:${d.resolution}`
+const stillKey = (d: FillerInput) => `${d.style}:${d.assetId}:${d.logoId}:${d.logoScale}:${d.resolution}:${d.divider}`
 
 /**
  * The create/edit form for one filler, owning its own draft state and the save
@@ -91,6 +94,7 @@ export default function FillerEditor({
   const [previewing, setPreviewing] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const previewUrlRef = useRef<string | null>(null)
+  const [zoomed, setZoomed] = useState(false)
 
   const setPreview = (url: string | null) => {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
@@ -220,6 +224,20 @@ export default function FillerEditor({
                 className="w-full accent-indigo-500"
               />
             </Field>
+            {draft.style === 'frosted' && (
+              <label className="flex items-start gap-2.5 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 accent-indigo-500"
+                  checked={!!draft.divider}
+                  onChange={(e) => set('divider', e.target.checked)}
+                />
+                <span>
+                  <span className="text-ink-soft">Divider between the halves</span>
+                  <span className="block text-xs text-ink-faint">A lit glass seam between your logo and the MosaicTV mark.</span>
+                </span>
+              </label>
+            )}
           </div>
         </Section>
       )}
@@ -264,7 +282,17 @@ export default function FillerEditor({
         <div className="flex items-start gap-3 flex-wrap">
           <div className="w-full aspect-video rounded-lg border border-edge bg-black overflow-hidden grid place-items-center shrink-0">
             {previewUrl ? (
-              <img src={previewUrl} alt="Filler preview" className="w-full h-full object-contain" />
+              <button
+                type="button"
+                onClick={() => setZoomed(true)}
+                aria-label="Enlarge the preview"
+                className="group relative h-full w-full cursor-zoom-in"
+              >
+                <img src={previewUrl} alt="Filler preview" className="h-full w-full object-contain" />
+                <span className="absolute right-2 bottom-2 grid h-8 w-8 place-items-center rounded-lg bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                  <Icon name="expand" size={15} />
+                </span>
+              </button>
             ) : (
               <span className="text-[11px] text-ink-faint px-3 text-center">
                 {previewing ? 'Rendering a frame…' : 'A still frame of this filler will appear here.'}
@@ -284,6 +312,8 @@ export default function FillerEditor({
           </div>
         </div>
       </Section>
+
+      {zoomed && previewUrl && <Lightbox src={previewUrl} alt="Filler preview" onClose={() => setZoomed(false)} />}
 
       <div className="flex justify-end gap-2 pt-1">
         <Button variant="secondary" size="sm" onClick={onCancel}>
