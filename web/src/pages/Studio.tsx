@@ -1,72 +1,59 @@
-import LogoManager from '../components/LogoManager'
-import AssetManager from '../components/AssetManager'
-import FillerManager from '../components/FillerManager'
-import { InfoHint, PageHeader, Tabs } from '../components/ui'
+import { useEffect, useState } from 'react'
+import SideNav, { type SideNavItem } from '../components/SideNav'
+import LogosStudio from '../components/studio/LogosStudio'
+import AudioStudio from '../components/studio/AudioStudio'
+import FillersStudio from '../components/studio/FillersStudio'
+import { api } from '../lib/api'
 import { useHashTab } from '../lib/hooks'
-import type { ReactNode } from 'react'
+import { PageHeader } from '../components/ui'
 
 // Formerly "Media", which collided with the media in your *library*. This page
 // is the station's own kit — the things the channels play around your content.
-const TABS = [
-  { id: 'images', label: 'Logos', icon: 'image' },
-  { id: 'audio', label: 'Audio', icon: 'audio' },
-  { id: 'fillers', label: 'Fillers', icon: 'clip' },
-] as const
+type Section = 'images' | 'audio' | 'fillers'
+const IDS: Section[] = ['images', 'audio', 'fillers']
 
-type Tab = (typeof TABS)[number]['id']
-const TAB_IDS = TABS.map((t) => t.id)
-
-const DESCRIPTIONS: Record<Tab, ReactNode> = {
-  images: (
-    <>
-      Channel logos and on-screen watermarks. Upload once, then pick them per channel.{' '}
-      <InfoHint>
-        Each logo carries its own watermark settings — hit <span className="text-ink">Watermark</span>{' '}
-        on a logo to tune its size, position, opacity and timing. Logos without their own settings
-        fall back to the default under Settings → Watermark.
-      </InfoHint>
-    </>
-  ),
-  audio: 'Ambient tracks for intermissions — what plays when a channel is between programmes.',
-  fillers: (
-    <>
-      Short station-ID clips that cover the gaps between scheduled programmes. Assign them from a
-      channel's Fillers tab.{' '}
-      <InfoHint>
-        This is the shared library — a filler deleted here disappears from every channel and block
-        using it. Generating a preview is optional: a filler airs whether or not you build one here.
-      </InfoHint>
-    </>
-  ),
-}
-
+/**
+ * The Studio: an editing suite for the station's branding. A section rail on
+ * the left, that section's library in the middle, and an inspector on the
+ * right for whatever is selected — the same shape for logos, music and
+ * fillers, so each works the same way.
+ */
 export default function Studio() {
   // "clips" was the fillers tab before uploads merged into the library, and
   // "#fillers" is linked from the channel editor — keep both landing right.
-  const [tab, setTab] = useHashTab<Tab>(TAB_IDS, 'images', { clips: 'fillers', logos: 'images' })
+  const [section, setSection] = useHashTab<Section>(IDS, 'images', { clips: 'fillers', logos: 'images' })
+  const [counts, setCounts] = useState<Record<Section, number | null>>({ images: null, audio: null, fillers: null })
+  const setCount = (s: Section) => (n: number) => setCounts((c) => (c[s] === n ? c : { ...c, [s]: n }))
+
+  // Counts for the rail up front, so every section shows its size before it's opened.
+  useEffect(() => {
+    api.logos().then((l) => setCount('images')(l.length)).catch(() => {})
+    api.assets('audio').then((a) => setCount('audio')(a.length)).catch(() => {})
+    api.fillers().then((f) => setCount('fillers')(f.length)).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const items: SideNavItem<Section>[] = [
+    { id: 'images', label: 'Logos', icon: 'image', description: 'Channel logos and their watermarks', count: counts.images },
+    { id: 'audio', label: 'Audio', icon: 'audio', description: 'Music under station breaks', count: counts.audio },
+    { id: 'fillers', label: 'Fillers', icon: 'clip', description: 'Station-ID clips between programs', count: counts.fillers },
+  ]
 
   return (
     <div>
-      <PageHeader title="Studio" icon="media" description={DESCRIPTIONS[tab]}>
-        <Tabs tabs={TABS} active={tab} onChange={setTab} />
-      </PageHeader>
-
-      {tab === 'images' && <LogoManager />}
-
-      {tab === 'audio' && (
-        <AssetManager
-          kind="audio"
-          accept="audio/*"
-          emptyText="No audio uploaded yet. Add ambient tracks to play during intermissions."
-          hint="Choose a track on a channel or block filler (channel editor → Fillers) to play it during intermissions."
-        />
-      )}
-
-      {tab === 'fillers' && (
-        <div className="max-w-4xl">
-          <FillerManager />
+      <PageHeader
+        title="Studio"
+        icon="media"
+        description="Your station's branding kit — the logos, music and station-ID clips your channels play around your content."
+      />
+      <div className="grid gap-6 grid-cols-[minmax(0,1fr)] lg:grid-cols-[232px_minmax(0,1fr)]">
+        <SideNav label="Studio sections" items={items} active={section} onChange={setSection} />
+        <div className="min-w-0">
+          {section === 'images' && <LogosStudio onCount={setCount('images')} />}
+          {section === 'audio' && <AudioStudio onCount={setCount('audio')} />}
+          {section === 'fillers' && <FillersStudio onCount={setCount('fillers')} />}
         </div>
-      )}
+      </div>
     </div>
   )
 }

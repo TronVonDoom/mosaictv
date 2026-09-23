@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   api,
+  ART,
   artworkUrl,
   tmdbImage,
   type Library,
@@ -201,10 +202,10 @@ export default function LibraryView() {
                 icon="show"
                 imageUrl={
                   s.posterItemId
-                    ? artworkUrl(s.posterItemId, 'show')
+                    ? artworkUrl(s.posterItemId, 'show', ART.poster)
                     : s.tmdbPosterPath
                       ? s.artItemId
-                        ? artworkUrl(s.artItemId, 'show')
+                        ? artworkUrl(s.artItemId, 'show', ART.poster)
                         : tmdbImage(s.tmdbPosterPath)
                       : undefined
                 }
@@ -226,7 +227,7 @@ export default function LibraryView() {
                 badge={m.height ? (m.height >= 2000 ? '4K' : `${m.height >= 1000 ? 1080 : m.height >= 700 ? 720 : m.height}p`) : undefined}
                 rating={m.rating}
                 icon={library?.kind === 'movie' ? 'movie' : library?.kind === 'music' ? 'audio' : 'clip'}
-                imageUrl={m.posterPath || m.tmdbPosterPath ? artworkUrl(m.id, 'poster') : undefined}
+                imageUrl={m.posterPath || m.tmdbPosterPath ? artworkUrl(m.id, 'poster', ART.poster) : undefined}
                 onClick={() => setSelectedId(m.id)}
               />
             ))}

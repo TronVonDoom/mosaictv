@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import Icon from './Icon'
-import { api, artworkUrl, tmdbImage, type MediaItemDetail } from '../lib/api'
+import { api, ART, artworkUrl, tmdbImage, type MediaItemDetail } from '../lib/api'
 import { episodeCode, formatDuration, formatSize, posterGradient } from '../lib/format'
 import { Badge, IconButton, Modal, Skeleton } from './ui'
 
@@ -30,11 +30,11 @@ export default function MediaDetailModal({ id, onClose }: { id: number; onClose:
   const poster = !item
     ? null
     : item.posterPath
-      ? artworkUrl(item.id, 'poster')
+      ? artworkUrl(item.id, 'poster', ART.large)
       : item.showPosterPath || isEpisode
-        ? artworkUrl(item.id, 'show')
+        ? artworkUrl(item.id, 'show', ART.large)
         : item.tmdbPosterPath
-          ? artworkUrl(item.id, 'poster')
+          ? artworkUrl(item.id, 'poster', ART.large)
           : null
   // Episodes use their show's backdrop; the route resolves that server-side.
   const wantBackdrop = !!item && backdropOk && (item.tmdbBackdropPath != null || isEpisode)

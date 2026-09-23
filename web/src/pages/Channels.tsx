@@ -1,8 +1,10 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
-import { useNavigate, useOutletContext } from 'react-router-dom'
+import { useLocation, useNavigate, useOutletContext } from 'react-router-dom'
 import ChannelCard from '../components/ChannelCard'
+import GuideGrid from '../components/GuideGrid'
 import LogoPicker from '../components/LogoPicker'
-import { api, type Channel, type ChannelNow } from '../lib/api'
+import MediaDetailModal from '../components/MediaDetailModal'
+import { api, type Channel, type ChannelNow, type Playout } from '../lib/api'
 import { copyText } from '../lib/clipboard'
 import { confirmDialog } from '../lib/confirm'
 import { errorMessage } from '../lib/errors'
@@ -17,6 +19,7 @@ import {
   Modal,
   ModalHeader,
   PageHeader,
+  SectionHeading,
   Segmented,
   Skeleton,
 } from '../components/ui'
@@ -25,6 +28,9 @@ import {
 const ChannelPreview = lazy(() => import('../components/ChannelPreview'))
 
 type Filter = 'all' | 'live' | 'drafts'
+type Span = '12' | '24' | '48'
+type Zoom = 'compact' | 'standard' | 'wide'
+const PX: Record<Zoom, number> = { compact: 3.2, standard: 5.5, wide: 9 }
 
 /** New-channel dialog: just enough to name it, then straight into the editor. */
 function NewChannelDialog({ onClose }: { onClose: () => void }) {
@@ -112,6 +118,11 @@ export default function Channels() {
   const [creating, setCreating] = useState(false)
   const [previewing, setPreviewing] = useState<Channel | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
+  const [span, setSpan] = useState<Span>('24')
+  const [zoom, setZoom] = useState<Zoom>('standard')
+  const [jump, setJump] = useState(0)
+  const [guides, setGuides] = useState<Record<number, Playout>>({})
+  const [detailId, setDetailId] = useState<number | null>(null)
   const nowMs = useNow(15000)
 
   const refresh = useCallback(() => {
@@ -154,12 +165,38 @@ export default function Channels() {
   const drafts = all.filter((c) => c.number == null)
   const shown = filter === 'live' ? live : filter === 'drafts' ? drafts : all
 
+  // The guide below the cards: fetched when the on-air set or the span
+  // changes, and refreshed every few minutes — listings change slowly.
+  const liveKey = live.map((c) => c.id).join(',')
+  const loadGuides = useCallback(() => {
+    const ids = liveKey ? liveKey.split(',').map(Number) : []
+    Promise.all(ids.map((id) => api.playout(id, Number(span) + 1).then((p) => [id, p] as const).catch(() => null))).then(
+      (entries) => {
+        const map: Record<number, Playout> = {}
+        for (const e of entries) if (e) map[e[0]] = e[1]
+        setGuides(map)
+      },
+    )
+  }, [liveKey, span])
+  useEffect(() => {
+    loadGuides()
+  }, [loadGuides])
+  usePolling(loadGuides, 300000)
+
+  // "/channels#guide" (the dashboard's Full guide link, the old /guide route)
+  // lands on the guide once there's a guide to land on.
+  const { hash } = useLocation()
+  const hasGuide = live.length > 0
+  useEffect(() => {
+    if (hash === '#guide' && hasGuide) document.getElementById('guide')?.scrollIntoView({ behavior: 'smooth' })
+  }, [hash, hasGuide])
+
   return (
     <div>
       <PageHeader
         title="Channels"
         icon="channels"
-        description="Each channel is a container — its collections, schedule, and fillers all live inside it."
+        description="Every channel you run, what it's airing, and the guide your players see."
         actions={
           <>
             <Button variant="secondary" icon="cast" onClick={openConnect}>
@@ -193,8 +230,8 @@ export default function Channels() {
       )}
 
       {channels == null ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 3 }, (_, i) => (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {Array.from({ length: 4 }, (_, i) => (
             <Skeleton key={i} className="aspect-[16/13] rounded-2xl" />
           ))}
         </div>
@@ -221,13 +258,13 @@ export default function Channels() {
         />
       ) : (
         <div
-          className={`grid gap-4 ${
-            // Even rows: two or four channels pair up rather than leave one
-            // orphaned under a row of three. Cards stay wide enough for their
-            // footer actions.
-            shown.length === 2 || shown.length === 4
-              ? 'sm:grid-cols-2 min-[1800px]:grid-cols-4'
-              : 'sm:grid-cols-2 2xl:grid-cols-3 min-[1800px]:grid-cols-4'
+          className={`grid grid-cols-1 gap-4 ${
+            // Four to a row on a desktop, so the guide below stays in view; a
+            // set of four pairs up (2×2) rather than leave one card orphaned
+            // under a row of three at the in-between width.
+            shown.length === 4
+              ? 'sm:grid-cols-2 xl:grid-cols-4'
+              : 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 3xl:grid-cols-5'
           }`}
         >
           {shown.map((c, i) => (
@@ -255,6 +292,62 @@ export default function Channels() {
           ))}
         </div>
       )}
+
+      {/* The guide — everything on air, on one time axis. */}
+      {live.length > 0 && (
+        <section id="guide" className="mt-10 scroll-mt-20">
+          <SectionHeading
+            title="TV Guide"
+            icon="guide"
+            description="The listings your players receive. Click a program for its details."
+            actions={
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                <Segmented<Span>
+                  size="sm"
+                  value={span}
+                  onChange={setSpan}
+                  options={[
+                    { value: '12', label: '12h' },
+                    { value: '24', label: '24h' },
+                    { value: '48', label: '48h' },
+                  ]}
+                />
+                <Segmented<Zoom>
+                  size="sm"
+                  value={zoom}
+                  onChange={setZoom}
+                  options={[
+                    { value: 'compact', label: 'Compact', icon: 'list' },
+                    { value: 'standard', label: 'Standard', icon: 'grid' },
+                    { value: 'wide', label: 'Wide', icon: 'layers' },
+                  ]}
+                />
+                <Button variant="secondary" size="sm" icon="clock" onClick={() => setJump((j) => j + 1)}>
+                  Now
+                </Button>
+              </div>
+            }
+          />
+          <GuideGrid
+            channels={live}
+            guides={guides}
+            nowMs={nowMs}
+            hours={Number(span)}
+            pxPerMin={PX[zoom]}
+            rowHeight={zoom === 'compact' ? 52 : 76}
+            // A handful of channels shows whole; a long lineup scrolls in place.
+            maxHeight={live.length > 8 ? 'calc(100vh - 9rem)' : undefined}
+            jump={jump}
+            onSelect={(e) => e.mediaItem && setDetailId(e.mediaItem.id)}
+          />
+          <p className="mt-3 text-xs text-ink-faint">
+            Listings reach as far ahead as each channel's schedule has been built — Settings → Streaming → Schedule
+            horizon.
+          </p>
+        </section>
+      )}
+
+      {detailId != null && <MediaDetailModal id={detailId} onClose={() => setDetailId(null)} />}
 
       {creating && <NewChannelDialog onClose={() => setCreating(false)} />}
 

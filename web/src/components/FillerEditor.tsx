@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, type Asset, type Filler, type FillerInput, type FillerOwner } from '../lib/api'
 import { errorMessage } from '../lib/errors'
 import LogoPicker from './LogoPicker'
-import { Banner, Field, Input, Section, Select } from './ui'
+import { Banner, Button, Field, Input, Section, Select } from './ui'
 
 export const emptyFillerDraft: FillerInput = {
   name: '',
@@ -164,11 +164,11 @@ export default function FillerEditor({
   }
 
   return (
-    <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-3 space-y-3">
+    <div className="space-y-3">
       {error && <Banner tone="error">{error}</Banner>}
 
       <Section title="Look">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid gap-3">
           <Field label="Name (optional)">
             <Input value={draft.name ?? ''} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Bumper" />
           </Field>
@@ -186,7 +186,7 @@ export default function FillerEditor({
             </Select>
           </Field>
           {draft.style === 'custom' && (
-            <Field label="Clip" className="sm:col-span-2">
+            <Field label="Clip">
               <Select value={draft.assetId ?? ''} onChange={(e) => set('assetId', e.target.value ? Number(e.target.value) : null)}>
                 <option value="">Pick a filler clip…</option>
                 {fillerAssets.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -225,8 +225,8 @@ export default function FillerEditor({
       )}
 
       <Section title="Audio & timing">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <Field label="Audio (optional)">
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Audio (optional)" className="col-span-2">
             <Select value={draft.audioAssetId ?? ''} onChange={(e) => set('audioAssetId', e.target.value ? Number(e.target.value) : null)}>
               <option value="">None</option>
               {audioAssets.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -262,7 +262,7 @@ export default function FillerEditor({
 
       <Section title="Preview">
         <div className="flex items-start gap-3 flex-wrap">
-          <div className="w-full sm:w-64 aspect-video rounded-lg border border-edge bg-black overflow-hidden grid place-items-center shrink-0">
+          <div className="w-full aspect-video rounded-lg border border-edge bg-black overflow-hidden grid place-items-center shrink-0">
             {previewUrl ? (
               <img src={previewUrl} alt="Filler preview" className="w-full h-full object-contain" />
             ) : (
@@ -272,13 +272,9 @@ export default function FillerEditor({
             )}
           </div>
           <div className="flex-1 min-w-[12rem] space-y-2">
-            <button
-              onClick={preview}
-              disabled={previewing || !canPreview}
-              className="rounded-lg border border-edge-strong hover:border-indigo-500 hover:text-indigo-300 disabled:opacity-50 px-3 py-1.5 text-sm"
-            >
-              {previewing ? 'Rendering…' : previewUrl ? 'Refresh preview' : 'Preview image'}
-            </button>
+            <Button variant="secondary" size="sm" icon="image" onClick={preview} loading={previewing} disabled={!canPreview}>
+              {previewing ? 'Rendering…' : previewUrl ? 'Refresh still' : 'Render a still'}
+            </Button>
             <p className="text-[11px] text-ink-faint leading-tight">
               {canPreview
                 ? 'A single frame, rendered in a second or two — check the look before committing to a full clip. Nothing is saved.'
@@ -289,11 +285,13 @@ export default function FillerEditor({
         </div>
       </Section>
 
-      <div className="flex justify-end gap-2">
-        <button onClick={onCancel} className="rounded-lg border border-edge-strong hover:border-ink-faint px-3 py-1.5 text-sm">Cancel</button>
-        <button onClick={save} disabled={saving} className="rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 px-4 py-1.5 text-sm font-medium">
-          {saving ? 'Saving…' : editId ? 'Save' : 'Add'}
-        </button>
+      <div className="flex justify-end gap-2 pt-1">
+        <Button variant="secondary" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button size="sm" onClick={save} loading={saving}>
+          {editId ? 'Save changes' : 'Add filler'}
+        </Button>
       </div>
       <p className="text-[11px] text-ink-faint">
         Uploaded clips &amp; music live on the Studio page. Fillers stretch to fill each gap; the chosen audio is

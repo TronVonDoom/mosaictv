@@ -13,7 +13,7 @@ import { Button, IconButton, Kbd, cx } from './ui'
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
 const PALETTE_HINT = IS_MAC ? '⌘K' : 'Ctrl K'
 
-// Seven destinations in three groups. The grouping answers "is this a feature
+// Six destinations in three groups. The grouping answers "is this a feature
 // or plumbing?" at a glance: Broadcast is what airs, Content is what it's made
 // of, System keeps it running.
 type NavItem = { to: string; label: string; icon: IconName; end?: boolean }
@@ -22,7 +22,6 @@ const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
     heading: 'Broadcast',
     items: [
       { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
-      { to: '/guide', label: 'TV Guide', icon: 'guide' },
       { to: '/channels', label: 'Channels', icon: 'channels' },
     ],
   },
@@ -44,12 +43,17 @@ const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
 
 const COLLAPSE_KEY = 'mosaictv.navCollapsed'
 
+/** The rail's collapsed state: the user's own choice once they've made one,
+ *  otherwise collapsed on a laptop-width window, where 248px of labels would
+ *  squeeze the page itself. */
 function readCollapsed(): boolean {
   try {
-    return localStorage.getItem(COLLAPSE_KEY) === '1'
+    const saved = localStorage.getItem(COLLAPSE_KEY)
+    if (saved != null) return saved === '1'
   } catch {
-    return false
+    /* storage blocked — fall through to the width default */
   }
+  return typeof window !== 'undefined' && window.innerWidth < 1280
 }
 
 type Live = { channels: number; viewers: number }
@@ -153,7 +157,7 @@ function Sidebar({
       <div className={cx('shrink-0 border-t border-edge', collapsed ? 'p-3' : 'p-3')}>
         {live && (
           <Link
-            to="/guide"
+            to="/channels"
             onClick={onNavigate}
             title={
               live.channels > 0
@@ -333,13 +337,17 @@ export default function Layout() {
   usePolling(loadLive, 10000)
   usePolling(loadHealth, 30000)
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0')
-    } catch {
-      /* private mode — the preference just won't stick */
-    }
-  }, [collapsed])
+  // Remember only an explicit choice, so the width default keeps applying
+  // until someone actually toggles the rail.
+  const toggleCollapsed = () =>
+    setCollapsed((c) => {
+      try {
+        localStorage.setItem(COLLAPSE_KEY, c ? '0' : '1')
+      } catch {
+        /* private mode — the preference just won't stick */
+      }
+      return !c
+    })
 
   return (
     <div className="min-h-screen text-ink bg-canvas app-backdrop">
@@ -347,7 +355,7 @@ export default function Layout() {
       <div className={cx('hidden lg:block fixed inset-y-0 left-0 z-40', collapsed ? 'w-[72px]' : 'w-[248px]')}>
         <Sidebar
           collapsed={collapsed}
-          onToggle={() => setCollapsed((c) => !c)}
+          onToggle={toggleCollapsed}
           live={live}
           version={health?.version ?? null}
         />
@@ -403,7 +411,12 @@ export default function Layout() {
         </header>
 
         <main className="flex-1 overflow-x-clip">
-          <div key={location.pathname} className="max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 py-7 fade-in">
+          {/* Wider on bigger monitors — the grids inside fill with more columns
+              rather than leaving a 1440p screen with empty margins. */}
+          <div
+            key={location.pathname}
+            className="max-w-[1680px] 3xl:max-w-[2160px] 4xl:max-w-[2720px] mx-auto px-4 sm:px-6 lg:px-8 3xl:px-10 py-7 fade-in"
+          >
             <Outlet context={{ openConnect: () => setConnectOpen(true) }} />
           </div>
         </main>

@@ -49,8 +49,9 @@ are flagged missing.
 ## 3. (Optional but recommended) TMDB metadata
 
 **Settings** → paste a free [TMDB API key](https://www.themoviedb.org/settings/api)
-→ **Save**. Then hit **Metadata** on each library. You get posters, overviews,
-genres, and ratings — used in Library → Browse and in your players' guide data.
+→ **Save**. Then **Fetch missing** for each library, on the same page. You get
+posters, overviews, genres, and ratings — used in the Library and in your
+players' guide data.
 Local artwork (`poster.jpg`, `folder.jpg`, Plex/Kodi/Jellyfin naming) is used
 first when present.
 
@@ -105,7 +106,8 @@ starts every show over.
 
 ## 8. Watch!
 
-The bar at the top of **Channels** has your two URLs:
+**Connect a player** (in the top bar, and on **Channels**) has your two URLs,
+with copy buttons:
 
 - **M3U**: `http://YOUR-SERVER:8688/iptv/channels.m3u`
 - **XMLTV**: `http://YOUR-SERVER:8688/iptv/xmltv.xml`
@@ -117,11 +119,12 @@ VLC. Full player-by-player instructions: [Connecting Players](clients.md).
 
 ## Polish (when you're ready)
 
-- **Logos & watermark** — upload channel logos on the **Logos** page, assign
-  them per channel/block, and tune the on-screen watermark under **Settings**.
+- **Logos & watermark** — upload channel logos in **Studio → Logos**, assign
+  them per channel/block, and tune the on-screen watermark per logo or under
+  **Settings → Watermark**, with a live preview.
   → [Branding](branding.md)
 - **Station-ID filler** — fill the gaps between programs with generated
-  station-ID clips (7 styles) or your own bumpers, per channel and per block.
+  station-ID clips or your own bumpers, per channel and per block.
   → [Branding](branding.md)
 - **"Coming up next" captions** — burn a caption naming the next program, per
   channel or per block. Channel **General** tab.

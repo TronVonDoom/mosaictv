@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { api, artworkUrl, type Library, type LibraryKind, type LibrarySample, type MediaItem, type Show } from '../lib/api'
+import { api, ART, artworkUrl, type Library, type LibraryKind, type LibrarySample, type MediaItem, type Show } from '../lib/api'
 import MediaDetailModal from './MediaDetailModal'
 import PosterCard from './PosterCard'
 import PosterRail, { RailItem } from './PosterRail'
@@ -29,8 +29,8 @@ function PosterMosaic({ sample, name }: { sample: LibrarySample | undefined; nam
   const tiles = sample?.items ?? []
   return (
     <div className="absolute inset-0 overflow-hidden" style={{ background: posterGradient(name) }}>
-      <div className="absolute -inset-x-10 -top-16 -bottom-6 grid grid-cols-6 gap-2 -rotate-[8deg] opacity-90 transition-transform duration-700 ease-out group-hover:scale-[1.04] group-hover:-rotate-[6deg]">
-        {Array.from({ length: 18 }, (_, i) => {
+      <div className="absolute -inset-x-10 -top-16 -bottom-6 grid grid-cols-6 3xl:grid-cols-8 gap-2 -rotate-[8deg] opacity-90 transition-transform duration-700 ease-out group-hover:scale-[1.04] group-hover:-rotate-[6deg]">
+        {Array.from({ length: 24 }, (_, i) => {
           const t = tiles.length ? tiles[i % tiles.length] : null
           return (
             <div
@@ -40,7 +40,7 @@ function PosterMosaic({ sample, name }: { sample: LibrarySample | undefined; nam
             >
               {t && (
                 <img
-                  src={artworkUrl(t.id, t.art)}
+                  src={artworkUrl(t.id, t.art, ART.tiny)}
                   alt=""
                   loading="lazy"
                   className="w-full h-full object-cover opacity-0 transition-opacity duration-500"
@@ -108,9 +108,9 @@ function LibraryRail({ library, onOpen }: { library: Library; onOpen: (id: numbe
               icon="show"
               imageUrl={
                 s.posterItemId != null
-                  ? artworkUrl(s.posterItemId, 'show')
+                  ? artworkUrl(s.posterItemId, 'show', ART.poster)
                   : s.artItemId != null
-                    ? artworkUrl(s.artItemId, 'show')
+                    ? artworkUrl(s.artItemId, 'show', ART.poster)
                     : undefined
               }
               onClick={() => navigate(`/library/${library.id}/show/${encodeURIComponent(s.showTitle)}`)}
@@ -138,7 +138,7 @@ function LibraryRail({ library, onOpen }: { library: Library; onOpen: (id: numbe
             subtitle={m.year ? String(m.year) : undefined}
             rating={m.rating}
             icon={library.kind === 'movie' ? 'movie' : 'clip'}
-            imageUrl={m.posterPath || m.tmdbPosterPath ? artworkUrl(m.id, 'poster') : undefined}
+            imageUrl={m.posterPath || m.tmdbPosterPath ? artworkUrl(m.id, 'poster', ART.poster) : undefined}
             onClick={() => onOpen(m.id)}
           />
         </RailItem>
@@ -172,7 +172,7 @@ export default function LibraryBrowse({ onAddLibrary }: { onAddLibrary: () => vo
 
   if (!loaded) {
     return (
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 2 }, (_, i) => (
           <Skeleton key={i} className="h-72 rounded-2xl" />
         ))}
@@ -197,7 +197,7 @@ export default function LibraryBrowse({ onAddLibrary }: { onAddLibrary: () => vo
 
   return (
     <div className="space-y-10">
-    <div className={`grid gap-5 ${libraries.length <= 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-2 xl:grid-cols-3'}`}>
+    <div className={`grid grid-cols-1 gap-5 ${libraries.length <= 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-2 xl:grid-cols-3'}`}>
       {libraries.map((l, i) => {
         const [one, many] = KIND_NOUN[l.kind]
         return (

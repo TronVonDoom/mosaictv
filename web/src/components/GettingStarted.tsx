@@ -102,7 +102,7 @@ export default function GettingStarted({ stats, channels }: { stats: Stats; chan
           )}
         </div>
 
-        <ol className="mt-6 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+        <ol className="mt-6 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
           {steps.map((s, i) => (
             <li key={s.title}>
               <Link

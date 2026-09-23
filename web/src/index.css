@@ -17,6 +17,11 @@
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
+  /* Two steps past Tailwind's 2xl, for the monitors people actually run a
+     media server's UI on: a 1080p desktop at 3xl, 1440p/4K at 4xl. */
+  --breakpoint-3xl: 120rem;
+  --breakpoint-4xl: 160rem;
+
   --color-indigo-50: #f5f3ff;
   --color-indigo-100: #ede9fe;
   --color-indigo-200: #ddd6fe;
@@ -349,6 +354,21 @@
   50% {
     opacity: 0.45;
     transform: scale(1.6);
+  }
+}
+
+/* An intermittent watermark in a preview: fades in, holds, fades out. Drives
+   filter: opacity() so it multiplies with the configured opacity rather than
+   replacing it. */
+@keyframes wm-blink {
+  0%, 12% {
+    filter: opacity(0);
+  }
+  28%, 78% {
+    filter: opacity(1);
+  }
+  94%, 100% {
+    filter: opacity(0);
   }
 }
 

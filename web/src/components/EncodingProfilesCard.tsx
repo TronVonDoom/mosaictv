@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { api, type EncodingProfile, type ProfileFields, type ProfileInput } from '../lib/api'
 import { toast } from '../lib/toast'
 import { errorMessage } from '../lib/errors'
-import { Banner, Card, Field, Input, Section, Select } from './ui'
+import { Badge, Banner, Button, Card, Field, Input, Menu, Section, Select, cx } from './ui'
+import Icon from './Icon'
 import { confirmDialog } from '../lib/confirm'
 
 const RES = [
@@ -33,6 +34,12 @@ const SCALING: { value: EncodingProfile['scalingMode']; label: string; hint: str
 ]
 
 const blank = (d: ProfileFields): ProfileInput => ({ name: '', ...d })
+
+/** "1080p · 30fps · medium · NVIDIA · stereo 192k" — a profile at a glance. */
+const summary = (p: ProfileFields) =>
+  `${resLabel(p.width, p.height)} · ${p.fps}fps · ${p.videoBitrateK > 0 ? `${p.videoBitrateK}k` : p.quality} · ${HW[p.hwaccel]} · ${
+    p.audioChannels === 6 ? '5.1' : 'stereo'
+  } ${p.audioBitrate}k`
 
 function Check({ checked, onChange, label, hint }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint: string }) {
   return (
@@ -109,37 +116,87 @@ export default function EncodingProfilesCard() {
   }
 
   return (
-    <Card className="p-5 mt-6">
-      <h2 className="font-semibold mb-1">Encoding profiles</h2>
-      <p className="text-ink-muted text-sm mb-4">
-        Reusable output settings you can assign per channel. Channels with no profile use the built-in
-        default{defaults ? ` (${resLabel(defaults.width, defaults.height)}, ${defaults.fps}fps, ${defaults.quality}, ${HW[defaults.hwaccel]})` : ''}.
-      </p>
-
-      {error && <Banner className="mb-4">{error}</Banner>}
-
-      {profiles.length > 0 && (
-        <div className="space-y-2 mb-4">
-          {profiles.map((p) => (
-            <div key={p.id} className="flex items-center gap-3 text-sm rounded-lg bg-canvas/50 border border-edge px-3 py-2">
-              <span className="font-medium flex-1 min-w-0 truncate">{p.name}</span>
-              <span className="text-xs text-ink-faint shrink-0">
-                {resLabel(p.width, p.height)} · {p.fps}fps · {p.videoBitrateK > 0 ? `${p.videoBitrateK}k` : p.quality} ·{' '}
-                {HW[p.hwaccel]} · {p.audioChannels === 6 ? '5.1' : 'stereo'} {p.audioBitrate}k
-                {p.deinterlace && ' · deint'}
-                {p.normalizeLoudness && ' · loudnorm'}
-                {p.burnSubtitles && ' · subs'}
-              </span>
-              <button onClick={() => startEdit(p)} className="text-xs text-ink-muted hover:text-indigo-300">Edit</button>
-              <button onClick={() => del(p.id)} className="text-ink-faint hover:text-rose-400" aria-label="Delete">×</button>
-            </div>
-          ))}
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[340px_minmax(0,1fr)] items-start">
+      {/* The list */}
+      <Card className="p-3 xl:sticky xl:top-20">
+        <div className="flex items-center justify-between px-2 pt-1 pb-3">
+          <div>
+            <h3 className="font-semibold text-[15px] tracking-tight">Profiles</h3>
+            <p className="text-[12px] text-ink-faint">Assign one per channel on its General tab</p>
+          </div>
+          <Button size="sm" icon="plus" variant={editingId == null ? 'secondary' : 'primary'} onClick={startNew}>
+            New
+          </Button>
         </div>
-      )}
+        <ul className="space-y-0.5">
+          {defaults && (
+            <li className="flex items-center gap-3 rounded-xl px-2 py-2">
+              <span className="grid place-items-center w-9 h-9 shrink-0 rounded-lg border border-edge bg-sunken text-ink-faint">
+                <Icon name="cpu" size={16} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2 text-[13.5px] font-medium text-ink-soft">
+                  Built-in default <Badge>read-only</Badge>
+                </span>
+                <span className="block text-[11.5px] text-ink-faint truncate">{summary(defaults)}</span>
+              </span>
+            </li>
+          )}
+          {profiles.map((p) => {
+            const on = p.id === editingId
+            return (
+              <li key={p.id}>
+                <div
+                  className={cx(
+                    'flex items-center gap-3 rounded-xl px-2 py-2 transition-colors',
+                    on ? 'bg-white/[0.07] shadow-[inset_0_1px_0_rgb(255_255_255/0.04)]' : 'hover:bg-white/[0.035]',
+                  )}
+                >
+                  <button onClick={() => startEdit(p)} className="flex items-center gap-3 min-w-0 flex-1 text-left">
+                    <span
+                      className={cx(
+                        'grid place-items-center w-9 h-9 shrink-0 rounded-lg border',
+                        on ? 'border-indigo-500/40 bg-indigo-500/15 text-indigo-200' : 'border-edge bg-sunken text-ink-muted',
+                      )}
+                    >
+                      <Icon name="sliders" size={16} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className={cx('block text-[13.5px] font-medium truncate', on ? 'text-ink' : 'text-ink-soft')}>{p.name}</span>
+                      <span className="block text-[11.5px] text-ink-faint truncate">
+                        {summary(p)}
+                        {p.deinterlace && ' · deint'}
+                        {p.normalizeLoudness && ' · loudnorm'}
+                        {p.burnSubtitles && ' · subs'}
+                      </span>
+                    </span>
+                  </button>
+                  <Menu items={[{ label: 'Delete profile', icon: 'trash', danger: true, onSelect: () => del(p.id) }]} />
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+        {profiles.length === 0 && (
+          <p className="px-2 pt-2 pb-1 text-[12.5px] text-ink-faint">
+            No profiles yet — channels use the default. Make one to give a channel its own resolution, bitrate or GPU.
+          </p>
+        )}
+      </Card>
 
+      {/* The editor */}
+      <Card className="p-6 min-w-0">
+      {error && <Banner className="mb-4">{error}</Banner>}
       {form && (
-        <div className="rounded-xl border border-edge bg-sunken/60 p-4">
-          <div className="text-sm font-medium mb-3">{editingId ? 'Edit profile' : 'New profile'}</div>
+        <div>
+          <div className="mb-4">
+            <h3 className="font-semibold text-[15px] tracking-tight">
+              {editingId ? `Edit “${profiles.find((p) => p.id === editingId)?.name ?? 'profile'}”` : 'New profile'}
+            </h3>
+            <p className="text-[12.5px] text-ink-muted mt-0.5">
+              {editingId ? 'Changes apply from each channel’s next program.' : 'Starts from the built-in default — change what you need.'}
+            </p>
+          </div>
           <div className="space-y-3">
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               <Field label="Name" className="col-span-2 md:col-span-1">
@@ -264,12 +321,17 @@ export default function EncodingProfilesCard() {
               </div>
             </Section>
           </div>
-          <div className="flex justify-end gap-2 mt-3">
-            {editingId && <button onClick={startNew} className="rounded-lg border border-edge-strong hover:border-ink-faint px-3 py-1.5 text-sm">New instead</button>}
-            <button onClick={save} className="rounded-lg bg-indigo-500 hover:bg-indigo-400 px-5 py-1.5 text-sm font-medium">{editingId ? 'Save' : 'Create profile'}</button>
+          <div className="flex justify-end gap-2 mt-5">
+            {editingId && (
+              <Button variant="secondary" onClick={startNew}>
+                Cancel
+              </Button>
+            )}
+            <Button onClick={save}>{editingId ? 'Save profile' : 'Create profile'}</Button>
           </div>
         </div>
       )}
-    </Card>
+      </Card>
+    </div>
   )
 }

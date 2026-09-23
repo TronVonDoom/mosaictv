@@ -118,7 +118,7 @@ export default function GuideTab({
           </InfoHint>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button icon="bolt" onClick={build} disabled={building || !hasSchedule} loading={building}>
             {buildLabel}
           </Button>

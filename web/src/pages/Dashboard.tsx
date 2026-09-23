@@ -85,11 +85,8 @@ export default function Dashboard() {
           <p className="mt-1 text-sm text-ink-muted">{summary.join(' · ') || ' '}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Link to="/guide" className={buttonClass('secondary', 'md')}>
-            <Icon name="guide" size={16} /> TV guide
-          </Link>
           <Link to="/channels" className={buttonClass('primary', 'md')}>
-            <Icon name="channels" size={16} /> Channels
+            <Icon name="channels" size={16} /> Channels &amp; guide
           </Link>
         </div>
       </header>
@@ -112,7 +109,7 @@ export default function Dashboard() {
           }
         />
         {channels == null ? (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {Array.from({ length: 4 }, (_, i) => (
               <Skeleton key={i} className="aspect-[16/12] rounded-2xl" />
             ))}
@@ -129,7 +126,7 @@ export default function Dashboard() {
             }
           />
         ) : (
-          <div className={`grid gap-4 ${liveCols}`}>
+          <div className={`grid grid-cols-1 gap-4 ${liveCols}`}>
             {onAir.map((c, i) => (
               <ChannelCard
                 key={c.id}
@@ -151,7 +148,7 @@ export default function Dashboard() {
             title="Coming up"
             description="The next few hours across every channel. Click a program for its details."
             actions={
-              <Link to="/guide" className="text-[13px] text-indigo-300 hover:text-indigo-200 inline-flex items-center gap-1">
+              <Link to="/channels#guide" className="text-[13px] text-indigo-300 hover:text-indigo-200 inline-flex items-center gap-1">
                 Full guide <Icon name="chevronRight" size={14} />
               </Link>
             }
@@ -169,7 +166,7 @@ export default function Dashboard() {
       )}
 
       {/* Library + system */}
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         <div>
           <SectionHeading
             title="Library"

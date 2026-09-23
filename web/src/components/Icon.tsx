@@ -53,6 +53,7 @@ import {
   Music2,
   PanelLeftClose,
   PanelLeftOpen,
+  Pause,
   Pencil,
   Play,
   Plus,
@@ -99,6 +100,7 @@ export type IconName =
   | 'upnext'
   // Actions
   | 'play'
+  | 'pause'
   | 'plus'
   | 'search'
   | 'edit'
@@ -172,6 +174,7 @@ const GLYPH: Record<IconName, LucideIcon> = {
   clock: Clock3,
   upnext: SkipForward,
   play: Play,
+  pause: Pause,
   plus: Plus,
   search: Search,
   edit: Pencil,

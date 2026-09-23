@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   api,
+  ART,
   artworkUrl,
   tmdbImage,
   type Airing,
@@ -151,7 +152,7 @@ export default function ShowView() {
 
   const posterSrc =
     detail?.artItemId != null
-      ? artworkUrl(detail.artItemId, 'show')
+      ? artworkUrl(detail.artItemId, 'show', ART.large)
       : detail?.tmdbPosterPath
         ? tmdbImage(detail.tmdbPosterPath)
         : null
@@ -379,7 +380,7 @@ export default function ShowView() {
                 icon="show"
                 imageUrl={
                   posterEp
-                    ? artworkUrl(posterEp.id, 'season')
+                    ? artworkUrl(posterEp.id, 'season', ART.poster)
                     : s.tmdbPosterPath
                       ? tmdbImage(s.tmdbPosterPath)
                       : undefined

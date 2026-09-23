@@ -85,7 +85,7 @@ export default function FillersTab({
               <Select
                 value={mode}
                 onChange={(e) => setBlockFillerMode(b.id, e.target.value)}
-                className="w-auto"
+                className="w-auto max-w-full"
               >
                 <option value="none">Off — no filler in this block</option>
                 <option value="between">Between programmes — spread it out</option>

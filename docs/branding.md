@@ -5,8 +5,8 @@ the corner, station-ID filler between programs, and "coming up next" captions.
 
 ## Logos
 
-Upload logos on the **Logos** page (PNG with transparency looks best). Uploaded
-logos are stored in your data volume and can be assigned to:
+Upload logos under **Studio → Logos** (PNG with transparency looks best).
+Uploaded logos are stored in your data volume and can be assigned to:
 
 - a **channel** (General tab) — used in players' guides (M3U `tvg-logo` +
   XMLTV icon) *and* as the default on-screen watermark;
@@ -15,9 +15,14 @@ logos are stored in your data volume and can be assigned to:
 
 Priority on screen: **block logo → channel logo**.
 
+Click a logo to open it in the inspector: rename it, replace its image, or give
+it its own watermark settings. The preview shows the bug over a frame from your
+library, in 16:9 or 4:3, as you change them.
+
 ## Watermark behavior
 
-**Settings → Default watermark** controls how the on-screen logo is drawn:
+**Settings → Watermark** sets how the on-screen logo is drawn, for any logo
+without watermark settings of its own (with the same live preview):
 
 - **Mode** — `permanent` (always on), `intermittent` (appears every N minutes
   for a set duration, with fade in/out), or `none`.
@@ -62,7 +67,7 @@ leaving the channel.
   that wraps it are created together; there's no separate step to "register"
   the file. (Deleting the filler removes the clip too, unless another filler
   shares it.)
-- **+ Add filler** — a generated station ID built from a channel's logo.
+- **New filler** — a generated station ID built from a channel's logo.
 
 Anything uploaded that no filler uses shows under **Unused clips** at the
 bottom of the list, so nothing becomes unreachable — normally it's empty.

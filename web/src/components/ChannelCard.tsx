@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import ChannelLogo from './ChannelLogo'
 import Icon from './Icon'
-import { artworkUrl, type Channel, type ChannelNow, type NowUnit } from '../lib/api'
+import { ART, artworkUrl, type Channel, type ChannelNow, type NowUnit } from '../lib/api'
 import { formatClock, formatRemaining, posterGradient } from '../lib/format'
 import { Badge, LiveBadge, Menu, ProgressBar, buttonClass, cx, type MenuItem } from './ui'
 
@@ -33,7 +33,7 @@ export function ProgramArt({
     <div className={cx('absolute inset-0 overflow-hidden', className)} style={{ background: posterGradient(unit?.title ?? name) }}>
       {useBackdrop && (
         <img
-          src={artworkUrl(id, 'backdrop')}
+          src={artworkUrl(id, 'backdrop', ART.card)}
           alt=""
           loading="lazy"
           onError={() => setBackdropFailed(true)}
@@ -43,14 +43,14 @@ export function ProgramArt({
       {usePoster && (
         <>
           <img
-            src={artworkUrl(id, unit!.art!)}
+            src={artworkUrl(id, unit!.art!, ART.poster)}
             alt=""
             loading="lazy"
             onError={() => setPosterFailed(true)}
             className="absolute inset-0 w-full h-full object-cover blur-2xl scale-125 opacity-70"
           />
           <img
-            src={artworkUrl(id, unit!.art!)}
+            src={artworkUrl(id, unit!.art!, ART.poster)}
             alt=""
             loading="lazy"
             className="absolute right-4 top-1/2 -translate-y-[58%] h-[78%] aspect-[2/3] object-cover rounded-lg shadow-[0_18px_40px_-8px_rgb(0_0_0/0.85)] ring-1 ring-white/15 transition-transform duration-500 group-hover:-translate-y-[60%]"
@@ -224,11 +224,6 @@ export default function ChannelCard({
                 'No schedule yet'
               )}
             </span>
-            {canWatch && (
-              <button onClick={onWatch} className={buttonClass('ghost', 'sm', 'px-2.5')}>
-                <Icon name="play" size={14} /> Watch
-              </button>
-            )}
             <Link to={`/channels/${channel.id}`} className={buttonClass('secondary', 'sm')}>
               <Icon name="edit" size={14} /> Edit
             </Link>

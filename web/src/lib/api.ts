@@ -250,6 +250,15 @@ export type CollectionItem = {
   mediaItemId: number | null
   label: string | null
   order: number
+  /** What the editor draws for this member (see memberMeta on the server). */
+  meta?: {
+    artId: number | null
+    artType: 'poster' | 'show' | 'season' | null
+    year: number | null
+    episodes: number | null
+    seasons: number | null
+    missing: boolean
+  } | null
 }
 
 export type FillerOwner = { channelId?: number; timeBlockId?: number }
@@ -868,10 +877,24 @@ export function tmdbImage(path: string, size: 'w200' | 'w342' | 'w500' | 'origin
   return `https://image.tmdb.org/t/p/${size}${path}`
 }
 
-// URL for a local artwork file, or null if the item has none of that type.
-export function artworkUrl(
-  id: number,
-  type: 'poster' | 'show' | 'season' | 'backdrop',
-): string {
-  return `/api/artwork/${id}?type=${type}`
+/**
+ * URL for an item's artwork. `w` asks for a thumbnail about that many pixels
+ * wide — the server shrinks local art once and caches it, and fetches TMDB art
+ * at a matching size — so a grid of 150px tiles doesn't pull megabyte posters.
+ * Ask for roughly twice the displayed width, for high-DPI screens.
+ */
+export function artworkUrl(id: number, type: 'poster' | 'show' | 'season' | 'backdrop', w?: number): string {
+  return `/api/artwork/${id}?type=${type}${w ? `&w=${w}` : ''}`
 }
+
+/** Thumbnail widths the UI asks for, sized to where the image is shown. */
+export const ART = {
+  /** A mosaic tile or small list art (~80px). */
+  tiny: 160,
+  /** A grid poster (~150px). */
+  poster: 320,
+  /** A hero poster (~200px). */
+  large: 480,
+  /** A card-width backdrop (~300–560px). */
+  card: 780,
+} as const

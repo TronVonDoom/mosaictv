@@ -71,8 +71,9 @@ export default function MediaSearchInput({
 
   return (
     <div className="relative" ref={boxRef}>
+      <Icon name="plus" size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint pointer-events-none" />
       <Input
-        className="w-full"
+        className="w-full pl-9"
         placeholder="Add a show, season, episode or movie…"
         value={q}
         onChange={(e) => setQ(e.target.value)}
@@ -81,7 +82,7 @@ export default function MediaSearchInput({
         }}
       />
       {open && results.length > 0 && (
-        <div className="absolute z-20 mt-1 w-full rounded-lg border border-edge-strong bg-surface shadow-xl max-h-64 overflow-y-auto">
+        <div className="absolute z-30 mt-1.5 w-full rounded-xl border border-edge-strong bg-overlay/95 backdrop-blur p-1 shadow-2xl shadow-black/60 max-h-80 overflow-y-auto modal-in">
           {results.map((r, i) => {
             const row = rowFor(r)
             return (
@@ -89,11 +90,14 @@ export default function MediaSearchInput({
                 key={i}
                 type="button"
                 onClick={() => pick(r)}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-raised flex items-center gap-2"
+                className="group w-full text-left rounded-lg px-2.5 py-2 text-[13px] hover:bg-white/[0.06] flex items-center gap-2.5"
               >
-                <Icon name={row.icon} size={15} colored />
-                <span className="flex-1 min-w-0 truncate">{row.main}</span>
-                <span className="text-xs text-ink-faint shrink-0">{row.meta}</span>
+                <span className="grid place-items-center w-7 h-7 shrink-0 rounded-md border border-edge bg-surface text-ink-muted">
+                  <Icon name={row.icon} size={14} />
+                </span>
+                <span className="flex-1 min-w-0 truncate text-ink-soft group-hover:text-ink">{row.main}</span>
+                <span className="text-[11.5px] text-ink-faint shrink-0">{row.meta}</span>
+                <Icon name="plus" size={14} className="shrink-0 text-ink-ghost group-hover:text-indigo-300" />
               </button>
             )
           })}

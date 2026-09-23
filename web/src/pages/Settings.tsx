@@ -1,8 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { api, backupUrl, AUDIO_LANGUAGES, type StreamMode, type WatermarkConfig } from '../lib/api'
+import { api, backupUrl, logoImageUrl, AUDIO_LANGUAGES, type StreamMode, type WatermarkConfig } from '../lib/api'
 import { errorMessage } from '../lib/errors'
 import WatermarkFields from '../components/WatermarkFields'
+import WatermarkPreview from '../components/WatermarkPreview'
 import EncodingProfilesCard from '../components/EncodingProfilesCard'
+import LibraryMetadataCard from '../components/settings/LibraryMetadataCard'
+import AboutCard from '../components/settings/AboutCard'
+import SideNav from '../components/SideNav'
 import { toast } from '../lib/toast'
 import { useHashTab } from '../lib/hooks'
 import {
@@ -19,15 +23,14 @@ import {
   Skeleton,
   cx,
 } from '../components/ui'
-import Icon from '../components/Icon'
 import { confirmDialog } from '../lib/confirm'
 
 const TABS = [
-  { id: 'metadata', label: 'Metadata', icon: 'sparkles' },
-  { id: 'streaming', label: 'Streaming', icon: 'cast' },
-  { id: 'watermark', label: 'Watermark', icon: 'image' },
-  { id: 'encoding', label: 'Encoding', icon: 'cpu' },
-  { id: 'maintenance', label: 'Maintenance', icon: 'database' },
+  { id: 'metadata', label: 'Metadata', icon: 'sparkles', description: 'TMDB artwork & descriptions' },
+  { id: 'streaming', label: 'Streaming', icon: 'cast', description: 'Streams, guide depth, tuner' },
+  { id: 'watermark', label: 'Watermark', icon: 'image', description: 'The default on-screen logo' },
+  { id: 'encoding', label: 'Encoding', icon: 'cpu', description: 'Resolution, bitrate, GPU' },
+  { id: 'maintenance', label: 'Maintenance', icon: 'database', description: 'Backup, reset, about' },
 ] as const
 
 type SettingsTab = (typeof TABS)[number]['id']
@@ -107,6 +110,14 @@ export default function Settings() {
   const [tunerName, setTunerName] = useState('MosaicTV')
   const [nameDraft, setNameDraft] = useState('MosaicTV')
   const [wipeAssets, setWipeAssets] = useState(true)
+  // A real logo to preview the default watermark with, if there is one.
+  const [sampleLogo, setSampleLogo] = useState<string | null>(null)
+  useEffect(() => {
+    api
+      .logos()
+      .then((ls) => setSampleLogo(ls[0] ? logoImageUrl(ls[0]) : '/logo-icon.png'))
+      .catch(() => setSampleLogo('/logo-icon.png'))
+  }, [])
   const [resetBusy, setResetBusy] = useState(false)
 
   useEffect(() => {
@@ -252,39 +263,17 @@ export default function Settings() {
         description="How this MosaicTV instance finds artwork, streams, brands its channels, and keeps itself backed up."
       />
 
-      <div className="grid gap-8 lg:grid-cols-[228px_minmax(0,1fr)]">
-        {/* Section nav: a rail on desktop, a scrolling strip on small screens. */}
-        <nav aria-label="Settings sections" className="lg:sticky lg:top-20 self-start">
-          <div className="flex lg:flex-col gap-1 overflow-x-auto no-scrollbar -mx-1 px-1">
-            {TABS.map((t) => {
-              const on = t.id === tab
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
-                  aria-current={on ? 'page' : undefined}
-                  className={cx(
-                    'relative flex items-center gap-3 h-10 shrink-0 rounded-lg px-3 text-[13.5px] font-medium text-left transition-colors',
-                    on
-                      ? 'bg-white/[0.07] text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.04)]'
-                      : 'text-ink-muted hover:text-ink-soft hover:bg-white/[0.035]',
-                  )}
-                >
-                  <Icon name={t.icon} size={17} className={on ? 'text-indigo-300' : 'text-ink-faint'} />
-                  {t.label}
-                </button>
-              )
-            })}
-          </div>
-        </nav>
+      <div className="grid gap-6 grid-cols-[minmax(0,1fr)] lg:grid-cols-[232px_minmax(0,1fr)]">
+        <SideNav label="Settings sections" items={TABS} active={tab} onChange={setTab} />
 
-        <div className="min-w-0 max-w-3xl">
+        <div className="min-w-0">
           <div className="mb-5">
             <h2 className="text-lg font-semibold tracking-tight">{current.label}</h2>
             <p className="text-[13.5px] text-ink-muted mt-0.5">{DESCRIPTIONS[tab]}</p>
           </div>
 
       {tab === 'metadata' && (
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 items-start">
         <SettingsCard
           title="TMDB (The Movie Database)"
           badge={
@@ -334,10 +323,14 @@ export default function Settings() {
             </p>
           )}
         </SettingsCard>
+        <LibraryMetadataCard configured={configured} />
+        </div>
       )}
 
       {tab === 'streaming' && (
-        <div className="space-y-4">
+        // Masonry: cards of different heights flow into two columns on a wide
+        // screen instead of one long stack beside empty space.
+        <div className="xl:columns-2 gap-5 [&>*]:mb-5 [&>*]:break-inside-avoid">
           <SettingsCard
             title="Schedule horizon"
             description={
@@ -538,6 +531,7 @@ export default function Settings() {
 
       {tab === 'watermark' &&
         (wm ? (
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,440px)] items-start">
           <SettingsCard
             title="Default watermark"
             description={
@@ -553,13 +547,17 @@ export default function Settings() {
           >
             <form onSubmit={saveWm}>
               <WatermarkFields wm={wm} onChange={setWm} />
-              <div className="flex justify-end mt-3">
-                <Button type="submit" size="lg">
-                  Save default
-                </Button>
+              <div className="flex justify-end mt-4">
+                <Button type="submit">Save default</Button>
               </div>
             </form>
           </SettingsCard>
+          <div className="xl:sticky xl:top-20">
+            <SettingsCard title="Preview" description="Over a frame from your library, with your first logo.">
+              <WatermarkPreview wm={wm} logoSrc={sampleLogo} />
+            </SettingsCard>
+          </div>
+          </div>
         ) : (
           <Skeleton className="h-64 rounded-xl" />
         ))}
@@ -567,7 +565,9 @@ export default function Settings() {
       {tab === 'encoding' && <EncodingProfilesCard />}
 
       {tab === 'maintenance' && (
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 items-start">
+          <AboutCard />
+          <div className="space-y-5">
           <SettingsCard
             title="Backup"
             description="Everything that makes this instance yours — the database, your logos, and your filler clips — in one archive."
@@ -599,6 +599,7 @@ export default function Settings() {
               </Button>
             </div>
           </SettingsCard>
+          </div>
         </div>
       )}
         </div>

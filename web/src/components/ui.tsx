@@ -15,6 +15,7 @@ import {
   type ReactNode,
   type SelectHTMLAttributes,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { LoaderCircle } from 'lucide-react'
 import Icon, { iconColor, type IconName } from './Icon'
@@ -561,7 +562,9 @@ export function PageHeader({
       {eyebrow && <div className="mb-3 text-[13px] text-ink-faint">{eyebrow}</div>}
       <div className="flex items-center gap-4 flex-wrap">
         {icon && <IconTile name={icon} size="md" className="hidden sm:grid" />}
-        <div className="min-w-0 flex-1">
+        {/* The 16rem basis wraps the actions below the text on a phone instead
+            of squeezing the description into a narrow column beside them. */}
+        <div className="min-w-0 flex-[1_1_16rem]">
           <h1 className="text-[26px] font-semibold tracking-[-0.02em] leading-tight text-ink">{title}</h1>
           {description && <p className="text-ink-muted text-sm mt-1 max-w-2xl leading-relaxed">{description}</p>}
         </div>
@@ -588,15 +591,17 @@ export function SectionHeading({
   className?: string
 }) {
   return (
-    <div className={cx('flex items-end gap-3 mb-3.5', className)}>
-      <div className="min-w-0 flex-1">
+    // Wraps on a phone: the actions (often a few segmented controls) drop
+    // below the title instead of running off the edge.
+    <div className={cx('flex flex-wrap items-end gap-x-3 gap-y-2.5 mb-3.5', className)}>
+      <div className="min-w-0 flex-[1_1_14rem]">
         <h2 className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-ink">
           {icon && <Icon name={icon} size={16} className="text-ink-muted" />}
           {title}
         </h2>
         {description && <p className="text-[13px] text-ink-faint mt-0.5">{description}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+      {actions && <div className="flex items-center gap-2 flex-wrap max-w-full">{actions}</div>}
     </div>
   )
 }
@@ -798,7 +803,10 @@ export function Modal({
     }
   }, [])
 
-  return (
+  // Portalled to <body>: a page's entry animation leaves it a stacking
+  // context, and a modal rendered inside one sat beneath the sidebar and the
+  // sticky top bar — which covered its title and close button.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-[3px] fade-in"
       onClick={onClose}
@@ -814,7 +822,8 @@ export function Modal({
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
