@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.10.1 — Frosted glass that looks like glass (2026-09-23)
+
+- **Frosted glass that looks like glass.** The frosted-glass filler was
+  frosted so heavily that the logos behind it were just smudges. Now the frost is
+  light enough to recognise them through, with a more heavily frosted band
+  across the middle so your logo still reads cleanly in front. The glass has
+  real texture: a slight ripple the logos slide through, a fine grain, a soft
+  glow where bright colours scatter, reflections, and a glint of light that
+  sweeps across every few seconds. The two panes meet at a seam with a
+  shadowed groove and a lit edge, and the logos in front float on a soft
+  shadow. Existing frosted fillers rebuild in the new look on their own.
+- **Smoother, faster frosted fillers.** The scrolling logos now glide at an
+  even pace. Before, the background ran at 25 frames a second inside a 30 fps
+  clip, so every sixth frame repeated and the scroll stuttered slightly. A
+  frosted filler also generates about a quarter faster, and a preview still
+  renders in about a second.
+
 ## 0.10.0 — Room to work (2026-09-23)
 
 Channels and the guide on one page, Studio and Settings rebuilt as workspaces,
