@@ -1,7 +1,7 @@
 # Branding: Logos, Watermarks & Filler
 
 The touches that make a channel feel like a real station: an on-screen bug in
-the corner, station-ID filler between programs, and "coming up next" captions.
+the corner, station-ID filler between programs, and "up next" cards.
 
 ## Logos
 
@@ -118,35 +118,68 @@ come back and the bar picks up where the build actually is, or shows the
 finished clip.
 
 Filler is looped/trimmed to exactly fill each gap, so blocks always land on
-their boundaries. The watermark stays off during filler; "coming up next"
-captions never show on filler either.
+their boundaries. The watermark stays off during filler; "up next" cards
+never show on filler either.
 
-## "Coming up next" captions
+## "Up next" cards
 
-A caption burned into the last stretch of a program announcing what's next.
+Near the end of a program, a card slides in naming what's on next: the next
+program's poster, its title, the episode (`S1 · E4`) and episode title, and
+its year, genres and rating, under an **UP NEXT** label with the time it
+starts. A movie shows its runtime instead of an episode.
+
+There are two styles:
+
+- **Glass** — a frosted panel: the picture behind it is blurred, so it reads on
+  a bright cartoon as well as a dark film.
+- **Broadcast** — a cable-network bar: the poster stands up out of a dark bar,
+  an angled **UP NEXT** tab and the time sit on its top edge, and the bar fades
+  out toward the middle of the picture. On the right-hand side it's mirrored.
 
 - **Channel-wide**: General tab → Coming up next.
 - **Per block**: Schedule tab → edit a block → override (including turning it
   off for that block only).
 
-Captions apply to programs from both rotation and blocks — never to filler. A
-station break between two programs doesn't hide the caption: it names the
+The settings show a preview: the card your channel's next program would get,
+drawn exactly as it airs, over a still from what's on now, with your channel's
+logo where its watermark sits — so you can see at a glance if the card would
+cover it. It follows your changes before you save.
+
+Cards appear over programs from both rotation and blocks, never over filler. A
+station break between two programs doesn't hide the card: it names the
 program after the break.
+
+**Broadcast episodes.** A multi-segment episode (Dexter's three shorts, say)
+gets one card, timed against the whole episode, not one per segment. The card
+announcing it lists every segment, e.g. `S1 · E4–6` and "Dexter Dodgeball /
+Dial M for Monkey - Rasslor / Dexter's Assistant", and the card at its end
+names the program after it.
+
+**Long titles** are cut at a word with an ellipsis rather than running across
+the screen, and a leading episode code the filename left on an episode title
+("E03 - …") is dropped, since the card shows the code on its own.
 
 **Timing.** *Before it ends* shows it once, the lead time before the program
 ends (default 5 minutes, 12 seconds on screen); *Middle* once at the halfway
 point; *Both* does both. On a movie channel the 5-minute mark usually lands in
-the end credits, which is where broadcasters put theirs too.
+the end credits, which is where broadcasters put theirs too. **Slide in** is
+how long the entrance (and exit) takes; 0 pops it on and off.
 
-**Template tokens.** `%showtitle%` is the series for an episode and the film's
-title for a movie, so the default `Coming up next: %showtitle% — %episodetitle%`
-reads "Coming up next: Hocus Pocus" before a movie. `%movietitle%` and `%title%`
-name the film explicitly; `%year%`, `%se%`, `%season%` and `%episode%` fill in
-when the program has them. An empty token takes its brackets and dashes with it
-(`%title% (%year%)` with no year is just the title), and a caption whose tokens
-all come up empty isn't shown at all.
+**Position.** Eight spots around the picture: the four corners, the middle of
+the top and bottom edges, and the middle of the left and right sides. Pick one
+clear of your logo — if the watermark sits bottom-left, put the card
+bottom-right. It slides in from its nearest edge (from the side, or up from
+the bottom / down from the top for the middle positions). The card sits on the
+picture itself, so on a 4:3 show pillarboxed into a 16:9 channel it stays on
+the image, not out on the black bars. Three sizes.
 
-**Saving applies it to what's on air.** The caption and the logo are burned in
+**Saving applies it to what's on air.** The card and the logo are burned in
 when a program starts, so on save the channel re-encodes the current program
 from where it is — a viewer skips a couple of seconds, the same as at any
 program change. Other edits (name, group, schedule) never interrupt the stream.
+
+### "Now playing" on music videos
+
+A music video gets the same card for its first dozen seconds, headed **NOW
+PLAYING**: the song, the artist and album, the year, and the album art when
+the library has some. It uses the channel's card style, position and size.

@@ -1,12 +1,12 @@
 // Building the ffmpeg command for one on-air segment: the video/audio filter
-// chains (scale, deinterlace, subtitles, watermark, captions, song chyron) and
+// chains (scale, deinterlace, subtitles, watermark, info cards) and
 // the argument list that wraps them. Pure string construction — nothing here
 // spawns a process or touches the database.
 
 import { encoderArgs } from './capabilities.js'
 import { VAAPI_DEVICE, type StreamProfile } from './profile.js'
-import type { ComingUpConfig, WatermarkConfig } from './overlays.js'
-import { episodeCode } from '../labels.js'
+import type { CardPosition, ComingUpConfig, WatermarkConfig } from './overlays.js'
+import type { RenderedCard } from './card.js'
 
 export type Segment = {
   filePath: string
@@ -167,147 +167,165 @@ function watermarkGraph(
   return { logoChain, overlayPos, overlayExtra: '' }
 }
 
-// ---- "Coming up next" caption -----------------------------------------------
-
-// The fields of a media item a coming-up caption can reference.
-type CaptionItem = { title: string; showTitle: string | null; season: number | null; episode: number | null; year: number | null }
+// ---- Info cards ("Up next", "Now playing") --------------------------------
 
 /**
- * Fill a coming-up template from the next program, dropping empty tokens and any
- * separators they leave dangling (so a movie with no episode title doesn't emit
- * a trailing " — "). Returns '' when nothing meaningful is left.
+ * Encode-relative windows (seconds) in which the up-next card is visible. The
+ * program can outlast this encode — a broadcast episode is several playout
+ * rows, and the card belongs to the whole episode — so the timings are
+ * measured on the program and clamped to this encode; a window that falls in
+ * another of its segments is dropped here and drawn there.
  */
-export function renderComingUpText(template: string, mi: CaptionItem): string {
-  const se = episodeCode(mi)
-  // %showtitle% names the programme: the series for an episode, the film for a
-  // movie. Without that, the default "%showtitle% — %episodetitle%" renders a
-  // movie as a bare "Coming up next" — unless the template already names the
-  // film another way, which would print it twice.
-  const namesFilm = /%(movietitle|title)%/i.test(template)
-  const vars: Record<string, string> = {
-    showtitle: mi.showTitle ?? (namesFilm ? '' : mi.title),
-    episodetitle: mi.showTitle ? mi.title : '', // only an "episode title" when it's a show
-    movietitle: mi.showTitle ? '' : mi.title,
-    title: mi.title ?? '',
-    season: mi.season != null ? String(mi.season) : '',
-    episode: mi.episode != null ? String(mi.episode) : '',
-    se,
-    year: mi.year != null ? String(mi.year) : '',
-  }
-  let tokens = 0
-  let filled = 0
-  let s = template.replace(/%(\w+)%/g, (m, k: string) => {
-    const key = k.toLowerCase()
-    if (!(key in vars)) return m
-    tokens++
-    if (vars[key]) filled++
-    return vars[key]
-  })
-  // Every token came up empty: the caption would be the template's own words
-  // ("Coming up next") naming nothing, so show none at all.
-  if (tokens > 0 && filled === 0) return ''
-  // Tidy up brackets and separators orphaned by an empty token.
-  s = s
-    .replace(/\(\s*\)|\[\s*\]/g, '') // "(%year%)" with no year
-    .replace(/\s*[—–-]\s*[—–-]\s*/g, ' — ') // doubled dash -> single
-    .replace(/^\s*[—–-]+\s*/g, '') // leading dash
-    .replace(/(\s*[:—–-])+\s*$/g, '') // trailing colon/dash, however many
-    .replace(/\s{2,}/g, ' ')
-    .trim()
-  return s
-}
-
-/** Segment-relative windows (seconds) in which the caption should be visible. */
-export function comingUpWindows(cfg: ComingUpConfig, segDur: number, itemDur: number, offset: number): { a: number; b: number }[] {
+export function comingUpWindows(
+  cfg: ComingUpConfig,
+  t: {
+    encodeSec: number // how long this encode runs
+    untilEndSec: number // from this encode's start to the program's end
+    programSec: number // the whole program's length
+    intoProgramSec: number // how far into the program this encode starts
+  },
+): { a: number; b: number }[] {
   const out: { a: number; b: number }[] = []
   const clampWin = (a: number, b: number) => {
     const A = Math.max(0, a)
-    const B = Math.min(segDur, b)
+    const B = Math.min(t.encodeSec, b)
     if (B - A > 0.5) out.push({ a: A, b: B })
   }
   if (cfg.timing === 'beforeEnd' || cfg.timing === 'both') {
-    const start = segDur - cfg.leadSeconds
+    const start = t.untilEndSec - cfg.leadSeconds
     clampWin(start, start + cfg.holdSeconds)
   }
   if (cfg.timing === 'middle' || cfg.timing === 'both') {
-    // Midpoint of the whole item, expressed in this segment's clock (a mid-item
-    // tune-in has offset>0, so the midpoint may already be behind us — then the
-    // clamp drops it, which is correct).
-    const mid = itemDur / 2 - offset
+    // The program's midpoint on this encode's clock. Tuned in past it, or in
+    // another segment, it lands outside the encode and the clamp drops it.
+    const mid = t.programSec / 2 - t.intoProgramSec
     clampWin(mid - cfg.holdSeconds / 2, mid + cfg.holdSeconds / 2)
   }
   return out
 }
 
 /**
- * Build the drawtext filter for the coming-up caption. Expression option values
- * are single-quoted so their commas aren't parsed as filtergraph separators
- * (the same trick the watermark graph uses). Text comes from a file
- * (expansion=none) so titles with quotes/colons/percent signs can't break the
- * graph. Returns null when there are no visible windows.
+ * An info card to composite: the PNG card.ts rendered (plus, for glass, its
+ * shape mask), where its box lands on the frame, when it's up, and which edge
+ * it slides in from.
  */
-export function comingUpFilter(cfg: ComingUpConfig, font: string, textFile: string, windows: { a: number; b: number }[], p: StreamProfile): string | null {
-  if (windows.length === 0) return null
-  const fontsize = Math.max(10, Math.round((p.height * cfg.fontSizePercent) / 100))
-  const margin = Math.round(p.height * 0.06)
-  const y = cfg.position === 'top' ? String(margin) : `h-text_h-${margin}`
-  const opacity = Math.max(0, Math.min(1, cfg.opacityPercent / 100))
-  const F = Math.max(0.05, cfg.fadeSeconds)
-  const enable = windows.map((w) => `between(t,${w.a.toFixed(2)},${w.b.toFixed(2)})`).join('+')
-  const fades = windows.map((w) => `clip(min((t-${w.a.toFixed(2)})/${F},(${w.b.toFixed(2)}-t)/${F}),0,1)`)
-  const fade = fades.length === 1 ? fades[0] : `max(${fades[0]},${fades[1]})`
-  const alpha = `${opacity.toFixed(3)}*(${fade})`
-  const box = Math.round(fontsize * 0.45)
-  return (
-    `drawtext=fontfile=${font}:textfile=${textFile}:expansion=none` +
-    `:fontsize=${fontsize}:fontcolor=white:borderw=2:bordercolor=black@0.85` +
-    `:box=1:boxcolor=black@0.5:boxborderw=${box}` +
-    `:x=(w-text_w)/2:y=${y}:enable='${enable}':alpha='${alpha}'`
-  )
+export type CardOverlay = {
+  card: RenderedCard
+  x: number
+  y: number
+  windows: { a: number; b: number }[]
+  fadeSec: number
+  scale: number
+  /** The direction it enters from, e.g. [-1, 0] = from the left. */
+  from: [number, number]
 }
 
-// ---- Music-video song chyron ------------------------------------------------
-
-// A music video's on-screen info: title line + "Artist — Album" line. Two
-// separate strings (rendered as two stacked drawtexts) so we never rely on an
-// in-file newline, whose glyph rendering varies by ffmpeg/font build.
-export function renderSongText(mi: { title: string; artist: string | null; album: string | null }): { title: string; sub: string } {
-  return { title: mi.title, sub: [mi.artist, mi.album].filter(Boolean).join(' — ') }
+/** The side a card at `position` is drawn from (card.ts CardAnchor). */
+export function cardAnchor(position: CardPosition): 'left' | 'center' | 'right' {
+  return position.endsWith('left') ? 'left' : position.endsWith('right') ? 'right' : 'center'
 }
 
-// Lower-third "now playing" chyron for a music video: bottom-left, title over
-// "Artist — Album", fading in/out across [a,b] (segment-relative seconds).
-// Two stacked drawtexts (sub on the bottom line, title above). Returns null
-// when the window is too small (e.g. a mid-song tune-in past the intro).
-export function songChyronFilter(
-  font: string,
-  titleFile: string,
-  subFile: string | null,
-  a: number,
-  b: number,
-  p: StreamProfile,
-): string | null {
-  if (b - a < 0.5) return null
-  const fontsize = Math.max(12, Math.round(p.height * 0.045))
-  const margin = Math.round(p.height * 0.07)
-  const lineH = Math.round(fontsize * 1.7) // vertical step between the two lines
-  const F = 0.5
-  const enable = `between(t,${a.toFixed(2)},${b.toFixed(2)})`
-  const alpha = `clip(min((t-${a.toFixed(2)})/${F},(${b.toFixed(2)}-t)/${F}),0,1)`
-  const box = Math.round(fontsize * 0.4)
-  const draw = (file: string, y: string, size: number) =>
-    `drawtext=fontfile=${font}:textfile=${file}:expansion=none` +
-    `:fontsize=${size}:fontcolor=white:borderw=2:bordercolor=black@0.85` +
-    `:box=1:boxcolor=black@0.55:boxborderw=${box}` +
-    `:x=${margin}:y=${y}:enable='${enable}':alpha='${alpha}'`
+/**
+ * The edge a card slides in from: its own side for the left and right
+ * columns, the top or bottom edge for the middle of either.
+ */
+export function cardEntry(position: CardPosition): [number, number] {
+  if (position.endsWith('left')) return [-1, 0]
+  if (position.endsWith('right')) return [1, 0]
+  return position.startsWith('top') ? [0, -1] : [0, 1]
+}
+
+/**
+ * Where a card's box sits: against any edge or corner of the picture, clear of
+ * it by a margin (or centred along it). On a pillarboxed 4:3 show `rect` is the
+ * picture, so the card lands on the image rather than out on the black bars.
+ */
+export function placeCard(
+  rect: { x0: number; y0: number; mw: number; mh: number },
+  frame: { width: number; height: number },
+  box: { w: number; h: number },
+  position: CardPosition,
+  scale: number,
+): { x: number; y: number } {
+  const mx = Math.max(24 * scale, rect.mw * 0.04)
+  const my = Math.max(24 * scale, rect.mh * 0.06)
+  const [v, hz] = position.split('-') as ['top' | 'middle' | 'bottom', 'left' | 'center' | 'right']
+  const x = hz === 'left' ? rect.x0 + mx : hz === 'right' ? rect.x0 + rect.mw - mx - box.w : rect.x0 + (rect.mw - box.w) / 2
+  const y = v === 'top' ? rect.y0 + my : v === 'bottom' ? rect.y0 + rect.mh - my - box.h : rect.y0 + (rect.mh - box.h) / 2
+  const even = (n: number, max: number) => Math.max(0, Math.min(max, 2 * Math.floor(n / 2)))
+  return { x: even(x, frame.width - box.w), y: even(y, frame.height - box.h) }
+}
+
+/** The picture's rectangle on the output canvas for a card (the whole canvas unless padded). */
+export function cardRect(seg: Pick<Segment, 'mediaWidth' | 'mediaHeight'>, p: StreamProfile): Rect {
+  return mediaRect(seg.mediaWidth, seg.mediaHeight, p.scalingMode === 'pad', p.width, p.height)
+}
+
+/**
+ * Composite `cards` over the frame labelled `input`, ending at `output`. For a
+ * glass card the picture behind it is blurred and cut to its shape (the
+ * frosted glass); the rendered card goes over that — or over a transparent
+ * layer for a card with no glass — and the whole layer slides in from its edge
+ * as it fades in, and back out. `inputIdx` maps each card to its [png, mask]
+ * ffmpeg input indexes (mask -1 without glass).
+ */
+function cardsGraph(cards: CardOverlay[], inputIdx: [number, number][], input: string, output: string, fps: number): string {
   const parts: string[] = []
-  if (subFile) {
-    parts.push(draw(subFile, `h-text_h-${margin}`, Math.round(fontsize * 0.82)))
-    parts.push(draw(titleFile, `h-text_h-${margin + lineH}`, fontsize))
-  } else {
-    parts.push(draw(titleFile, `h-text_h-${margin}`, fontsize))
-  }
-  return parts.join(',')
+  let cur = input
+  cards.forEach((c, k) => {
+    const { card } = c
+    const L = `ic${k}`
+    const on = c.windows.map((w) => `between(t,${w.a.toFixed(2)},${w.b.toFixed(2)})`).join('+')
+    const [pngIdx, maskIdx] = inputIdx[k]
+    // Where the PNG's top-left lands on the frame.
+    const lx = c.x - card.box.x
+    const ly = c.y - card.box.y
+    // This branch sees every frame of the program, and the card is up for
+    // seconds of it, so everything that can idle does — the blur, the mask, the
+    // compositing and the fades are all switched on only while the card is up —
+    // and it stays in the video's own YUV (with alpha): an RGB round trip here
+    // cost a quarter more CPU on the whole encode. The card PNG is converted
+    // once; overlay repeats its single frame.
+    let base = cur
+    if (card.frost && maskIdx >= 0) {
+      const f = card.frost
+      base = `${L}m`
+      parts.push(`[${cur}]split=2[${L}m][${L}s]`)
+      parts.push(`[${L}s]crop=${f.w}:${f.h}:${lx + f.x}:${ly + f.y},gblur=sigma=${(16 * c.scale).toFixed(1)}:enable='${on}'[${L}b]`)
+      parts.push(`[${L}b][${maskIdx}:v]alphamerge=enable='${on}',pad=${card.width}:${card.height}:${f.x}:${f.y}:color=black@0[${L}g]`)
+    } else {
+      parts.push(`color=c=black@0:s=${card.width}x${card.height}:r=${fps},format=yuva420p[${L}g]`)
+    }
+    parts.push(`[${L}g][${pngIdx}:v]overlay=0:0:enable='${on}'[${L}l]`)
+    const n = c.windows.length
+    if (n > 1) parts.push(`[${L}l]split=${n}${c.windows.map((_, i) => `[${L}l${i}]`).join('')}`)
+    const F = c.fadeSec
+    const D = 56 * c.scale
+    const [dx, dy] = c.from
+    c.windows.forEach((w, i) => {
+      const src = n > 1 ? `${L}l${i}` : `${L}l`
+      const a = w.a.toFixed(2)
+      const b = w.b.toFixed(2)
+      // The slide takes the whole fade time; the opacity settles in the first
+      // 60% of it, so the card is plainly visible while it glides into place
+      // (and the same in reverse on the way out).
+      const move = F > 0 ? Math.min(F, (w.b - w.a) / 2) : 0
+      const op = (move * 0.6).toFixed(2)
+      const fade =
+        move > 0
+          ? `fade=t=in:st=${a}:d=${op}:alpha=1:enable='between(t,${a},${b})',fade=t=out:st=${(w.b - move * 0.6).toFixed(2)}:d=${op}:alpha=1:enable='between(t,${a},${b})'`
+          : 'null'
+      parts.push(`[${src}]${fade}[${L}f${i}]`)
+      // Eased: out on the way in, in on the way out.
+      const offset = `(pow(1-clip((t-${a})/${move.toFixed(2)},0,1),3)+pow(clip((t-${(w.b - move).toFixed(2)})/${move.toFixed(2)},0,1),3))`
+      const along = (pos: number, dir: number) => (move > 0 && dir ? `${pos}${dir > 0 ? '+' : '-'}${D.toFixed(1)}*${offset}` : String(pos))
+      const out = k === cards.length - 1 && i === n - 1 ? output : `${L}o${i}`
+      parts.push(`[${base}][${L}f${i}]overlay=x='${along(lx, dx)}':y='${along(ly, dy)}':enable='between(t,${a},${b})'[${out}]`)
+      base = out
+    })
+    cur = base
+  })
+  return parts.join(';')
 }
 
 // ---- Full command construction ----------------------------------------------
@@ -345,7 +363,7 @@ function outputArgs(output: FfmpegOutput): string[] {
 
 /** The ffmpeg command that encodes one on-air segment — to MPEG-TS on stdout by
  *  default, or to on-disk HLS segments when `output` says so (the v2 segmenter). */
-export function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: StreamProfile, textFilter?: string, readrate?: string[], output: FfmpegOutput = { kind: 'mpegts-pipe' }): string[] {
+export function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: StreamProfile, cards: CardOverlay[] = [], readrate?: string[], output: FfmpegOutput = { kind: 'mpegts-pipe' }): string[] {
   // Filler is usually built out of the logo already, so the bug goes on top of
   // it only if explicitly asked for.
   const useWatermark = wm.mode !== 'none' && !!seg.logo && (!seg.isFiller || wm.showOnFiller)
@@ -394,6 +412,16 @@ export function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: St
     audioIdx = idx++
     a.push('-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo')
   }
+  // Info cards: each a still PNG and its shape mask, read once — overlay and
+  // alphamerge repeat a single frame. They must come before -t, which after
+  // them would bind to the last input instead of the output.
+  const cardInputs: [number, number][] = cards.map((c) => {
+    a.push('-i', c.card.png)
+    const png = idx++
+    if (!c.card.mask) return [png, -1]
+    a.push('-i', c.card.mask)
+    return [png, idx++]
+  })
   if (seg.durationSec) a.push('-t', seg.durationSec.toFixed(3))
 
   // Deinterlace before scaling, or the comb artifacts get resampled into the
@@ -421,12 +449,12 @@ export function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: St
     const rect = mediaRect(seg.mediaWidth, seg.mediaHeight, constrain, p.width, p.height)
     const totalFrames = Math.round((seg.durationSec ?? 0) * p.fps)
     const wg = watermarkGraph(wm, logoIdx, seg.wmEpochSec, rect, p.fps, fading, seg.fadeInSec, seg.fadeOutSec, totalFrames)
-    vf = `${base}[bg];${wg.logoChain};[bg][lg]overlay=${wg.overlayPos}${wg.overlayExtra}${textFilter ? '[vpre]' : '[v]'}`
+    vf = `${base}[bg];${wg.logoChain};[bg][lg]overlay=${wg.overlayPos}${wg.overlayExtra}${cards.length ? '[vpre]' : '[v]'}`
   } else {
-    vf = `${base}${textFilter ? '[vpre]' : '[v]'}`
+    vf = `${base}${cards.length ? '[vpre]' : '[v]'}`
   }
-  // The coming-up caption goes last, on top of everything else.
-  if (textFilter) vf += `;[vpre]${textFilter}[v]`
+  // The info cards go last, on top of everything else.
+  if (cards.length) vf += ';' + cardsGraph(cards, cardInputs, 'vpre', 'v', p.fps)
   // VAAPI: upload the finished software frame to a GPU surface for the encoder.
   if (enc === 'h264_vaapi') vf = vf.replace(/\[v\]$/, '[vsw]') + ';[vsw]format=nv12,hwupload[v]'
   // A generated audio input (ambient music, silence) is always its own stream

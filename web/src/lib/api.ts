@@ -162,31 +162,62 @@ export type ComingUpConfig = {
   timing: 'middle' | 'beforeEnd' | 'both'
   leadSeconds: number
   holdSeconds: number
-  fadeSeconds: number
-  position: 'top' | 'bottom'
-  template: string
-  fontSizePercent: number
-  opacityPercent: number
+  fadeSeconds: number // slide + fade in/out (0 = pop)
+  style: 'glass' | 'broadcast'
+  position: CardPosition
+  size: 'small' | 'medium' | 'large'
 }
 
-// Starting point when a channel/block first enables a caption.
+/** Any edge or corner of the picture — clear of wherever the logo sits. */
+export type CardPosition =
+  | 'top-left'
+  | 'top-center'
+  | 'top-right'
+  | 'middle-left'
+  | 'middle-right'
+  | 'bottom-left'
+  | 'bottom-center'
+  | 'bottom-right'
+
+// Starting point when a channel/block first enables the up-next card.
 export const DEFAULT_COMINGUP: ComingUpConfig = {
   enabled: true,
   timing: 'beforeEnd',
   leadSeconds: 300,
   holdSeconds: 12,
-  fadeSeconds: 0.5,
-  position: 'bottom',
-  template: 'Coming up next: %showtitle% — %episodetitle%',
-  fontSizePercent: 4,
-  opacityPercent: 90,
+  fadeSeconds: 0.6,
+  style: 'glass',
+  position: 'bottom-left',
+  size: 'medium',
 }
 
-/** Parse a stored comingUp JSON string into a config (null/invalid → null). */
+const CARD_POSITIONS: CardPosition[] = ['top-left', 'top-center', 'top-right', 'middle-left', 'middle-right', 'bottom-left', 'bottom-center', 'bottom-right']
+/** A stored position, including the first card version's "top"/"bottom". */
+function cardPosition(v: unknown): CardPosition {
+  if (v === 'top') return 'top-left'
+  if (v === 'bottom') return 'bottom-left'
+  return CARD_POSITIONS.includes(v as CardPosition) ? (v as CardPosition) : 'bottom-left'
+}
+
+/**
+ * Parse a stored comingUp JSON string into a config (null/invalid → null).
+ * Only today's fields are kept, so a config saved for the old text caption
+ * (with its template and font size) doesn't carry them back on the next save.
+ */
 export function parseComingUp(json: string | null | undefined): ComingUpConfig | null {
   if (!json) return null
   try {
-    return { ...DEFAULT_COMINGUP, ...(JSON.parse(json) as Partial<ComingUpConfig>) }
+    const c = { ...DEFAULT_COMINGUP, ...(JSON.parse(json) as Partial<ComingUpConfig>) }
+    return {
+      enabled: c.enabled,
+      timing: c.timing,
+      leadSeconds: c.leadSeconds,
+      holdSeconds: c.holdSeconds,
+      fadeSeconds: c.fadeSeconds,
+      style: c.style === 'broadcast' ? 'broadcast' : 'glass',
+      position: cardPosition(c.position),
+      size: ['small', 'medium', 'large'].includes(c.size) ? c.size : 'medium',
+    }
   } catch {
     return null
   }
@@ -822,6 +853,17 @@ export const api = {
   addChannel: (data: { number?: number | null; name: string; group?: string | null; logoId?: number | null }) =>
     request<Channel>('/api/channels', { method: 'POST', body: JSON.stringify(data) }),
   channel: (id: number) => request<ChannelDetail>(`/api/channels/${id}`),
+  /** The up-next card this channel's next program would get, as it airs (a PNG), for unsaved settings. */
+  comingUpPreview: async (channelId: number, comingUp: ComingUpConfig, signal?: AbortSignal): Promise<Blob> => {
+    const res = await fetch(`/api/channels/${channelId}/coming-up/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ comingUp }),
+      signal,
+    })
+    if (!res.ok) throw new Error(`Preview failed (${res.status})`)
+    return res.blob()
+  },
   updateChannel: (id: number, data: { number?: number | null; name?: string; group?: string | null; logoUrl?: string | null; logoId?: number | null; profileId?: number | null; comingUp?: ComingUpConfig | null; audioLanguage?: string | null }) =>
     request<Channel>(`/api/channels/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 

@@ -1,6 +1,6 @@
-import type { ComingUpConfig } from '../lib/api'
-import { Field, Input, Section, Select } from './ui'
-
+import { useEffect, useRef, useState } from 'react'
+import { api, type CardPosition, type ComingUpConfig } from '../lib/api'
+import { Field, Input, Section, Segmented, Skeleton, cx } from './ui'
 
 const TIMINGS: { value: ComingUpConfig['timing']; label: string; hint: string }[] = [
   { value: 'beforeEnd', label: 'Before it ends', hint: 'Appears a set time before the current program ends.' },
@@ -8,25 +8,131 @@ const TIMINGS: { value: ComingUpConfig['timing']; label: string; hint: string }[
   { value: 'both', label: 'Both', hint: 'Appears at the midpoint and again near the end.' },
 ]
 
-// The %tokens% a template can use, with a short description each.
-const TOKENS: [string, string][] = [
-  ['%showtitle%', 'series name (a movie’s title for a movie)'],
-  ['%episodetitle%', 'episode title'],
-  ['%movietitle%', 'movie title'],
-  ['%se%', 'S01E02'],
-  ['%season%', 'season number'],
-  ['%episode%', 'episode number'],
-  ['%year%', 'release year'],
+const STYLES = [
+  { value: 'glass', label: 'Glass', title: 'A frosted-glass card over the picture' },
+  { value: 'broadcast', label: 'Broadcast', title: 'A cable-network bar with the poster standing out of it' },
+] as const
+
+const POSITION_LABEL: Record<CardPosition, string> = {
+  'top-left': 'Top left',
+  'top-center': 'Top middle',
+  'top-right': 'Top right',
+  'middle-left': 'Middle left',
+  'middle-right': 'Middle right',
+  'bottom-left': 'Bottom left',
+  'bottom-center': 'Bottom middle',
+  'bottom-right': 'Bottom right',
+}
+// A 3×3 grid over the picture; the centre isn't a place for a card.
+const GRID: (CardPosition | null)[] = [
+  'top-left', 'top-center', 'top-right',
+  'middle-left', null, 'middle-right',
+  'bottom-left', 'bottom-center', 'bottom-right',
 ]
 
-// Editor for the "coming up next" caption shown over programs. Mirrors
-// WatermarkFields' look. Shown only over programs — never filler.
+/** Pick an edge or corner of the picture: a small 16:9 frame to click in. */
+function PositionPicker({ value, onChange }: { value: CardPosition; onChange: (p: CardPosition) => void }) {
+  return (
+    <div className="flex items-center gap-3">
+      <div role="radiogroup" aria-label="Card position" className="grid w-[132px] aspect-video grid-cols-3 grid-rows-3 gap-1 rounded-lg border border-edge bg-sunken p-1">
+        {GRID.map((pos, i) =>
+          pos ? (
+            <button
+              key={pos}
+              type="button"
+              role="radio"
+              aria-checked={value === pos}
+              aria-label={POSITION_LABEL[pos]}
+              title={POSITION_LABEL[pos]}
+              onClick={() => onChange(pos)}
+              className={cx(
+                'rounded-[4px] transition-colors',
+                value === pos ? 'bg-indigo-500 shadow-[0_0_0_1px_rgb(165_180_252/0.5)]' : 'bg-white/[0.06] hover:bg-white/[0.14]',
+              )}
+            />
+          ) : (
+            <span key={i} />
+          ),
+        )}
+      </div>
+      <span className="text-sm text-ink-soft">{POSITION_LABEL[value]}</span>
+    </div>
+  )
+}
+
+const SIZES = [
+  { value: 'small', label: 'Small' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'large', label: 'Large' },
+] as const
+
+/**
+ * The card as it will air: this channel's real next program over a still from
+ * what's on now, rendered by the server exactly as the stream draws it.
+ * Follows the form's unsaved settings, a moment after each change.
+ */
+function CardPreview({ channelId, cfg }: { channelId: number; cfg: ComingUpConfig }) {
+  const [url, setUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
+  const urlRef = useRef<string | null>(null)
+  // Only what changes the picture — timing edits don't need a new render.
+  const key = `${cfg.style}|${cfg.position}|${cfg.size}`
+
+  useEffect(() => {
+    const ac = new AbortController()
+    setLoading(true)
+    const t = setTimeout(() => {
+      api
+        .comingUpPreview(channelId, cfg, ac.signal)
+        .then((blob) => {
+          const next = URL.createObjectURL(blob)
+          if (urlRef.current) URL.revokeObjectURL(urlRef.current)
+          urlRef.current = next
+          setUrl(next)
+          setFailed(false)
+        })
+        .catch(() => !ac.signal.aborted && setFailed(true))
+        .finally(() => !ac.signal.aborted && setLoading(false))
+    }, 250)
+    return () => {
+      clearTimeout(t)
+      ac.abort()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelId, key])
+
+  useEffect(() => () => void (urlRef.current && URL.revokeObjectURL(urlRef.current)), [])
+
+  return (
+    <figure className="max-w-xl">
+      <div className="relative aspect-video overflow-hidden rounded-xl border border-edge bg-sunken">
+        {url ? (
+          <img src={url} alt="The up-next card over a still from this channel" className={cx('absolute inset-0 h-full w-full object-cover transition-opacity', loading && 'opacity-60')} />
+        ) : failed ? (
+          <div className="absolute inset-0 grid place-items-center text-xs text-ink-faint">Preview unavailable</div>
+        ) : (
+          <Skeleton className="absolute inset-0 rounded-none" />
+        )}
+      </div>
+      <figcaption className="mt-1.5 text-xs text-ink-faint">
+        This channel's next program, as it will air, with the channel's logo where its watermark sits — keep
+        the card clear of it. The card slides in from the nearest edge.
+      </figcaption>
+    </figure>
+  )
+}
+
+// Editor for the "up next" card shown over programs — never filler. With a
+// channel, it previews the card as it will air.
 export default function ComingUpFields({
   cfg,
   onChange,
+  channelId,
 }: {
   cfg: ComingUpConfig
   onChange: (c: ComingUpConfig) => void
+  channelId?: number
 }) {
   const set = <K extends keyof ComingUpConfig>(k: K, v: ComingUpConfig[K]) => onChange({ ...cfg, [k]: v })
 
@@ -34,23 +140,12 @@ export default function ComingUpFields({
     <div className="space-y-3">
       <label className="flex items-center gap-2 text-sm select-none">
         <input type="checkbox" checked={cfg.enabled} onChange={(e) => set('enabled', e.target.checked)} />
-        <span className="text-ink font-medium">Show a “coming up next” caption over programs</span>
+        <span className="text-ink font-medium">Show an “up next” card over programs</span>
       </label>
 
       {cfg.enabled && (
         <>
-          <Section title="Text">
-            <Field label="Template" hint="Empty tokens (and the dashes around them) are dropped automatically.">
-              <Input className="w-full font-mono" value={cfg.template} onChange={(e) => set('template', e.target.value)} />
-            </Field>
-            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-faint">
-              {TOKENS.map(([tok, desc]) => (
-                <span key={tok}>
-                  <code className="text-ink-muted">{tok}</code> {desc}
-                </span>
-              ))}
-            </div>
-          </Section>
+          {channelId != null && <CardPreview channelId={channelId} cfg={cfg} />}
 
           <Section title="Timing">
             <div className="inline-flex rounded-lg border border-edge-strong overflow-hidden">
@@ -77,25 +172,22 @@ export default function ComingUpFields({
               <Field label="On screen (sec)">
                 <Input type="number" min={2} max={120} className="w-full" value={cfg.holdSeconds} onChange={(e) => set('holdSeconds', Number(e.target.value))} />
               </Field>
-              <Field label="Fade (sec)" hint="0 = pop.">
-                <Input type="number" min={0} step={0.5} className="w-full" value={cfg.fadeSeconds} onChange={(e) => set('fadeSeconds', Number(e.target.value))} />
+              <Field label="Slide in (sec)" hint="0 = no animation.">
+                <Input type="number" min={0} max={3} step={0.1} className="w-full" value={cfg.fadeSeconds} onChange={(e) => set('fadeSeconds', Number(e.target.value))} />
               </Field>
             </div>
           </Section>
 
           <Section title="Appearance">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="flex flex-wrap items-start gap-x-8 gap-y-4">
+              <Field label="Style">
+                <Segmented options={STYLES} value={cfg.style} onChange={(v) => set('style', v)} />
+              </Field>
               <Field label="Position">
-                <Select className="w-full" value={cfg.position} onChange={(e) => set('position', e.target.value as ComingUpConfig['position'])}>
-                  <option value="bottom">Bottom</option>
-                  <option value="top">Top</option>
-                </Select>
+                <PositionPicker value={cfg.position} onChange={(v) => set('position', v)} />
               </Field>
-              <Field label="Text size %" hint="Share of frame height.">
-                <Input type="number" min={1.5} max={15} step={0.5} className="w-full" value={cfg.fontSizePercent} onChange={(e) => set('fontSizePercent', Number(e.target.value))} />
-              </Field>
-              <Field label="Opacity %">
-                <Input type="number" min={0} max={100} className="w-full" value={cfg.opacityPercent} onChange={(e) => set('opacityPercent', Number(e.target.value))} />
+              <Field label="Size">
+                <Segmented options={SIZES} value={cfg.size} onChange={(v) => set('size', v)} />
               </Field>
             </div>
           </Section>

@@ -1,5 +1,5 @@
 // Configuration for the two burned-in overlays: the corner watermark (station
-// logo) and the "coming up next" caption. Types, defaults, and the parse /
+// logo) and the "coming up next" card. Types, defaults, and the parse /
 // sanitize helpers the API routes and the stream pipeline share. The filter
 // graphs that render them live in filters.ts.
 
@@ -77,42 +77,77 @@ export async function loadWatermark(): Promise<WatermarkConfig> {
 
 // ---- "Coming up next" overlay ---------------------------------------------
 
-// A burned-in caption naming the NEXT program, shown over the current program
-// during a configurable window. Never shown on filler (the schedule filler is a
-// separate feature). Text is drawn with ffmpeg's drawtext, which is
-// feature-detected — if unavailable the overlay is silently skipped.
+// The "up next" card naming the NEXT program (card.ts), shown over the current
+// program during a configurable window. Never shown on filler (the schedule
+// filler is a separate feature).
 export type ComingUpConfig = {
   enabled: boolean
-  // Where in the current program the caption appears.
+  // Where in the current program the card appears.
   timing: 'middle' | 'beforeEnd' | 'both'
   leadSeconds: number // beforeEnd: how long before the program ends it appears
   holdSeconds: number // how long it stays on screen
-  fadeSeconds: number // fade in/out (0 = pop)
-  position: 'top' | 'bottom'
-  // Template with %tokens% filled from the next program:
-  // %showtitle% %episodetitle% %movietitle% %title% %season% %episode% %se% %year%
-  template: string
-  fontSizePercent: number // caption height as a share of the frame height
-  opacityPercent: number
+  fadeSeconds: number // slide + fade in/out (0 = pop)
+  style: CardStyle
+  position: CardPosition
+  size: CardSize
 }
+
+/** Glass: a frosted panel. Broadcast: a cable-network bar with a tab. */
+export type CardStyle = 'glass' | 'broadcast'
+export const CARD_STYLES: CardStyle[] = ['glass', 'broadcast']
+
+/** Any edge or corner of the picture — clear of wherever the logo sits. */
+export type CardPosition =
+  | 'top-left'
+  | 'top-center'
+  | 'top-right'
+  | 'middle-left'
+  | 'middle-right'
+  | 'bottom-left'
+  | 'bottom-center'
+  | 'bottom-right'
+export const CARD_POSITIONS: CardPosition[] = [
+  'top-left',
+  'top-center',
+  'top-right',
+  'middle-left',
+  'middle-right',
+  'bottom-left',
+  'bottom-center',
+  'bottom-right',
+]
+
+export type CardSize = 'small' | 'medium' | 'large'
+/** How much a card size scales the 720p design, on top of the frame height. */
+export const CARD_SCALE: Record<CardSize, number> = { small: 0.85, medium: 1, large: 1.2 }
 
 export const DEFAULT_COMINGUP: ComingUpConfig = {
   enabled: false,
   timing: 'beforeEnd',
   leadSeconds: 300,
   holdSeconds: 12,
-  fadeSeconds: 0.5,
-  position: 'bottom',
-  template: 'Coming up next: %showtitle% — %episodetitle%',
-  fontSizePercent: 4,
-  opacityPercent: 90,
+  fadeSeconds: 0.6,
+  style: 'glass',
+  position: 'bottom-left',
+  size: 'medium',
 }
 
-/** Parse a stored ComingUpConfig JSON blob, filling gaps from the default. */
+/** A position from a config, including the two the first card version had. */
+function asPosition(v: unknown): CardPosition {
+  if (v === 'top') return 'top-left'
+  if (v === 'bottom') return 'bottom-left'
+  return CARD_POSITIONS.includes(v as CardPosition) ? (v as CardPosition) : 'bottom-left'
+}
+
+/**
+ * Parse a stored ComingUpConfig JSON blob, filling gaps from the default. Run
+ * through sanitizeComingUp so a config saved by an older version (with the text
+ * caption's template and font size) comes back in today's shape.
+ */
 export function parseComingUp(json: string | null | undefined): ComingUpConfig {
   if (!json) return DEFAULT_COMINGUP
   try {
-    return { ...DEFAULT_COMINGUP, ...(JSON.parse(json) as Partial<ComingUpConfig>) }
+    return sanitizeComingUp(JSON.parse(json))
   } catch {
     return DEFAULT_COMINGUP
   }
@@ -133,11 +168,9 @@ export function sanitizeComingUp(input: unknown): ComingUpConfig {
     timing: timings.includes(c.timing) ? c.timing : 'beforeEnd',
     leadSeconds: Math.round(num(c.leadSeconds, 300, 5, 3600)),
     holdSeconds: Math.round(num(c.holdSeconds, 12, 2, 120)),
-    fadeSeconds: num(c.fadeSeconds, 0.5, 0, 10),
-    position: c.position === 'top' ? 'top' : 'bottom',
-    // Cap length so a pathological template can't blow up the filtergraph.
-    template: String(c.template ?? DEFAULT_COMINGUP.template).slice(0, 200),
-    fontSizePercent: num(c.fontSizePercent, 4, 1.5, 15),
-    opacityPercent: Math.round(num(c.opacityPercent, 90, 0, 100)),
+    fadeSeconds: num(c.fadeSeconds, 0.6, 0, 3),
+    style: CARD_STYLES.includes(c.style) ? c.style : 'glass',
+    position: asPosition(c.position),
+    size: typeof c.size === 'string' && Object.hasOwn(CARD_SCALE, c.size) ? c.size : 'medium',
   }
 }

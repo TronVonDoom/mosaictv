@@ -1,7 +1,7 @@
 # MosaicTV Documentation
 
 Turn your media library into scheduled 24/7 live TV channels — with filler,
-watermarks, "coming up next" captions, and standard M3U + XMLTV output that
+watermarks, "up next" cards, and standard M3U + XMLTV output that
 plugs into Plex, Jellyfin, Emby, or any IPTV player.
 
 ## Guides
@@ -11,7 +11,7 @@ plugs into Plex, Jellyfin, Emby, or any IPTV player.
 | [Installation](install.md) | Docker run, Docker Compose, Portainer, Unraid — plus updating and all settings |
 | [Getting Started](getting-started.md) | Zero to your first live channel, step by step |
 | [Channels & Scheduling](channels.md) | Collections, multi-segment broadcast episodes, rotations, time blocks, playback orders, the guide |
-| [Branding: Logos, Watermarks & Filler](branding.md) | On-screen logos, watermark behavior, station-ID filler clips, "coming up next" |
+| [Branding: Logos, Watermarks & Filler](branding.md) | On-screen logos, watermark behavior, station-ID filler clips, "up next" cards |
 | [Connecting Players](clients.md) | Jellyfin, Emby, Plex, VLC, and friends — plus shared HLS vs MPEG-TS, and casting |
 | [Hardware Acceleration](hardware-acceleration.md) | CPU vs GPU encoding (NVIDIA/QuickSync/VAAPI/AMF/VideoToolbox), setup per platform, encoding profiles |
 | [Security](security.md) | Why MosaicTV is LAN-only and how to access it remotely the safe way |
