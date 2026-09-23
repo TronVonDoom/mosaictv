@@ -23,8 +23,9 @@ const ORDER_OPTIONS = [INHERIT, ...PLAYBACK_ORDERS]
 
 // What a scheduled item actually plays as: "inherit" is resolved so the list
 // reads the same whether the order was set here or on the collection.
+// Lowercase, to sit among the rest of the row's details.
 const effectiveLabel = (setting: string, collection: { defaultOrder: string }): string =>
-  setting === 'inherit' ? orderLabel(collection.defaultOrder) : orderLabel(setting)
+  (setting === 'inherit' ? orderLabel(collection.defaultOrder) : orderLabel(setting)).toLowerCase()
 
 function timeToMin(t: string): number {
   const [h, m] = t.split(':').map(Number)

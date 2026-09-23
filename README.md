@@ -23,8 +23,8 @@ simple to run and pleasant to configure.
 - 📺 **Real live-TV channels** — tune in mid-program like broadcast TV.
   Channels resume where they left off, forever. Serve them as shared HLS (one
   transcode per channel, however many viewers) or per-client MPEG-TS.
-- 🗓 **Scheduling that thinks like a station** — 24/7 rotations (in order /
-  round-robin across shows / shuffle) plus day/time blocks (*weekdays 6–9pm →
+- 🗓 **Scheduling that thinks like a station** — 24/7 rotations (your order /
+  release order / round-robin across shows / shuffle) plus day/time blocks (*weekdays 6–9pm →
   Cartoons*) with soft or exact-time starts.
 - 🎬 **Station-ID filler** — gaps auto-filled so blocks end on time: seven
   generated ident styles branded with your channel logo, or your own bumper

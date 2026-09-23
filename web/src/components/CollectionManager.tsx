@@ -11,11 +11,12 @@ import {
   type MediaItem,
   type MediaSearchResult,
 } from '../lib/api'
-import { PLAYBACK_ORDERS, orderLabel } from '../lib/playback'
+import { orderLabel } from '../lib/playback'
 import { posterGradient, programLabel } from '../lib/format'
 import { confirmDialog } from '../lib/confirm'
 import MediaSearchInput from './MediaSearchInput'
 import LogoPicker from './LogoPicker'
+import OrderPicker from './OrderPicker'
 import { toast } from '../lib/toast'
 import { errorMessage } from '../lib/errors'
 import { Badge, Banner, Button, Card, EmptyState, Field, IconTile, Input, Menu, Modal, ModalHeader, Select, cx } from './ui'
@@ -188,29 +189,29 @@ function CollectionSettings({
   }
 
   return (
-    <Modal onClose={onClose} panelClassName="w-full max-w-xl">
+    <Modal onClose={onClose} panelClassName="w-full max-w-3xl">
       <ModalHeader icon="layers" title="Collection settings" subtitle={collection.name} onClose={onClose} />
-      <div className="p-5 space-y-4">
+      <div className="p-5 space-y-5">
         {error && <Banner>{error}</Banner>}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Name">
             <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </Field>
-          <Field label="Plays in this order" hint="Unless a rotation item or block overrides it.">
-            <Select value={form.defaultOrder} onChange={(e) => setForm({ ...form, defaultOrder: e.target.value })}>
-              {PLAYBACK_ORDERS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          {/* Not a <Field>: LogoPicker carries its own <label> (the upload button). */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[12.5px] font-medium text-ink-soft">Logo</span>
+            <LogoPicker value={form.logoId} onChange={(id) => setForm({ ...form, logoId: id })} />
+            <span className="text-xs text-ink-faint">On screen while this collection airs, unless its block sets one.</span>
+          </div>
         </div>
-        {/* Not a <Field>: LogoPicker carries its own <label> (the upload button). */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[12.5px] font-medium text-ink-soft">Logo</span>
-          <LogoPicker value={form.logoId} onChange={(id) => setForm({ ...form, logoId: id })} />
-          <span className="text-xs text-ink-faint">The on-screen logo while this collection airs, unless its block sets one.</span>
+        <div>
+          <div className="text-[13px] font-medium text-ink mb-0.5">Plays in this order</div>
+          <p className="text-xs text-ink-faint mb-3">A rotation item or block can override it for its own slot.</p>
+          <OrderPicker
+            collectionId={collection.id}
+            value={form.defaultOrder}
+            onChange={(order) => setForm({ ...form, defaultOrder: order })}
+          />
         </div>
         <div className="rounded-xl border border-edge bg-sunken/60 p-4">
           <div className="text-[13px] font-medium text-ink mb-0.5">Smart filter</div>
@@ -294,7 +295,7 @@ export default function CollectionManager({
   useEffect(() => {
     if (!showPreview || !selected) return
     setPreview(null)
-    api.collectionPreview(selected.id).then(setPreview).catch(() => setPreview(null))
+    api.collectionPreview(selected.id, selected.defaultOrder).then(setPreview).catch(() => setPreview(null))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showPreview, selected?.id, selected?.items.length, selected?.defaultOrder])
 
@@ -518,7 +519,7 @@ export default function CollectionManager({
               ) : (
                 <>
                   <div className="text-[12px] text-ink-faint mb-2.5">
-                    The first {preview.sample.length} of {preview.count.toLocaleString()}, {orderLabel(preview.order)}
+                    The first {preview.sample.length} of {preview.count.toLocaleString()} · {orderLabel(preview.order)}
                   </div>
                   <ol className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
                     {preview.sample.map((m, i) => (
@@ -573,7 +574,7 @@ export default function CollectionManager({
               </div>
               {selected.items.length > 1 && (
                 <p className="mt-4 text-[12px] text-ink-faint inline-flex items-center gap-1.5">
-                  <Icon name="info" size={13} /> Drag posters to reorder — the sequence the “hand-picked order” mode airs.
+                  <Icon name="info" size={13} /> Drag posters to reorder: Your order, Release order and Rotate shows follow this arrangement.
                 </p>
               )}
             </>

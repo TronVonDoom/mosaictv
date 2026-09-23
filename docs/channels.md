@@ -35,21 +35,22 @@ resolves to a set of playable items from two sources, combined and deduped:
 
 1. **Members** — hand-picked entries added via the search box: a whole **show**,
    a single **season** of one, an individual **episode**, or a **movie**. A
-   collection can hold any mix. **Drag members to reorder them**: that sequence
-   is what the *hand-picked order* playback mode airs.
+   collection can hold any mix. **Drag members to reorder them**: *Your order*,
+   *Release order* and *Rotate shows* all follow that arrangement.
 2. **Smart filter** — optional: by library, media type, exact show, title
-   search, or genre. Filter results have no hand-picked position, so they air
-   after the members.
+   search, or genre. Filter results have no hand-picked position, so they come
+   after the members, show by show, A–Z.
 
 Only playable items count (files that exist and have a known duration).
 
-**Plays in this order** sets the collection's own playback order (below). Every
-rotation item and time block defaults to *collection default*, so a collection
-airing in five places only needs its order set once — override it per slot when
-you actually want them to differ.
+**Plays in this order** (in the collection's **Settings**) sets its own playback
+order (below), with each choice explained and the collection's first airings
+previewed as you pick. Every rotation item and time block defaults to
+*collection default*, so a collection airing in five places only needs its
+order set once — override it per slot when you actually want them to differ.
 
-**Preview** lists what the collection resolves to, in that order — the quickest
-way to check a hand-picked arrangement came out the way you meant.
+**What airs** lists what the collection resolves to, in its order — the
+quickest way to check an arrangement came out the way you meant.
 
 ## Rotation
 
@@ -61,24 +62,32 @@ that loops forever. Per entry:
   repeating.
 - **Playback order** (defaults to **collection default** — the order set on the
   collection itself):
-  - **in order** — chronological (S01E01 → S01E02 → …; movies by year).
-  - **hand-picked order** — the collection's members in the exact order you
-    arranged them, each show expanded into its own episodes in sequence.
-  - **rotate shows** — round-robin across shows in the collection: each show
-    takes a turn, each continuing from its own last-played episode. Everything
-    without a show (movies, one-offs) shares a single turn, so one show plus
-    fifty movies still splits the airtime evenly rather than 1:50.
-  - **shuffle** — every item in random order, re-dealt every time the
+  - **Your order** — the collection's members in the exact order you arranged
+    them, each show expanded into its own episodes in sequence: one show's
+    full run, then the next member.
+  - **Release order** — oldest first: movies by year, each show's episodes in
+    order (S01E01 → S01E02 → …), the shows one after another in your
+    arrangement. A movie series added in any order still airs 1978 → 1981 → 1988.
+  - **Rotate shows** — round-robin across the shows, in your arrangement: one
+    episode from each show in turn. Everything without a show (movies,
+    one-offs) shares a single turn, so one show plus fifty movies still splits
+    the airtime evenly rather than 1:50.
+  - **Rotate shows, mixed** — every show still gets one episode per round, but
+    each round is dealt in a new random order (and never opens with the show
+    that closed the last one). Episodes stay in sequence. With two shows there's
+    nothing to mix, so they alternate.
+  - **Shuffle** — every item in random order, re-dealt every time the
     collection is played through, so a second pass isn't the same running order
     as the first.
-  - **shuffle shows** — the shows in random order but each one's episodes still
-    in sequence: a marathon of one show, then a marathon of another. Which show
-    is up next is re-dealt each pass.
 
-  Both shuffles derive their deal from the playback position rather than storing
-  it, so a guide rebuild reproduces the timeline exactly. (With only two or
-  three groups, consecutive passes can land on the same arrangement by chance —
-  that's the shuffle being honest, not a stuck seed.)
+  In both rotations **each show keeps its own place**: add a show and it starts
+  at its first episode while the rest carry on; drop one and it resumes where it
+  was if you add it back; reorder them and only whose turn is next changes.
+
+  The random orders derive their deal from the playback position rather than
+  storing it, so a guide rebuild reproduces the timeline exactly. (With only two
+  or three groups, consecutive passes can land on the same arrangement by
+  chance — that's the shuffle being honest, not a stuck seed.)
 
 Every show/collection keeps its **position** — a channel resumes exactly where
 it left off, even across guide rebuilds and container restarts.

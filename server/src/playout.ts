@@ -67,7 +67,12 @@ export async function topUpPlayout(channel: {
 }
 
 type BlockWithCollection = TimeBlock & { collection: CollectionWithItems }
-type State = { rotationIndex: number; positions: Record<string, number> }
+type State = {
+  rotationIndex: number
+  positions: Record<string, number>
+  // Each show's turns in a rotating order, by position key (see RotationProgress).
+  shows?: Record<string, Record<string, number>>
+}
 
 function truncateToMinute(d: Date): Date {
   return new Date(Math.floor(d.getTime() / 60000) * 60000)
@@ -166,25 +171,41 @@ async function buildPlayoutInner(channelId: number, until: Date): Promise<number
     ? (JSON.parse(channel.playoutState) as State)
     : { rotationIndex: 0, positions: {} }
 
-  // Cache resolved collection lists for this build pass (per collection+order).
-  // `setting` may be "inherit", which defers to the collection's own default.
-  const cache = new Map<string, ResolvedList>()
-  const listFor = async (
-    collection: CollectionWithItems,
-    setting: string,
-  ): Promise<ResolvedList> => {
-    const order = effectiveOrder(setting, collection)
-    const ck = `${collection.id}:${order}`
-    if (!cache.has(ck)) {
-      const seed = channelId * 100000 + collection.id
-      cache.set(ck, await resolveCollection(collection, order, seed))
-    }
-    return cache.get(ck)!
-  }
   // Position for a collection, adopting the pre-refactor per-block/per-rotation
   // key the first time so nothing restarts at episode 1 on upgrade.
   const posOf = (key: string, legacyKey: string): number =>
     state.positions[key] ?? state.positions[legacyKey] ?? 0
+
+  // Cache resolved collection lists for this build pass (per collection+order).
+  // `setting` may be "inherit", which defers to the collection's own default.
+  // A rotation is resolved against where it stands now, so its later positions
+  // in this pass are counted on from there.
+  const cache = new Map<string, ResolvedList>()
+  const listFor = async (
+    collection: CollectionWithItems,
+    setting: string,
+    key: string,
+    legacyKey: string,
+  ): Promise<ResolvedList> => {
+    const order = effectiveOrder(setting, collection)
+    const ck = `${collection.id}:${order}`
+    let list = cache.get(ck)
+    if (!list) {
+      const seed = channelId * 100000 + collection.id
+      list = await resolveCollection(collection, order, seed, { base: posOf(key, legacyKey), shows: state.shows?.[key] })
+      cache.set(ck, list)
+    }
+    return list
+  }
+  // Save a collection's new position — and, for a rotation, each show's turns
+  // as of it. A list of the same collection in another order was resolved
+  // against the old position, so it's dropped to be resolved afresh.
+  const advance = (key: string, collectionId: number, list: ResolvedList, pos: number) => {
+    state.positions[key] = pos
+    const shows = list.progressAt?.(pos)
+    if (shows) (state.shows ??= {})[key] = shows
+    for (const [ck, other] of cache) if (ck.startsWith(`${collectionId}:`) && other !== list) cache.delete(ck)
+  }
 
   const created: {
     mediaItemId: number | null
@@ -230,7 +251,7 @@ async function buildPlayoutInner(channelId: number, until: Date): Promise<number
     if (block) {
       const key = 'c' + block.collectionId
       const legacy = 'b' + block.id
-      const items = await listFor(block.collection, block.playbackOrder)
+      const items = await listFor(block.collection, block.playbackOrder, key, legacy)
       const blockEnd = skipToBlockEnd(cursor, block)
       const fillerMode = block.fillerMode || 'none'
 
@@ -242,7 +263,7 @@ async function buildPlayoutInner(channelId: number, until: Date): Promise<number
         // Soft boundary: one program (unit) per iteration; may overrun the end.
         const pos = posOf(key, legacy)
         const u = items.at(pos)
-        state.positions[key] = pos + 1
+        advance(key, block.collectionId, items, pos + 1)
         const end = pushUnit(u, cursor.getTime())
         if (end > cursor.getTime()) cursor = new Date(end)
       } else {
@@ -265,12 +286,12 @@ async function buildPlayoutInner(channelId: number, until: Date): Promise<number
           used += dur
           pos++
         }
-        state.positions[key] = pos
+        advance(key, block.collectionId, items, pos)
 
         if (fit.length === 0) {
           // A single unit is longer than the whole block — play it (overruns).
           const u = items.at(pos)
-          state.positions[key] = pos + 1
+          advance(key, block.collectionId, items, pos + 1)
           const end = pushUnit(u, cursor.getTime())
           cursor = new Date(Math.max(end, cursor.getTime() + 1000))
         } else {
@@ -299,7 +320,7 @@ async function buildPlayoutInner(channelId: number, until: Date): Promise<number
       state.rotationIndex = state.rotationIndex + 1
       const key = 'c' + ri.collectionId
       const legacy = 'r' + ri.id
-      const items = await listFor(ri.collection, ri.playbackOrder)
+      const items = await listFor(ri.collection, ri.playbackOrder, key, legacy)
       if (items.length > 0) {
         // "play N" counts units, so a multi-part airing is one of the N.
         const take = ri.mode === 'multiple' ? Math.max(1, ri.count) : 1
@@ -329,7 +350,7 @@ async function buildPlayoutInner(channelId: number, until: Date): Promise<number
           if (cursor >= until) break
           if (activeBlock(channel.timeBlocks, cursor)) break // enter the block promptly
         }
-        state.positions[key] = pos
+        advance(key, ri.collectionId, items, pos)
       }
     } else {
       // No rotation: this is a blocks-only channel. Jump to the next block

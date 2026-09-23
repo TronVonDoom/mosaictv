@@ -75,7 +75,18 @@ export type ProgramUnit = MediaItem[]
 export type ResolvedList = {
   length: number
   at(pos: number): ProgramUnit
+  /** Each show's turns taken as of `pos`, for the rotating orders (see RotationProgress). */
+  progressAt?(pos: number): Record<string, number>
 }
+
+/**
+ * Where a rotation stands: `base` is its stored position (a turn counter) and
+ * `shows` how many turns each show had taken by then, keyed by show group.
+ * Counting each show separately is what lets a show join or leave a rotation
+ * without shifting every other show's episode — with only the shared counter,
+ * adding an eighth show to seven sent all seven back several episodes.
+ */
+export type RotationProgress = { base: number; shows?: Record<string, number> }
 
 // Only playable items: present on disk and with a known duration.
 export function collectionWhere(c: CollectionFilter): Prisma.MediaItemWhereInput {
@@ -214,7 +225,12 @@ async function resolveUnitGroups(c: CollectionWithItems): Promise<ProgramUnit[]>
           ...(c.libraryId ? { libraryId: c.libraryId } : {}),
         })
       : []
-    for (const u of groupIntoAirings(eps, airings)) out.push(u)
+    // Show by show, A–Z: the filter has no member order of its own, and grouped
+    // this way its shows follow the hand-picked ones in a rotation too.
+    const units = groupIntoAirings(eps, airings).sort(
+      (a, b) => (a[0].showTitle ?? '').localeCompare(b[0].showTitle ?? '') || byUnit(a, b),
+    )
+    for (const u of units) out.push(u)
     for (const m of others.sort((a, b) => a.title.localeCompare(b.title))) out.push([m])
   }
   return out
@@ -281,12 +297,7 @@ function hash(n: number): number {
   return (x ^ (x >>> 16)) >>> 0
 }
 
-function seededShuffle<T extends { id: number }>(arr: T[], seed: number): T[] {
-  return [...arr]
-    .map((x) => ({ x, k: hash(x.id ^ seed) }))
-    .sort((a, b) => a.k - b.k)
-    .map((o) => o.x)
-}
+const mod = (a: number, n: number) => ((a % n) + n) % n
 
 /** A fixed order, looped: position 0 and position `length` are the same unit. */
 function looped(units: ProgramUnit[]): ResolvedList {
@@ -339,21 +350,6 @@ function shuffled(units: ProgramUnit[], seed: number): ResolvedList {
   return redealt(units.length, (cycle) => seededShuffleUnits(units, (seed ^ hash(cycle)) >>> 0))
 }
 
-/**
- * Shows in random order, but each show's episodes still in sequence: a
- * marathon of one show, then a marathon of another. Which show is up next is
- * re-dealt each pass; the episodes never jump around.
- */
-function shuffledShows(units: ProgramUnit[], seed: number): ResolvedList {
-  const groups = showGroups(units)
-  return redealt(units.length, (cycle) =>
-    seededShuffle(
-      groups.map((g) => ({ id: g[0][0].id, g })),
-      (seed ^ hash(cycle)) >>> 0,
-    ).flatMap((o) => o.g),
-  )
-}
-
 // Order within a single show/group: season, episode, year, title.
 function byEpisode(a: MediaItem, b: MediaItem): number {
   return (
@@ -369,21 +365,21 @@ function byUnit(a: ProgramUnit, b: ProgramUnit): number {
   return byEpisode(a[0], b[0])
 }
 
-function chronological(units: ProgramUnit[]): ProgramUnit[] {
-  return [...units].sort(
-    (a, b) => (a[0].showTitle ?? '').localeCompare(b[0].showTitle ?? '') || byEpisode(a[0], b[0]),
-  )
-}
+/** A show (or the one group all the movies share) and its units in episode order. */
+type ShowGroup = { key: string; units: ProgramUnit[] }
 
 /**
  * Split units into per-show groups, each internally in episode order. Units
  * without a show (movies, one-offs) form ONE group rather than a group each:
  * as separate groups they'd swamp a round-robin, so a collection of one show
  * plus fifty movies would give the show 1/51 of its airtime instead of half.
- * A multi-part airing is keyed by its first segment's show. Groups come back in
- * a stable, name-sorted order for callers to use or reorder.
+ * A multi-part airing is keyed by its first segment's show.
+ *
+ * Groups come back in the collection's own order — where each group's first
+ * unit appears, which is member order, then the smart filter's shows — so the
+ * order the user arranges is the order a rotation or release order follows.
  */
-function showGroups(units: ProgramUnit[]): ProgramUnit[][] {
+function showGroups(units: ProgramUnit[]): ShowGroup[] {
   const groups = new Map<string, ProgramUnit[]>()
   for (const u of units) {
     const key = u[0].showTitle ? 'show:' + u[0].showTitle : 'movies'
@@ -391,50 +387,146 @@ function showGroups(units: ProgramUnit[]): ProgramUnit[][] {
     if (g) g.push(u)
     else groups.set(key, [u])
   }
-  return [...groups.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([, arr]) => arr.sort(byUnit))
+  return [...groups.entries()].map(([key, arr]) => ({ key, units: arr.sort(byUnit) }))
 }
 
 /**
- * Round-robin across shows: one unit from each show in turn, each show
- * advancing in episode order and starting over from its first episode when it
- * runs out.
- *
- * A show keeps its slot in the rotation forever — it does NOT drop out once its
- * last episode has aired. Dropping it would hand its airtime to whichever shows
- * had more episodes left, so a rotation of a 19-episode show and a 200-episode
- * one would decay into the long one playing alone. Every show gets an equal
- * share instead, which is what "one from each show in turn" has to mean on a
- * channel that runs forever.
- *
- * Each show wraps on its own count, so the position is not periodic over
- * `length` the way a fixed list is; that is fine, since positions are stored
- * ever-increasing and only this list interprets them.
+ * Release order: each show's episodes in order and the movies oldest first,
+ * one group after another in the collection's order. (It used to sort the
+ * shows A–Z, which no arrangement could change.)
  */
-export function rotated(units: ProgramUnit[]): ResolvedList {
-  const lists = showGroups(units)
+export function releaseOrder(units: ProgramUnit[]): ProgramUnit[] {
+  return showGroups(units).flatMap((g) => g.units)
+}
+
+// Turns in [0, x) that land on slot i of an n-slot round-robin.
+const slotTurns = (x: number, i: number, n: number) => Math.max(0, Math.floor((x - i + n - 1) / n))
+
+/**
+ * Each show's turns taken as of `progress.base`. A rotation saved before shows
+ * were counted separately has only its position; it ran the shows A–Z, one
+ * turn each, so each show's count follows from that, and every show picks up
+ * exactly where it left off in the new order.
+ */
+function startingTurns(groups: ShowGroup[], progress: RotationProgress): Record<string, number> {
+  const out: Record<string, number> = {}
+  if (progress.shows) {
+    // A show new to the rotation starts at its first episode.
+    for (const g of groups) out[g.key] = progress.shows[g.key] ?? 0
+    return out
+  }
+  const alpha = groups.map((g) => g.key).sort((a, b) => a.localeCompare(b))
+  for (const g of groups) out[g.key] = slotTurns(progress.base, alpha.indexOf(g.key), groups.length)
+  return out
+}
+
+/**
+ * A rotation over show groups. `turn.showAt(pos)` says whose turn position
+ * `pos` is and `turn.before(pos, g)` how many turns group g has had in
+ * [0, pos); each show's episode follows from its own count.
+ *
+ * A show keeps its turn forever — it does NOT drop out once its last episode
+ * has aired, but starts over from its first. Dropping it would hand its
+ * airtime to whichever shows had more episodes left, so a rotation of a
+ * 19-episode show and a 200-episode one would decay into the long one playing
+ * alone. Every show gets an equal share instead, which is what "one from each
+ * show in turn" has to mean on a channel that runs forever.
+ */
+function rotation(
+  groups: ShowGroup[],
+  progress: RotationProgress,
+  turn: { showAt(pos: number): number; before(pos: number, g: number): number },
+  length: number,
+): ResolvedList {
+  const start = startingTurns(groups, progress)
+  const taken = (g: number, pos: number) =>
+    start[groups[g].key] + turn.before(pos, g) - turn.before(progress.base, g)
   return {
-    length: units.length,
+    length,
     at(pos) {
-      if (units.length === 0) throw new Error('empty collection')
-      const show = lists[pos % lists.length]
-      return show[Math.floor(pos / lists.length) % show.length]
+      if (groups.length === 0) throw new Error('empty collection')
+      const g = turn.showAt(pos)
+      const list = groups[g].units
+      return list[mod(taken(g, pos), list.length)]
+    },
+    progressAt(pos) {
+      // Shows no longer in the collection keep their count, so one that comes
+      // back resumes where it was.
+      const out: Record<string, number> = { ...progress.shows }
+      groups.forEach((grp, g) => (out[grp.key] = taken(g, pos)))
+      return out
     },
   }
 }
 
-/** Resolve a collection to an ordered, endlessly repeating list of units. */
+/** Rotate shows: one unit from each show in turn, in the collection's order. */
+export function rotated(units: ProgramUnit[], progress: RotationProgress = { base: 0 }): ResolvedList {
+  const groups = showGroups(units)
+  const n = groups.length
+  return rotation(groups, progress, { showAt: (pos) => mod(pos, n), before: (pos, g) => slotTurns(pos, g, n) }, units.length)
+}
+
+/**
+ * Rotate shows, mixed: every show still gets one turn per round, but each
+ * round is dealt in a fresh random order, reproducible from the seed and the
+ * round number. A show never plays twice running across a round boundary — a
+ * round that would open with the show that closed the last one swaps its first
+ * two. (Only the first two ever move, so the last show of the previous round
+ * is always its unadjusted deal.) Two shows have no room to mix: they alternate.
+ */
+export function mixedRotation(units: ProgramUnit[], seed: number, progress: RotationProgress = { base: 0 }): ResolvedList {
+  const groups = showGroups(units)
+  const n = groups.length
+  const deal = (r: number): number[] =>
+    Array.from({ length: n }, (_, i) => ({ i, k: hash((i + 1) ^ ((seed ^ hash(r)) >>> 0)) }))
+      .sort((a, b) => a.k - b.k)
+      .map((o) => o.i)
+  const rounds = new Map<number, { order: number[]; slotOf: number[] }>()
+  const round = (r: number) => {
+    let hit = rounds.get(r)
+    if (!hit) {
+      let order = n < 3 ? Array.from({ length: n }, (_, i) => i) : deal(r)
+      if (n >= 3 && order[0] === deal(r - 1)[n - 1]) order = [order[1], order[0], ...order.slice(2)]
+      const slotOf: number[] = []
+      order.forEach((g, j) => (slotOf[g] = j))
+      hit = { order, slotOf }
+      // A build pass only touches a round or two; don't grow unbounded.
+      if (rounds.size > 8) rounds.clear()
+      rounds.set(r, hit)
+    }
+    return hit
+  }
+  return rotation(
+    groups,
+    progress,
+    {
+      showAt: (pos) => round(Math.floor(pos / n)).order[mod(pos, n)],
+      // Every whole round before this one gave g one turn; this round has
+      // given it one if its slot came before `pos`.
+      before: (pos, g) => {
+        const r = Math.floor(pos / n)
+        return r + (round(r).slotOf[g] < mod(pos, n) ? 1 : 0)
+      },
+    },
+    units.length,
+  )
+}
+
+/**
+ * Resolve a collection to an ordered, endlessly repeating list of units.
+ * `progress` is where a rotation stands; the other orders ignore it.
+ */
 export async function resolveCollection(
   c: CollectionWithItems,
   order: PlaybackOrder,
   seed = 0,
+  progress?: RotationProgress,
 ): Promise<ResolvedList> {
   // `resolveUnits` already returns the hand-picked order.
   const units = await resolveUnits(c)
   if (order === 'custom') return looped(units)
   if (order === 'shuffle') return shuffled(units, seed)
-  if (order === 'shuffleShows') return shuffledShows(units, seed)
-  if (order === 'rotate') return rotated(units)
-  return looped(chronological(units))
+  if (order === 'shuffleShows') return mixedRotation(units, seed, progress)
+  if (order === 'rotate') return rotated(units, progress)
+  return looped(releaseOrder(units))
 }

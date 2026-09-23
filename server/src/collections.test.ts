@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { MediaItem } from '@prisma/client'
-import { groupIntoAirings, rotated } from './collections.js'
+import { groupIntoAirings, mixedRotation, releaseOrder, rotated } from './collections.js'
 
 // Minimal MediaItem — only the fields groupIntoAirings and its sort touch.
 function mi(id: number, over: Partial<MediaItem> = {}): MediaItem {
@@ -74,14 +74,14 @@ function airs(units: MediaItem[][], n: number): string[] {
   })
 }
 
-test('rotate gives every show a turn, in show-name order', () => {
+test("rotate gives every show a turn, in the collection's order (not A-Z)", () => {
   const units = [
     [epOf('B Show', 1, 10)],
     [epOf('B Show', 2, 11)],
     [epOf('A Show', 1, 20)],
     [epOf('A Show', 2, 21)],
   ]
-  assert.deepEqual(airs(units, 4), ['A Show 1', 'B Show 1', 'A Show 2', 'B Show 2'])
+  assert.deepEqual(airs(units, 4), ['B Show 1', 'A Show 1', 'B Show 2', 'A Show 2'])
 })
 
 test('a show that runs out starts over instead of dropping out of the rotation', () => {
@@ -91,11 +91,11 @@ test('a show that runs out starts over instead of dropping out of the rotation',
     ...[1, 2, 3, 4, 5].map((n) => [epOf('Long', n, 10 + n)]),
   ]
   assert.deepEqual(airs(units, 10), [
-    'Long 1', 'Short 1',
-    'Long 2', 'Short 2',
-    'Long 3', 'Short 1', // Short wraps to its first episode, still in rotation
-    'Long 4', 'Short 2',
-    'Long 5', 'Short 1',
+    'Short 1', 'Long 1',
+    'Short 2', 'Long 2',
+    'Short 1', 'Long 3', // Short wraps to its first episode, still in rotation
+    'Short 2', 'Long 4',
+    'Short 1', 'Long 5',
   ])
 })
 
@@ -128,4 +128,80 @@ test('movies rotate as one group against the shows, not one group each', () => {
   // Movie, show, movie, show — the two movies share one slot between them
   // rather than taking one each, so the show keeps half the airtime.
   assert.deepEqual(seen, ['Beetlejuice', 'Ep 10', 'Hocus Pocus', 'Ep 11'])
+})
+
+// --- each show's own progress ---
+
+const eps = (show: string, count: number, firstId: number) =>
+  Array.from({ length: count }, (_, i) => [epOf(show, i + 1, firstId + i)])
+const label = (u: MediaItem[]) => `${u[0].showTitle} ${u[0].episode}`
+
+test('a show added to a rotation starts at episode 1 without moving the others', () => {
+  const [a, b, c] = [eps('A', 6, 1), eps('B', 6, 11), eps('C', 6, 21)]
+  // Four turns in, A and B have each aired twice.
+  const saved = rotated([...a, ...b]).progressAt!(4)
+  assert.deepEqual(saved, { 'show:A': 2, 'show:B': 2 })
+  const three = rotated([...a, ...b, ...c], { base: 4, shows: saved })
+  assert.deepEqual(
+    [4, 5, 6, 7, 8, 9].map((p) => label(three.at(p))),
+    ['B 3', 'C 1', 'A 3', 'B 4', 'C 2', 'A 4'],
+  )
+})
+
+test('a show dropped from a rotation keeps its place for when it comes back', () => {
+  const [a, b] = [eps('A', 6, 1), eps('B', 6, 11)]
+  const saved = rotated([...a, ...b]).progressAt!(4) // A 2, B 2
+  const aOnly = rotated(a, { base: 4, shows: saved })
+  const later = aOnly.progressAt!(6) // A airs twice more on its own
+  assert.deepEqual(later, { 'show:A': 4, 'show:B': 2 })
+  const back = rotated([...a, ...b], { base: 6, shows: later })
+  assert.deepEqual([6, 7].map((p) => label(back.at(p))), ['A 5', 'B 3'])
+})
+
+test('a rotation saved before per-show progress picks every show up where it was', () => {
+  // The old rotation ran shows A-Z: turns 0-3 aired A 1, Z 1, A 2, Z 2.
+  const units = [...eps('Z', 6, 1), ...eps('A', 6, 11)] // arranged Z first
+  const upgraded = rotated(units, { base: 4 }) // a position, no per-show counts
+  assert.deepEqual([4, 5, 6, 7].map((p) => label(upgraded.at(p))), ['Z 3', 'A 3', 'Z 4', 'A 4'])
+})
+
+test('rotate shows, mixed: every show once a round, a new order each round, episodes in sequence', () => {
+  const shows = ['A', 'B', 'C', 'D']
+  const units = shows.flatMap((s, i) => eps(s, 8, i * 100))
+  const list = mixedRotation(units, 12345)
+  const played = Array.from({ length: 32 }, (_, pos) => list.at(pos)[0])
+  const rounds = Array.from({ length: 8 }, (_, r) => played.slice(r * 4, r * 4 + 4).map((m) => m.showTitle))
+  for (const r of rounds) assert.deepEqual([...r].sort(), shows, 'each show once per round')
+  assert.ok(new Set(rounds.map((r) => r.join())).size > 1, 'rounds are dealt in different orders')
+  for (const s of shows) {
+    const seq = played.filter((m) => m.showTitle === s).map((m) => m.episode)
+    assert.deepEqual(seq, [1, 2, 3, 4, 5, 6, 7, 8], `${s} plays in episode order`)
+  }
+  for (let i = 1; i < played.length; i++) {
+    assert.notEqual(played[i].showTitle, played[i - 1].showTitle, 'no show twice running')
+  }
+})
+
+test("rotate shows, mixed keeps each show's progress across a rebuild", () => {
+  const units = ['A', 'B', 'C'].flatMap((s, i) => eps(s, 10, i * 100))
+  const whole = mixedRotation(units, 7)
+  // Resolved again from a saved position, it continues the same timeline.
+  const resumed = mixedRotation(units, 7, { base: 9, shows: whole.progressAt!(9) })
+  for (let p = 9; p < 21; p++) assert.equal(label(resumed.at(p)), label(whole.at(p)))
+})
+
+test("release order: shows in the collection's order, episodes in order, movies oldest first", () => {
+  const movie = (title: string, year: number, id: number) =>
+    mi(id, { showTitle: null, title, year, episode: null, season: null })
+  const units = [
+    [epOf('B', 2, 2)],
+    [movie('Later', 1990, 50)],
+    [epOf('B', 1, 1)],
+    [epOf('A', 1, 10)],
+    [movie('Earlier', 1980, 51)],
+  ]
+  assert.deepEqual(
+    releaseOrder(units).map((u) => (u[0].showTitle ? label(u) : u[0].title)),
+    ['B 1', 'B 2', 'Earlier', 'Later', 'A 1'],
+  )
 })
