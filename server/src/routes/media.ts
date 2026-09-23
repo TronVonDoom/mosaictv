@@ -18,16 +18,23 @@ mediaRouter.get('/', async (req, res) => {
     where.OR = [{ title: { contains: q } }, { showTitle: { contains: q } }]
   }
 
+  // Title order by default (shows, then season/episode); the library grid also
+  // offers newest release, most recently added, and TMDB rating.
+  const sort = typeof req.query.sort === 'string' ? req.query.sort : 'title'
+  const orderBy: Prisma.MediaItemOrderByWithRelationInput[] =
+    sort === 'year'
+      ? [{ year: 'desc' }, { title: 'asc' }]
+      : sort === 'added'
+        ? [{ addedAt: 'desc' }, { title: 'asc' }]
+        : sort === 'rating'
+          ? [{ rating: 'desc' }, { title: 'asc' }]
+          : [{ showTitle: 'asc' }, { season: 'asc' }, { episode: 'asc' }, { title: 'asc' }]
+
   const [total, items] = await Promise.all([
     prisma.mediaItem.count({ where }),
     prisma.mediaItem.findMany({
       where,
-      orderBy: [
-        { showTitle: 'asc' },
-        { season: 'asc' },
-        { episode: 'asc' },
-        { title: 'asc' },
-      ],
+      orderBy,
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),

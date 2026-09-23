@@ -6,6 +6,7 @@ import { restyleSegmenter, segmenterViewers } from '../streaming/segmenter.js'
 import { activeBlockAt } from '../streaming/logo.js'
 import { asOrderSetting } from '../collections.js'
 import { programLabel } from '../labels.js'
+import { channelsNow } from '../nowPlaying.js'
 
 export const channelsRouter = Router()
 
@@ -102,6 +103,20 @@ channelsRouter.post('/', async (req, res) => {
   } catch {
     res.status(409).json({ error: 'A channel with that number already exists.' })
   }
+})
+
+// What's on every on-air channel right now, and what's next — shaped for the
+// dashboard and channel cards. Registered before /:id so "now" isn't an id.
+channelsRouter.get('/now', async (_req, res) => {
+  const chs = await prisma.channel.findMany({
+    where: { number: { not: null } },
+    orderBy: { number: 'asc' },
+    select: { id: true, number: true },
+  })
+  const rows = await channelsNow(chs.map((c) => c.id))
+  res.json(
+    rows.map((r, i) => ({ ...r, number: chs[i].number, viewers: segmenterViewers(chs[i].number as number) })),
+  )
 })
 
 channelsRouter.get('/:id', async (req, res) => {

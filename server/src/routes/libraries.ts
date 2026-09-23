@@ -28,6 +28,51 @@ librariesRouter.get('/', async (_req, res) => {
   )
 })
 
+// A handful of titles with artwork, for the poster mosaic on a library's card.
+// TV libraries sample distinct shows (their show poster); anything else samples
+// items with a poster of their own. Shuffled per request — it's decoration.
+librariesRouter.get('/:id/sample', async (req, res) => {
+  const id = Number(req.params.id)
+  const limit = Math.min(24, Math.max(1, Number(req.query.limit) || 12))
+  const lib = await prisma.library.findUnique({ where: { id }, select: { kind: true } })
+  if (!lib) return res.status(404).json({ error: 'Library not found.' })
+
+  const shuffle = <T,>(a: T[]) => {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[a[i], a[j]] = [a[j], a[i]]
+    }
+    return a
+  }
+
+  if (lib.kind === 'tv') {
+    const [eps, tmdbShows] = await Promise.all([
+      prisma.mediaItem.findMany({
+        where: { libraryId: id, type: 'episode', missing: false, showTitle: { not: null } },
+        distinct: ['showTitle'],
+        select: { id: true, showTitle: true, showPosterPath: true },
+      }),
+      prisma.show.findMany({ where: { libraryId: id, tmdbPosterPath: { not: null } }, select: { title: true } }),
+    ])
+    const hasTmdb = new Set(tmdbShows.map((s) => s.title))
+    const withArt = eps.filter((e) => e.showPosterPath || hasTmdb.has(e.showTitle as string))
+    return res.json({
+      items: shuffle(withArt).slice(0, limit).map((e) => ({ id: e.id, title: e.showTitle, art: 'show' })),
+    })
+  }
+
+  const items = await prisma.mediaItem.findMany({
+    where: {
+      libraryId: id,
+      missing: false,
+      OR: [{ posterPath: { not: null } }, { tmdbPosterPath: { not: null } }],
+    },
+    select: { id: true, title: true },
+    take: 400,
+  })
+  res.json({ items: shuffle(items).slice(0, limit).map((m) => ({ id: m.id, title: m.title, art: 'poster' })) })
+})
+
 librariesRouter.post('/', async (req, res) => {
   const { name, kind } = req.body ?? {}
   const folders: unknown = req.body?.folders

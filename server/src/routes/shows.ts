@@ -35,6 +35,7 @@ showsRouter.get('/', async (req, res) => {
     totalDurationSec: number
     libraryId: number
     posterItemId: number | null
+    anyItemId: number
   }
   const map = new Map<string, Agg>()
   for (const e of episodes) {
@@ -49,6 +50,7 @@ showsRouter.get('/', async (req, res) => {
         totalDurationSec: 0,
         libraryId: e.libraryId,
         posterItemId: null,
+        anyItemId: e.id,
       }
       map.set(key, agg)
     }
@@ -85,6 +87,10 @@ showsRouter.get('/', async (req, res) => {
         totalDurationSec: s.totalDurationSec,
         libraryId: s.libraryId,
         posterItemId: s.posterItemId,
+        // Any episode will do to ask /api/artwork for the show's TMDB poster,
+        // which the server caches — so browsers on a LAN without internet
+        // still get artwork.
+        artItemId: s.anyItemId,
         tmdbPosterPath: m?.tmdbPosterPath ?? null,
         overview: m?.overview ?? null,
         rating: m?.rating ?? null,
@@ -140,6 +146,11 @@ showsRouter.get('/detail', async (req, res) => {
     genres: showRow?.genres ?? null,
     rating: showRow?.rating ?? null,
     tmdbPosterPath: showRow?.tmdbPosterPath ?? null,
+    // The web's hero panel asks /api/artwork/<any episode>?type=backdrop, which
+    // resolves to the show's TMDB backdrop — so name an episode, and say
+    // whether there's anything to fetch.
+    hasBackdrop: !!showRow?.tmdbBackdropPath,
+    artItemId: episodes[0]?.id ?? null,
     seasons,
   })
 })

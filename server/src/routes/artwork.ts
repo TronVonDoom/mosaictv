@@ -54,10 +54,13 @@ function sendArtwork(res: Response, filePath: string) {
   })
 }
 
-// GET /api/artwork/:id?type=poster|show|season
+// GET /api/artwork/:id?type=poster|show|season|backdrop
 // Serves local artwork when the scanner found some, else falls back to the
 // item's (or its show's) TMDB poster, downloaded and cached locally. Only paths
 // recorded on the item are used, so this can't be made to read arbitrary files.
+//
+// `backdrop` is the wide TMDB still behind the web UI's hero panels: a movie's
+// own, or an episode's show's. There's no local equivalent to prefer.
 artworkRouter.get('/:id', async (req, res) => {
   const id = Number(req.params.id)
   if (Number.isNaN(id)) return res.status(400).end()
@@ -69,6 +72,7 @@ artworkRouter.get('/:id', async (req, res) => {
       showPosterPath: true,
       seasonPosterPath: true,
       tmdbPosterPath: true,
+      tmdbBackdropPath: true,
       type: true,
       showTitle: true,
       libraryId: true,
@@ -77,6 +81,21 @@ artworkRouter.get('/:id', async (req, res) => {
   if (!item) return res.status(404).end()
 
   const type = req.query.type
+
+  if (type === 'backdrop') {
+    let backdrop = item.type === 'episode' ? null : item.tmdbBackdropPath
+    if (!backdrop && item.showTitle) {
+      const show = await prisma.show.findFirst({
+        where: { libraryId: item.libraryId, title: item.showTitle },
+        select: { tmdbBackdropPath: true },
+      })
+      backdrop = show?.tmdbBackdropPath ?? null
+    }
+    if (!backdrop) return res.status(404).end()
+    const cached = await cachedTmdbPoster(backdrop, 'w1280')
+    if (!cached) return res.status(404).end()
+    return sendArtwork(res, cached)
+  }
   const localPath =
     type === 'show'
       ? item.showPosterPath
