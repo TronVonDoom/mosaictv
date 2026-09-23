@@ -24,7 +24,7 @@ const LOGO_STYLES = new Set(['frosted', 'spotlight', 'logowall', 'pulse'])
 // The retired looks (logo wall, pulse, animated, vintage, retro) stay defined
 // for when they're refined — re-add them here to bring them back.
 export const STYLES: { id: FillerInput['style']; label: string; desc: string }[] = [
-  { id: 'frosted', label: 'Frosted glass', desc: 'logos scrolling behind blurred glass, sharp logos in front' },
+  { id: 'frosted', label: 'Frosted glass', desc: 'logos gliding behind frosted glass panes, your logo floating in front' },
   { id: 'spotlight', label: 'Spotlight', desc: 'a lit glass card with a sweeping gleam, logo above the wordmark' },
   { id: 'custom', label: 'Custom clip', desc: 'an uploaded video from the Studio page' },
 ]

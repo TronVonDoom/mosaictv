@@ -63,8 +63,10 @@ type StyleBuild = {
   vol: number
 }
 
-function gradientInput(dims: Dims, dur: number, speed: string, colors: string): string[] {
-  return ['-f', 'lavfi', '-i', `gradients=s=${dims.w}x${dims.h}:d=${dur}:speed=${speed}:${colors}:nb_colors=4`]
+// `rate` defaults to the source's 25 fps (which the 30 fps output duplicates up
+// to); a style that scrolls passes FPS so its motion doesn't stutter.
+function gradientInput(dims: Dims, dur: number, speed: string, colors: string, rate?: number): string[] {
+  return ['-f', 'lavfi', '-i', `gradients=s=${dims.w}x${dims.h}${rate ? `:r=${rate}` : ''}:d=${dur}:speed=${speed}:${colors}:nb_colors=4`]
 }
 
 // Preferred generic look: a drifting color gradient with a slow hue sway,
@@ -144,46 +146,166 @@ function pulseGraph(dims: Dims, scale: number): string {
   ].join(';')
 }
 
+// The frosted scene is built at half size (see frostedGraph).
+const frostedBackDims = (dims: Dims): Dims => ({ w: Math.round(dims.w / 4) * 2, h: Math.round(dims.h / 4) * 2 })
+
 // Frosted-glass scene: rows of the channel + MosaicTV logos scrolling opposite
-// ways behind a blurred glass panel. In front, the screen is split into two
-// halves — the channel logo centered left, the MosaicTV logo centered right —
-// divided by a faint glass seam.
+// ways behind two panes of frosted glass. In front, the channel logo is
+// centered on the left pane and the MosaicTV logo on the right, each floating
+// on a soft shadow.
+//
+// The glass is what makes it read as glass rather than a blur: a light frost
+// that leaves the logos behind recognisable, a more heavily frosted band behind
+// the foreground logos (like the etched strip on a glass door), a fixed ripple
+// the rows slide through, a glow where bright shapes scatter light, a fine
+// grain, reflections and a sweeping glint on the surface, and a seam between
+// the panes with a shadowed groove and one lit edge.
+//
+// Inputs: [0] the background gradient at frostedBackDims, [1] the channel logo
+// and [2] the MosaicTV mark, each a single frame.
 function frostedGraph(dims: Dims, scale: number): string {
   const { w: W, h: H } = dims
   const k = H / 720
-  const rowH = Math.round(90 * k)
-  const cellW = Math.round(260 * k)
+  const f = (n: number) => n.toFixed(2)
+
+  // The scene behind the glass is built at half size: it's frosted anyway, so
+  // the upscale is invisible, and it's a quarter of the work per frame. The
+  // seam, grain and foreground logos are drawn at full size.
+  const { w, h } = frostedBackDims(dims)
+  const kh = h / 720
+  const rowH = Math.round(90 * kh)
+  const cellW = Math.round(260 * kh)
   const nTile = 8 // strip wide enough to cover the screen + one cell while scrolling
-  const speed = Math.round(55 * k) // px/sec
+  // A whole number of pixels per frame, so the rows glide evenly instead of in
+  // the uneven 1-2-1-2 steps a fractional speed rounds to.
+  const step = Math.max(1, Math.round((55 * kh) / FPS))
   const nRows = 5
-  const spacing = Math.floor(H / nRows)
+  const spacing = Math.floor(h / nRows)
   const y = (r: number) => r * spacing + Math.floor((spacing - rowH) / 2)
-  const leftX = `x='-mod(t*${speed},${cellW})'`
-  const rightX = `x='mod(t*${speed},${cellW})-${cellW}'`
-  const blur = Math.max(4, Math.round(14 * k))
-  const seam = Math.max(1, Math.round(2 * k))
-  const cellChain = `scale=${cellW}:${rowH}:force_original_aspect_ratio=decrease,pad=${cellW}:${rowH}:(ow-iw)/2:(oh-ih)/2:color=black@0,format=rgba,tile=${nTile}x1`
+  const leftX = `x='-mod(n*${step},${cellW})'`
+  const rightX = `x='mod(n*${step},${cellW})-${cellW}'`
+  // The logo arrives as one frame; the tile needs one per cell.
+  const cellChain = `scale=${cellW}:${rowH}:force_original_aspect_ratio=decrease,pad=${cellW}:${rowH}:(ow-iw)/2:(oh-ih)/2:color=black@0,format=rgba,loop=loop=${nTile - 1}:size=1,tile=${nTile}x1`
+
+  // Everything that doesn't move is drawn once and repeated. Layers are
+  // converted to the frame's own format before they repeat, so the overlays
+  // never convert per frame either.
+  const loop = `loop=loop=-1:size=1,setpts=N/(${FPS}*TB)`
+  const still = (src: string) => `${src},trim=end_frame=1,${loop}`
+  const plane = (pw: number, ph: number, c = 'black') => `color=c=${c}:s=${pw}x${ph}:r=${FPS}:d=1`
+
+  // Refraction maps: a blurred-noise luma plane around 128 (no shift). Chroma
+  // stays at 128, so colour moves with the brightness rather than fringing.
+  // Strength is in half-size pixels, and finer noise blurs to a larger swing,
+  // hence the (kh/k)² to keep the ripple the same at any resolution.
+  const map = (seed: number) =>
+    still(
+      `${plane(w, h)},format=yuv420p,lutyuv=y=128:u=128:v=128,noise=c0s=100:c0_seed=${seed},` +
+        `gblur=sigma=${f(3 * kh)}:planes=1,lutyuv=y='128+(val-128)*${f(0.12 * (kh / k) ** 2)}'`,
+    )
+
+  // The heavier frosted band across the middle, in normalised coordinates
+  // (geq's X/Y/W/H are per plane).
+  const band = `exp(-pow((Y/H-0.5)/0.2,4))`
+
+  // The glass surface as one layer of light (white) over shade (black): a
+  // haze, the band's extra milk, a wash from the top-left, two diagonal
+  // reflection bars, a pool of light behind each logo, and darker corners.
+  // It's smooth, so it's computed at quarter size and scaled up. geq evaluates
+  // each channel on its own, so each expression stores its terms and reuses them.
+  const u = `(X/W+0.55*(Y/H)*${f(H / W)})` // position across the reflection bars
+  const light = [
+    `10`,
+    `18*${band}`,
+    `20*max(0,1-(X/W+Y/H)*0.85)`,
+    `12*exp(-pow((${u}-0.34)/0.05,2))`,
+    `14*exp(-pow((${u}-0.43)/0.016,2))`,
+    `16*exp(-(pow((X/W-0.25)/0.2,2)+pow((Y/H-0.5)/0.32,2)))`,
+    `16*exp(-(pow((X/W-0.75)/0.2,2)+pow((Y/H-0.5)/0.32,2)))`,
+  ].join('+')
+  const shade = `40*pow(max(0,abs(X/W-0.5)*2-0.55)/0.45,2)+34*pow(max(0,abs(Y/H-0.5)*2-0.5)/0.5,2)`
+  // Shade first, light over it, folded into one colour + alpha.
+  const layer = (sh: string, li: string) => {
+    const pre = `st(0,min(1,(${sh})/255));st(1,min(1,(${li})/255));st(2,1-(1-ld(0))*(1-ld(1)))`
+    const lum = `${pre};if(gt(ld(2),0),255*ld(1)/ld(2),0)`
+    return `format=rgba,geq=r='${lum}':g='${lum}':b='${lum}':a='${pre};255*ld(2)'`
+  }
+  // The grain lives in the layer's alpha: a fixed, full-size speckle of light.
+  const surface = still(
+    `${plane(Math.round(W / 8) * 2, Math.round(H / 8) * 2)},${layer(shade, light)},` +
+      `scale=${W}:${H}:flags=bicubic,format=yuva420p,noise=c3s=5:c3_seed=7`,
+  )
+
+  // The seam between the panes, lit from the top-left: a shadowed groove with
+  // one bright edge. It only varies across, so it's drawn one pixel tall.
+  const sw = Math.round((40 * k) / 2) * 2
+  const c = sw / 2
+  const seam = still(
+    `${plane(sw, 1)},` +
+      layer(
+        `110*exp(-pow((X-${c}+${f(2.5 * k)})/${f(2.2 * k)},2))+16*exp(-pow((X-${c})/${f(12 * k)},2))`,
+        `120*exp(-pow((X-${c}-${f(0.5 * k)})/${f(0.7 * k)},2))+22*exp(-pow((X-${c}-${f(2 * k)})/${f(3 * k)},2))`,
+      ) +
+      `,scale=${sw}:${H}:flags=neighbor,format=yuva420p`,
+  )
+
+  // A soft glint that sweeps across the glass, ~2.8 s to cross, every 8 s.
+  const gs = W * 0.05
+  const gw = Math.round((0.55 * H + 6 * gs) / 2) * 2
+  const v = Math.round((W + gw) / 2.8)
+  const glint = still(
+    `${plane(Math.round(gw / 4), Math.round(H / 4), 'white')},format=rgba,` +
+      `geq=r=255:g=255:b=255:a='46*exp(-pow((X*4+0.55*Y*4-${f(0.55 * H + 3 * gs)})/${f(gs)},2))',` +
+      `scale=${gw}:${H}:flags=bicubic,format=yuva420p`,
+  )
+
+  // Foreground logos. Each sits in a box that is a fraction of its own
+  // half-panel so a short wide logo is held instead of swelling to the seam,
+  // while a tall logo is bounded by the height. `scale` grows the channel
+  // logo's box only — the MosaicTV mark stays put.
+  const sh = Math.max(3, Math.round(7 * k))
+  const shOff = Math.round(6 * k)
+  const shadowOf = `colorchannelmixer=rr=0:gg=0:bb=0:aa=0.55,pad=iw+${sh * 6}:ih+${sh * 6}:${sh * 3}:${sh * 3}:color=black@0,gblur=sigma=${sh}`
+
   return [
-    `[0:v]format=rgba[bg]`,
+    `[0:v]format=yuv420p[bg]`,
     `[1:v]split=2[chA][chFg]`,
     `[2:v]split=2[mzA][mzFg]`,
-    `[chA]${cellChain},split=3[ch0][ch1][ch2]`,
-    `[mzA]${cellChain},split=2[mz0][mz1]`,
+    `[chA]${cellChain},format=yuva420p,${loop},split=3[ch0][ch1][ch2]`,
+    `[mzA]${cellChain},format=yuva420p,${loop},split=2[mz0][mz1]`,
     `[bg][ch0]overlay=${leftX}:y=${y(0)}[r0]`,
     `[r0][mz0]overlay=${rightX}:y=${y(1)}[r1]`,
     `[r1][ch1]overlay=${leftX}:y=${y(2)}[r2]`,
     `[r2][mz1]overlay=${rightX}:y=${y(3)}[r3]`,
     `[r3][ch2]overlay=${leftX}:y=${y(4)}[rows]`,
-    // Frost: blur the scrolling layer, tint it like glass, draw the seam.
-    `[rows]boxblur=${blur}:2,drawbox=x=0:y=0:w=iw:h=ih:color=white@0.07:t=fill,drawbox=x=(iw-${seam})/2:y=0:w=${seam}:h=ih:color=white@0.10:t=fill[frost]`,
-    // Sharp foreground logos. Each sits in a box that is a fraction of its own
-    // half-panel so a short wide logo is held instead of swelling to the seam,
-    // while a tall logo is bounded by the height. `scale` grows the channel
-    // logo's box only — the MosaicTV mark stays put.
-    `[chFg]${logoBox(W * 0.3 * scale, 180 * k * scale)},format=rgba[chfg]`,
-    `[mzFg]${logoBox(W * 0.28, 120 * k)},format=rgba[mzfg]`,
-    `[frost][chfg]overlay=x=(W/2-w)/2:y=(H-h)/2[f1]`,
-    `[f1][mzfg]overlay=x=W/2+(W/2-w)/2:y=(H-h)/2,format=yuv420p[v]`,
+    // The frost: light everywhere, heavy in the band; then the ripple, and a
+    // glow from the heavy frost screened over the brightness only.
+    `${map(11)}[mx]`,
+    `${map(29)}[my]`,
+    `${still(`${plane(w, h)},format=yuv420p,geq=lum='255*${band}':cb='255*${band}':cr='255*${band}'`)}[bm]`,
+    `[rows]split=2[d0][d1]`,
+    `[d0]gblur=sigma=${f(4.2 * kh)}[lite]`,
+    `[d1]gblur=sigma=${f(13 * kh)},split=2[heavy][glow]`,
+    `[lite][heavy][bm]maskedmerge[f0]`,
+    `[f0][mx][my]displace=edge=smear[f1]`,
+    `[f1][glow]blend=c0_mode=screen:c0_opacity=0.3:c1_mode=normal:c2_mode=normal,scale=${W}:${H}:flags=bicubic[frost]`,
+    // The surface, the seam and the glint, at full size.
+    `${surface}[surf]`,
+    `${seam}[seam]`,
+    `${glint}[glint]`,
+    `[frost][surf]overlay=0:0[g1]`,
+    `[g1][seam]overlay=x=${W / 2 - c}:y=0[g2]`,
+    `[g2][glint]overlay=x='-${gw}+mod(t*${v},${v * 8})':y=0[g3]`,
+    `[chFg]${logoBox(W * 0.3 * scale, 180 * k * scale)},format=rgba,split=2[chl][chs0]`,
+    `[mzFg]${logoBox(W * 0.28, 120 * k)},format=rgba,split=2[mzl][mzs0]`,
+    `[chs0]${shadowOf},format=yuva420p,${loop}[chs]`,
+    `[mzs0]${shadowOf},format=yuva420p,${loop}[mzs]`,
+    `[chl]format=yuva420p,${loop}[chfg]`,
+    `[mzl]format=yuva420p,${loop}[mzfg]`,
+    `[g3][chs]overlay=x=(W/2-w)/2:y=(H-h)/2+${shOff}[o1]`,
+    `[o1][chfg]overlay=x=(W/2-w)/2:y=(H-h)/2[o2]`,
+    `[o2][mzs]overlay=x=W/2+(W/2-w)/2:y=(H-h)/2+${shOff}[o3]`,
+    `[o3][mzfg]overlay=x=W/2+(W/2-w)/2:y=(H-h)/2,format=yuv420p[v]`,
   ].join(';')
 }
 
@@ -247,7 +369,8 @@ function buildStyle(
     return { inputs: [...gradientInput(dims, dur, '0.03', 'c0=0x120a24:c1=0x1e1140:c2=0x0b1530:c3=0x241448'), '-loop', '1', '-i', logoFile], filter: pulseGraph(dims, scale), tone: 96, vol: 0.05 }
   }
   if (style === 'frosted' && logoFile && mzLogo) {
-    return { inputs: [...gradientInput(dims, dur, '0.04', 'c0=0x0b1020:c1=0x2a1150:c2=0x10233f:c3=0x0e2f3a'), '-loop', '1', '-i', logoFile, '-loop', '1', '-i', mzLogo], filter: frostedGraph(dims, scale), tone: 90, vol: 0.04 }
+    // The logos go in as single frames — the graph draws them once and repeats.
+    return { inputs: [...gradientInput(frostedBackDims(dims), dur, '0.04', 'c0=0x0b1020:c1=0x2a1150:c2=0x10233f:c3=0x0e2f3a', FPS), '-i', logoFile, '-i', mzLogo], filter: frostedGraph(dims, scale), tone: 90, vol: 0.04 }
   }
   if (style === 'spotlight' && logoFile && mzLogo) {
     return { inputs: [...gradientInput(dims, dur, '0.035', 'c0=0x0a0e1c:c1=0x1b1436:c2=0x0c1a2e:c3=0x141026'), '-loop', '1', '-i', logoFile, '-loop', '1', '-i', mzLogo], filter: spotlightGraph(dims, dur, scale), tone: 92, vol: 0.04 }
@@ -306,7 +429,7 @@ function mosaictvLogoFile(): string | undefined {
 
 // Bump these when the generators change so persisted clips regenerate.
 const FILLER_VERSION = 5
-const FROSTED_VERSION = 6
+const FROSTED_VERSION = 7
 const THEME_VERSION = 2
 
 // Resolve an Asset id to its on-disk file (or undefined).

@@ -79,7 +79,7 @@ composites the channel's (or block's) logo into an animated station-ID loop:
 
 | Style | Look | Uses your logo |
 | ----- | ---- | -------------- |
-| `frosted` | Frosted-glass scene: scrolling logo rows behind, logo in front | ✅ |
+| `frosted` | Two panes of frosted glass: rows of logos glide behind, still recognisable through the frost, with a more heavily frosted band behind your logo, which floats in front on a soft shadow. Light plays across the glass as it runs | ✅ |
 | `custom` | **Your own clip** — bumpers, ident reels, anything | your call |
 
 Earlier builds also offered `logowall`, `pulse`, `animated`, `retro` and
