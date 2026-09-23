@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.10.0 — Room to work (2026-09-23)
+
+Channels and the guide on one page, Studio and Settings rebuilt as workspaces,
+faster artwork, and a layout that fits any screen.
+
+- **Channels and the TV guide are one page.** Your channels sit four to a row
+  at the top, with the full guide right beneath them — spans, zoom and "Now"
+  included. The old TV Guide address and the dashboard's "Full guide" link land
+  on it.
+- **Collections as posters.** A channel's collections open as a list beside the
+  selected one, whose members are a poster grid — a show, a season or a movie,
+  each with its artwork, year and episode count — instead of a row of tags.
+  Drag to reorder, hover to remove; name, order, logo and smart filter moved
+  into a Settings dialog, and "What airs" previews the order. A season shows
+  its own TMDB poster rather than the show's.
+- **Library artwork loads fast.** Tiles and rails ask for a thumbnail sized to
+  the tile instead of the full-size poster — a 4 MB local poster becomes a few
+  KB — resized once and cached on disk, and TMDB art is fetched at the matching
+  size. The random mosaics are unchanged; they just arrive quickly.
+- **Studio is an editing suite.** Logos, Audio and Fillers share one layout: a
+  section rail, a grid of cards, and an inspector beside it (a dialog on
+  smaller screens). A logo's inspector previews its watermark live over a
+  frame from your library, in 16:9 or 4:3. Audio tracks play in place and show
+  which fillers use them, filler clips preview on hover, and uploads go
+  through one drag-and-drop dialog.
+- **Settings fill the screen.** The same section rail, with cards laid out
+  side by side on a wide screen. Metadata can now fetch or fully re-match a
+  library from the page (re-match was API-only), the default watermark has a
+  live preview, encoding profiles are a list beside their editor, and
+  Maintenance gains an About card with version, uptime and links to the docs.
+- **Responsive from phone to 4K.** Every page was checked at phone, tablet,
+  laptop, 1080p and 1440p widths: nothing runs off the side of a phone
+  anymore, headers and toolbars wrap instead of squeezing, and big monitors
+  use their width — wider pages, more cards per row — instead of a narrow
+  column. The sidebar starts collapsed on smaller laptops.
+- **Dialogs sit above everything.** A dialog opened from inside a page could
+  slide under the sticky top bar, hiding its title and close button.
+
 ## 0.9.0 — A control room, not a config file (2026-09-22)
 
 A redesign of the whole web app, and a few features that came with it.
