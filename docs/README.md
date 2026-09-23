@@ -12,7 +12,7 @@ plugs into Plex, Jellyfin, Emby, or any IPTV player.
 | [Getting Started](getting-started.md) | Zero to your first live channel, step by step |
 | [Channels & Scheduling](channels.md) | Collections, rotations, time blocks, playback orders, the guide |
 | [Branding: Logos, Watermarks & Filler](branding.md) | On-screen logos, watermark behavior, station-ID filler clips, "coming up next" |
-| [Connecting Players](clients.md) | Jellyfin, Emby, Plex (via Threadfin), VLC, and friends — plus shared HLS vs MPEG-TS |
+| [Connecting Players](clients.md) | Jellyfin, Emby, Plex, VLC, and friends — plus shared HLS vs MPEG-TS, and casting |
 | [Hardware Acceleration](hardware-acceleration.md) | CPU vs GPU encoding (NVIDIA/QuickSync/VAAPI/AMF/VideoToolbox), setup per platform, encoding profiles |
 | [Security](security.md) | Why MosaicTV is LAN-only and how to access it remotely the safe way |
 | [Troubleshooting & Backup](troubleshooting.md) | Common issues, logs, backing up and restoring |
