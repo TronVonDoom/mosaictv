@@ -122,8 +122,12 @@ export function parseComingUp(json: string | null | undefined): ComingUpConfig {
 export function sanitizeComingUp(input: unknown): ComingUpConfig {
   const c = { ...DEFAULT_COMINGUP, ...((input as Partial<ComingUpConfig>) ?? {}) }
   const timings: ComingUpConfig['timing'][] = ['middle', 'beforeEnd', 'both']
-  const num = (v: unknown, def: number, lo: number, hi: number) =>
-    Math.max(lo, Math.min(hi, Number(v) || def))
+  // Zero is a real value here ("0 = pop" for the fade), so only a missing or
+  // unreadable number takes the default — `Number(v) || def` turned 0 into it.
+  const num = (v: unknown, def: number, lo: number, hi: number) => {
+    const n = v === '' || v == null ? NaN : Number(v)
+    return Math.max(lo, Math.min(hi, Number.isFinite(n) ? n : def))
+  }
   return {
     enabled: !!c.enabled,
     timing: timings.includes(c.timing) ? c.timing : 'beforeEnd',

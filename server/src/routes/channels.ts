@@ -2,7 +2,8 @@ import { Router } from 'express'
 import { prisma } from '../db.js'
 import { MAX_HORIZON_HOURS, buildPlayout, horizonHours, prunePlayout, resetPlayout } from '../playout.js'
 import { sanitizeComingUp } from '../streaming/overlays.js'
-import { segmenterViewers } from '../streaming/segmenter.js'
+import { restyleSegmenter, segmenterViewers } from '../streaming/segmenter.js'
+import { activeBlockAt } from '../streaming/logo.js'
 import { asOrderSetting } from '../collections.js'
 import { programLabel } from '../labels.js'
 
@@ -37,6 +38,12 @@ function intervalsOverlap(a: [number, number][], b: [number, number][]): boolean
   for (const [s1, e1] of a) for (const [s2, e2] of b) if (s1 < e2 && s2 < e1) return true
   return false
 }
+
+// The on-screen look an edit can change mid-program: caption and logo. The
+// General tab saves every field at once, so compare rather than trusting which
+// keys were sent — renaming a channel shouldn't restart what's on air.
+type Look = { comingUp: string | null; logoId: number | null; logoUrl: string | null }
+const lookChanged = (a: Look, b: Look) => a.comingUp !== b.comingUp || a.logoId !== b.logoId || a.logoUrl !== b.logoUrl
 
 // Label for the program airing right now (mirrors the EPG naming).
 function nowLabel(it: { title: string | null; mediaItem: { title: string; showTitle: string | null; season: number | null; episode: number | null; type: string } | null }): string {
@@ -123,7 +130,9 @@ channelsRouter.patch('/:id', async (req, res) => {
   // '' from a cleared <select> means "inherit the global setting", not "no audio".
   if (audioLanguage !== undefined) data.audioLanguage = audioLanguage ? String(audioLanguage) : null
   try {
+    const before = await prisma.channel.findUnique({ where: { id } })
     const c = await prisma.channel.update({ where: { id }, data })
+    if (before && c.number != null && lookChanged(before, c)) restyleSegmenter(c.number)
     res.json(c)
   } catch {
     res.status(409).json({ error: 'Update failed — is that channel number already in use?' })
@@ -238,6 +247,20 @@ channelsRouter.patch('/:id/blocks/:blockId', async (req, res) => {
   }
   const b = await prisma.timeBlock.update({ where: { id: blockId }, data }).catch(() => null)
   if (!b) return res.status(404).json({ error: 'Block not found.' })
+  // Only a block governing the program on air has a look to refresh. That's
+  // the block the program *started* in (the stream styles it by its start
+  // time), which after a soft overrun isn't the block the clock is in.
+  if (lookChanged(current, b)) {
+    const now = new Date()
+    const onAir = await prisma.playoutItem.findFirst({
+      where: { channelId: b.channelId, startTime: { lte: now }, stopTime: { gt: now } },
+      select: { startTime: true },
+    })
+    if (onAir && (activeBlockAt([current], onAir.startTime) || activeBlockAt([b], onAir.startTime))) {
+      const ch = await prisma.channel.findUnique({ where: { id: b.channelId }, select: { number: true } })
+      if (ch?.number != null) restyleSegmenter(ch.number)
+    }
+  }
   res.json(b)
 })
 

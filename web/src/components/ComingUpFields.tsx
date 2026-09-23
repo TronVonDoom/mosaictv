@@ -10,7 +10,7 @@ const TIMINGS: { value: ComingUpConfig['timing']; label: string; hint: string }[
 
 // The %tokens% a template can use, with a short description each.
 const TOKENS: [string, string][] = [
-  ['%showtitle%', 'series name'],
+  ['%showtitle%', 'series name (a movie’s title for a movie)'],
   ['%episodetitle%', 'episode title'],
   ['%movietitle%', 'movie title'],
   ['%se%', 'S01E02'],

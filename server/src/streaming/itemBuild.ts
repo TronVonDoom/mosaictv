@@ -73,6 +73,9 @@ export type BuildItemParams = {
   logoWm: Map<number, WatermarkConfig>
   item: PlayoutItemForBuild
   next: PlayoutItemForBuild | undefined
+  /** The next real program, looking past any filler in between — what the
+   *  coming-up caption names. */
+  nextProgram: PlayoutItemForBuild | undefined
   prevKind: string | undefined
   /** Seek into the media (seconds); 0 for a from-the-top item. */
   offset: number
@@ -91,7 +94,7 @@ export type BuildItemParams = {
  * segmenter to spawn rather than streaming them itself.
  */
 export async function buildItemArgs(params: BuildItemParams): Promise<BuiltItem> {
-  const { channelNumber, channel, profile, enc, defaultWm, logoPath, logoWm, item, next, prevKind, offset, segDur, output, readrate, tag } = params
+  const { channelNumber, channel, profile, enc, defaultWm, logoPath, logoWm, item, next, nextProgram, prevKind, offset, segDur, output, readrate, tag } = params
 
   const active = activeLogo(channel, channel.timeBlocks, logoPath, item.startTime)
   const logo = await localLogo(active.raw)
@@ -176,20 +179,20 @@ export async function buildItemArgs(params: BuildItemParams): Promise<BuiltItem>
     return { kind: 'black', durSec: Math.min(segDur, 10), why: `no playable segment for ${label}`, label }
   }
 
-  // Coming-up-next caption: over a program (never filler), only when the next
-  // item is a real program with metadata. Text is written to a per-segment file
-  // (cleaned up by the caller) so titles with quotes/colons/% can't break the
-  // filtergraph.
+  // Coming-up-next caption: over a program (never filler), naming the next real
+  // program — a station break in between doesn't hide what comes after it. Text
+  // is written to a per-segment file (cleaned up by the caller) so titles with
+  // quotes/colons/% can't break the filtergraph.
   let textFilter: string | undefined
   let captionFile: string | undefined
   const songFiles: string[] = []
-  if (!thisIsFiller && next?.kind === 'program' && next.mediaItem) {
+  if (!thisIsFiller && nextProgram?.mediaItem) {
     const cuBlock = activeBlockAt(channel.timeBlocks, item.startTime)
     const cuJson = cuBlock?.comingUp ?? channel.comingUp
     const cu = cuJson ? parseComingUp(cuJson) : null
     const support = cu?.enabled ? await detectTextOverlay() : null
     if (cu && support) {
-      const text = renderComingUpText(cu.template, next.mediaItem)
+      const text = renderComingUpText(cu.template, nextProgram.mediaItem)
       const itemDur = (item.stopTime.getTime() - item.startTime.getTime()) / 1000
       const windows = comingUpWindows(cu, segDur, itemDur, offset)
       if (text && windows.length > 0) {

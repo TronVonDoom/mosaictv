@@ -90,6 +90,7 @@ class ChannelSegmenter {
   private emittedAny = false
   private runSeq = 0
   private loop: Promise<void> | null = null
+  private restyled = false // the running encoder was killed by restyle()
 
   constructor(n: number) {
     this.n = n
@@ -133,6 +134,22 @@ class ChannelSegmenter {
 
   ready(): boolean {
     return this.segs.length >= READY_MIN_SEGS
+  }
+
+  /**
+   * Re-encode what's on air with the channel's current look. An item bakes its
+   * overlays (coming-up caption, logo) into the encode when it starts, so an
+   * edit would otherwise wait for the next program — up to a whole movie, which
+   * reads as "the setting does nothing". Killing the encoder hands control back
+   * to the producer loop, which reloads the channel and resumes the same item
+   * at the current offset: the viewer skips the few seconds of the unfinished
+   * segment and the player resets at a discontinuity, as at any item boundary.
+   */
+  restyle(): boolean {
+    if (!this.running || !this.proc) return false
+    this.restyled = true
+    this.proc.kill('SIGKILL')
+    return true
   }
 
   playlistFile(): string {
@@ -181,10 +198,11 @@ class ChannelSegmenter {
     const logoPath = new Map<number, string>(logos.map((l) => [l.id, path.join(logosDir(), l.filename)]))
     const logoWm = new Map<number, WatermarkConfig>(logos.map((l) => [l.id, parseWatermark(l.watermark, defaultWm)]))
 
+    // Enough look-ahead to see past a station break to the program after it.
     const items = (await prisma.playoutItem.findMany({
       where: { channelId: channel.id, stopTime: { gt: new Date(now) } },
       orderBy: { startTime: 'asc' },
-      take: 3,
+      take: 4,
       include: { mediaItem: true },
     })) as PlayoutItemForBuild[]
 
@@ -204,6 +222,7 @@ class ChannelSegmenter {
     }
 
     const next = items[1]
+    const nextProgram = items.slice(1).find((it) => it.kind === 'program' && it.mediaItem)
     const prevRow = await prisma.playoutItem.findFirst({
       where: { channelId: channel.id, stopTime: { lte: new Date(now) } },
       orderBy: { stopTime: 'desc' },
@@ -227,6 +246,7 @@ class ChannelSegmenter {
       logoWm,
       item,
       next,
+      nextProgram,
       prevKind: prevRow?.kind,
       offset,
       segDur,
@@ -359,6 +379,10 @@ class ChannelSegmenter {
     clearInterval(watchdog)
     this.ingest(run) // final drain: pick up the last finalized segment
     if (this.proc === proc) this.proc = null
+    if (this.restyled) {
+      this.restyled = false
+      log('info', 'stream', `Ch ${this.n}: channel look changed — re-encoding ${label} from here`, undefined, this.tag)
+    }
 
     // 255 / SIGKILL is our own reaper, the watchdog, or a restart; anything else
     // mid-life is a real fault worth surfacing (the loop keeps going regardless).
@@ -369,6 +393,14 @@ class ChannelSegmenter {
     // ffmpeg has read the caption files at init; drop them and the child playlist.
     for (const f of captionFiles) fs.rmSync(f, { force: true })
     fs.rm(run.playlist, { force: true }, () => {})
+    // A killed encoder (watchdog, restyle) leaves its unfinished segment behind;
+    // everything it finished has been ingested (renamed away) by now.
+    const prefix = path.basename(run.playlist, '.m3u8') + '_'
+    try {
+      for (const f of fs.readdirSync(run.dir)) if (f.startsWith(prefix)) fs.rm(path.join(run.dir, f), { force: true }, () => {})
+    } catch {
+      /* dir already gone (stopped) */
+    }
     return { code, stalled }
   }
 
@@ -479,6 +511,11 @@ export async function ensureSegmenter(n: number, ip?: string, client?: string): 
   const status = await seg.start()
   if (status === 'unavailable') channels.delete(n)
   return status
+}
+
+/** Re-encode a channel's on-air item with its current look, if it's streaming. */
+export function restyleSegmenter(n: number): boolean {
+  return channels.get(n)?.restyle() ?? false
 }
 
 /** Register a segment/playlist fetch so the reaper keeps the producer alive. */

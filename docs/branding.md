@@ -111,4 +111,24 @@ A caption burned into the last stretch of a program announcing what's next.
 - **Per block**: Schedule tab → edit a block → override (including turning it
   off for that block only).
 
-Captions apply to programs from both rotation and blocks — never to filler.
+Captions apply to programs from both rotation and blocks — never to filler. A
+station break between two programs doesn't hide the caption: it names the
+program after the break.
+
+**Timing.** *Before it ends* shows it once, the lead time before the program
+ends (default 5 minutes, 12 seconds on screen); *Middle* once at the halfway
+point; *Both* does both. On a movie channel the 5-minute mark usually lands in
+the end credits, which is where broadcasters put theirs too.
+
+**Template tokens.** `%showtitle%` is the series for an episode and the film's
+title for a movie, so the default `Coming up next: %showtitle% — %episodetitle%`
+reads "Coming up next: Hocus Pocus" before a movie. `%movietitle%` and `%title%`
+name the film explicitly; `%year%`, `%se%`, `%season%` and `%episode%` fill in
+when the program has them. An empty token takes its brackets and dashes with it
+(`%title% (%year%)` with no year is just the title), and a caption whose tokens
+all come up empty isn't shown at all.
+
+**Saving applies it to what's on air.** The caption and the logo are burned in
+when a program starts, so on save the channel re-encodes the current program
+from where it is — a viewer skips a couple of seconds, the same as at any
+program change. Other edits (name, group, schedule) never interrupt the stream.

@@ -11,7 +11,7 @@ import {
 import { useDraft } from '../../lib/hooks'
 import ComingUpFields from '../ComingUpFields'
 import LogoPicker from '../LogoPicker'
-import { Button, Card, Field, InfoHint, Input, Section, Select } from '../ui'
+import { Badge, Button, Card, Field, InfoHint, Input, Section, Select } from '../ui'
 import type { ChannelTabProps } from './types'
 
 // Channel-level coming-up state is always a full config; "off" is enabled=false,
@@ -22,7 +22,7 @@ const offComingUp = (): ComingUpConfig => ({ ...DEFAULT_COMINGUP, enabled: false
  *  channel-wide "coming up next" caption. */
 export default function GeneralTab({ channelId, ch, guard, drafts }: ChannelTabProps) {
   const [profiles, setProfiles] = useState<EncodingProfile[]>([])
-  const [form, setForm, clearFormDraft] = useDraft(drafts, 'general.form', () => ({
+  const savedForm = () => ({
     number: ch.number != null ? String(ch.number) : '',
     name: ch.name,
     group: ch.group ?? '',
@@ -30,10 +30,15 @@ export default function GeneralTab({ channelId, ch, guard, drafts }: ChannelTabP
     logoId: ch.logoId ?? (null as number | null),
     profileId: ch.profileId ?? (null as number | null),
     audioLanguage: ch.audioLanguage ?? '',
-  }))
-  const [cu, setCu, clearCuDraft] = useDraft<ComingUpConfig>(drafts, 'general.comingUp', () =>
-    parseComingUp(ch.comingUp) ?? offComingUp(),
-  )
+  })
+  const savedCu = () => parseComingUp(ch.comingUp) ?? offComingUp()
+  const [form, setForm, clearFormDraft] = useDraft(drafts, 'general.form', savedForm)
+  const [cu, setCu, clearCuDraft] = useDraft<ComingUpConfig>(drafts, 'general.comingUp', savedCu)
+  // A caption that's switched off saves as nothing, so its hidden fields don't
+  // count as a change.
+  const cuValue = (c: ComingUpConfig) => (c.enabled ? JSON.stringify(c) : null)
+  const dirty =
+    JSON.stringify(form) !== JSON.stringify(savedForm()) || cuValue(cu) !== cuValue(savedCu())
 
   useEffect(() => {
     api.profiles().then((r) => setProfiles(r.profiles)).catch(() => {})
@@ -158,37 +163,41 @@ export default function GeneralTab({ channelId, ch, guard, drafts }: ChannelTabP
           </Field>
         </div>
 
-        <div className="flex flex-wrap gap-3 items-end">
-          <Field
-            label={
-              <span className="inline-flex items-center gap-1.5">
-                Logo
-                <InfoHint>
-                  Shown in the guide, and used as the default on-screen watermark. A collection or time
-                  block can override it.
-                </InfoHint>
-              </span>
-            }
-            className="flex-1 min-w-56"
-          >
-            <LogoPicker value={form.logoId} onChange={(id) => setForm({ ...form, logoId: id })} />
-          </Field>
-          <Button type="submit" size="lg">
-            Save
-          </Button>
-        </div>
+        <Field
+          label={
+            <span className="inline-flex items-center gap-1.5">
+              Logo
+              <InfoHint>
+                Shown in the guide, and used as the default on-screen watermark. A collection or time
+                block can override it.
+              </InfoHint>
+            </span>
+          }
+        >
+          <LogoPicker value={form.logoId} onChange={(id) => setForm({ ...form, logoId: id })} />
+        </Field>
 
         <Section title="Coming up next" className="mt-5">
           <p className="text-ink-muted text-sm mb-3">
             Burns a caption naming the next programme over the current one, across this channel's
             rotation and blocks alike.{' '}
             <InfoHint>
-              A time block can override this on the Schedule tab. The caption never shows over filler.
-              Saved with the Save button above.
+              A time block can override this on the Schedule tab. The caption never shows over filler;
+              it names the programme after the break instead. Saving applies it to what's on air right
+              away.
             </InfoHint>
           </p>
           <ComingUpFields cfg={cu} onChange={setCu} />
         </Section>
+
+        {/* Below everything it saves: the caption fields grow the form well past
+            the fold, and a Save above them read as "already applied". */}
+        <div className="mt-5 flex items-center justify-end gap-3">
+          {dirty && <Badge tone="warn">Unsaved changes</Badge>}
+          <Button type="submit" size="lg">
+            Save
+          </Button>
+        </div>
       </form>
     </Card>
   )

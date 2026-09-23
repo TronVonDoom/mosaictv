@@ -179,8 +179,13 @@ type CaptionItem = { title: string; showTitle: string | null; season: number | n
  */
 export function renderComingUpText(template: string, mi: CaptionItem): string {
   const se = episodeCode(mi)
+  // %showtitle% names the programme: the series for an episode, the film for a
+  // movie. Without that, the default "%showtitle% — %episodetitle%" renders a
+  // movie as a bare "Coming up next" — unless the template already names the
+  // film another way, which would print it twice.
+  const namesFilm = /%(movietitle|title)%/i.test(template)
   const vars: Record<string, string> = {
-    showtitle: mi.showTitle ?? '',
+    showtitle: mi.showTitle ?? (namesFilm ? '' : mi.title),
     episodetitle: mi.showTitle ? mi.title : '', // only an "episode title" when it's a show
     movietitle: mi.showTitle ? '' : mi.title,
     title: mi.title ?? '',
@@ -189,12 +194,24 @@ export function renderComingUpText(template: string, mi: CaptionItem): string {
     se,
     year: mi.year != null ? String(mi.year) : '',
   }
-  let s = template.replace(/%(\w+)%/g, (m, k: string) => (k.toLowerCase() in vars ? vars[k.toLowerCase()] : m))
-  // Tidy up separators orphaned by an empty token.
+  let tokens = 0
+  let filled = 0
+  let s = template.replace(/%(\w+)%/g, (m, k: string) => {
+    const key = k.toLowerCase()
+    if (!(key in vars)) return m
+    tokens++
+    if (vars[key]) filled++
+    return vars[key]
+  })
+  // Every token came up empty: the caption would be the template's own words
+  // ("Coming up next") naming nothing, so show none at all.
+  if (tokens > 0 && filled === 0) return ''
+  // Tidy up brackets and separators orphaned by an empty token.
   s = s
+    .replace(/\(\s*\)|\[\s*\]/g, '') // "(%year%)" with no year
     .replace(/\s*[—–-]\s*[—–-]\s*/g, ' — ') // doubled dash -> single
     .replace(/^\s*[—–-]+\s*/g, '') // leading dash
-    .replace(/\s*[:—–-]+\s*$/g, '') // trailing colon/dash
+    .replace(/(\s*[:—–-])+\s*$/g, '') // trailing colon/dash, however many
     .replace(/\s{2,}/g, ' ')
     .trim()
   return s
