@@ -13,7 +13,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import opentype from 'opentype.js'
-import { renderAsync, type ResvgRenderOptions } from '@resvg/resvg-js'
+import type { ResvgRenderOptions } from '@resvg/resvg-js'
 import type { CardStyle } from './overlays.js'
 
 const FONT_DIR = fileURLToPath(new URL('../../assets/fonts/', import.meta.url))
@@ -349,9 +349,19 @@ function drawCard(c: CardContent, s: number, style: CardStyle, anchor: CardAncho
   return style === 'broadcast' ? broadcastSvg(c, s, anchor) : glassSvg(c, s)
 }
 
+// resvg is a native module, loaded on first use rather than at startup: a host
+// whose build of it won't load loses its cards (each fails, logged, and the
+// encode goes on without it), never the whole server.
+let resvg: Promise<typeof import('@resvg/resvg-js')> | null = null
+
 // Rendering takes ~50ms, and it runs at a program boundary: off the main
 // thread (resvg's worker), so segment requests aren't held up meanwhile.
 async function render(svg: string, extra: Partial<ResvgRenderOptions> = {}): Promise<Buffer> {
+  resvg ??= import('@resvg/resvg-js')
+  const { renderAsync } = await resvg.catch((e) => {
+    resvg = null // let the next card try again
+    throw e
+  })
   const img = await renderAsync(svg, {
     font: { fontFiles: fontFiles(), loadSystemFonts: false, defaultFontFamily: 'Inter' },
     ...extra,
