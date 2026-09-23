@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.8.5 — "Coming up next" that shows up (2026-09-22)
+
+- **"Coming up next" works for movies.** The default template,
+  `Coming up next: %showtitle% — %episodetitle%`, fills both tokens from an
+  episode — and a movie has neither, so before a movie the caption read a bare
+  "Coming up next", naming nothing. `%showtitle%` now names the film for a
+  movie (unless the template already does with `%movietitle%` or `%title%`),
+  empty brackets like `(%year%)` drop out, and a caption whose tokens all come up
+  empty is skipped rather than shown blank.
+- **Caption and logo edits reach the screen immediately.** Both are burned in
+  when a program starts, so a change used to wait for the next program — on a
+  movie channel, up to two hours of "the setting does nothing". Saving now
+  re-encodes what's on air from where it is. Only a change to the caption or
+  logo does this; renaming a channel or editing its schedule doesn't touch the
+  stream.
+- **The caption looks past station breaks.** It only appeared when the very
+  next item was a program, so with filler between programs it never showed. It
+  now names the program after the break.
+- **Save sits below the caption settings.** On a channel's General tab the Save
+  button was above the "Coming up next" section, which scrolls it out of view
+  as soon as you tick the box — easy to configure a caption and leave without
+  saving. Save is now at the bottom of the form, with an *Unsaved changes*
+  marker beside it.
+- **A caption fade of 0 means no fade.** "0 = pop" was stored as the 0.5s
+  default, since the check treated zero as missing.
+- **Remakes get their own TMDB match.** The movie search filtered by TMDB's
+  `year`, which matches any release that year — re-releases included — so the
+  2010 *A Nightmare on Elm Street* and the 2019 *The Addams Family* took the
+  originals' descriptions and posters. It now searches the film's first
+  release year, falling back to the loose match. Titles already matched keep
+  their old match until a forced re-fetch (`POST /api/metadata/<id>?force=1`);
+  the Metadata button only fills in what's missing.
+
 ## 0.8.4 — Fix: 0.8.3 could not start on an existing install (2026-09-22)
 
 - **Fixes a 0.8.3 upgrade that stopped the container from starting.** 0.8.3
