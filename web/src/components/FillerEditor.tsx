@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, type Asset, type Filler, type FillerInput, type FillerOwner } from '../lib/api'
+import { api, type Asset, type Filler, type FillerInput, type FillerOwner, type FillerUse } from '../lib/api'
 import { errorMessage } from '../lib/errors'
+import { formatDays, minutesToTime } from '../lib/format'
 import Icon from './Icon'
 import Lightbox from './Lightbox'
 import LogoPicker from './LogoPicker'
@@ -50,10 +51,55 @@ export const fillerStyleLabel = (s: string): string =>
 /** Retired styles can still be played and displayed, just not created. */
 export const isLegacyStyle = (s: string): boolean => s in LEGACY_LABELS
 
+/** An existing filler's editable fields, to seed the editor. */
+export const draftOf = (f: Filler): FillerInput => ({
+  name: f.name,
+  style: f.style,
+  assetId: f.assetId,
+  audioAssetId: f.audioAssetId,
+  logoId: f.logoId,
+  resolution: f.resolution,
+  logoScale: f.logoScale,
+  divider: f.divider,
+})
+
 /** One-line summary of a filler, shared by the library and the assignment list. */
 export function fillerSummary(f: Filler): string {
   return `${fillerStyleLabel(f.style)}${f.audioAssetId != null ? ' · with music' : ''}`
 }
+
+/** A block, told apart from others showing the same collection: "Cartoons (Weekdays 3:00 PM)". */
+export const blockLabel = (b: NonNullable<FillerUse['block']>): string =>
+  `${b.name} (${formatDays(b.days)} ${minutesToTime(b.startMinute)})`
+
+/**
+ * Where a filler airs, one line per channel ("channel default + 2 blocks"),
+ * `hereChannelId` first and called "This channel". The default station ident
+ * also airs on every channel with no fillers of its own.
+ */
+export function usageLines(usedOn: FillerUse[] = [], isDefault = false, hereChannelId?: number): string[] {
+  const byChannel = new Map<number, { name: string; asDefault: boolean; blocks: string[] }>()
+  for (const u of usedOn) {
+    const c = byChannel.get(u.channelId) ?? { name: u.channelName, asDefault: false, blocks: [] }
+    if (u.block) c.blocks.push(blockLabel(u.block))
+    else c.asDefault = true
+    byChannel.set(u.channelId, c)
+  }
+  const ids = [...byChannel.keys()].sort((a, b) => (a === hereChannelId ? -1 : b === hereChannelId ? 1 : 0))
+  const lines = ids.map((id) => {
+    const c = byChannel.get(id)!
+    const blocks =
+      c.blocks.length === 0 ? '' : c.blocks.length === 1 ? `the ${c.blocks[0]} block` : `${c.blocks.length} blocks`
+    const where = [c.asDefault ? 'channel default' : '', blocks].filter(Boolean).join(' + ')
+    return `${id === hereChannelId ? 'This channel' : c.name} — ${where}`
+  })
+  if (isDefault) lines.push('Every channel with no fillers of its own — it’s the default station ident')
+  return lines
+}
+
+/** How many channels besides `hereChannelId` a filler airs on. */
+export const otherChannels = (usedOn: FillerUse[] = [], hereChannelId?: number): number =>
+  new Set(usedOn.map((u) => u.channelId).filter((id) => id !== hereChannelId)).size
 
 // The render-affecting inputs that change how a still looks — when any of these
 // change, an existing still preview no longer matches and is cleared.
@@ -61,22 +107,31 @@ const stillKey = (d: FillerInput) => `${d.style}:${d.assetId}:${d.logoId}:${d.lo
 
 /**
  * The create/edit form for one filler, owning its own draft state and the save
- * call. Used inline by the library (Studio → Fillers) and inside a modal from a
- * channel's Fillers tab, so a filler can be made without leaving the channel.
+ * call — the one editor for a filler, wherever it's opened from: the library
+ * (Studio → Fillers), or a channel's Fillers tab.
  *
  * `previewOwner` is whose logo the still preview is branded with — the channel
  * picked in the library, or the channel/block a modal was opened from.
+ * `usedOn`/`isDefault` say where an existing filler airs, shown above the form
+ * so an edit's reach is plain wherever it's made; `hereChannelId` is the
+ * channel it's being edited from, if any.
  */
 export default function FillerEditor({
   editId = null,
   initial,
   previewOwner,
+  usedOn,
+  isDefault = false,
+  hereChannelId,
   onCancel,
   onSaved,
 }: {
   editId?: number | null
   initial?: FillerInput
   previewOwner?: FillerOwner
+  usedOn?: FillerUse[]
+  isDefault?: boolean
+  hereChannelId?: number
   onCancel: () => void
   onSaved: (f: Filler) => void
 }) {
@@ -165,9 +220,31 @@ export default function FillerEditor({
     }
   }
 
+  const airs = editId ? usageLines(usedOn, isDefault, hereChannelId) : []
+
   return (
     <div className="space-y-3">
       {error && <Banner tone="error">{error}</Banner>}
+
+      {editId != null && (
+        <div className="rounded-xl border border-edge bg-sunken/60 px-3.5 py-2.5 text-[12.5px]">
+          <div className="text-ink-muted font-medium mb-1">Airs on</div>
+          {airs.length === 0 ? (
+            <p className="text-ink-faint">Nowhere yet — assign it on a channel’s Fillers tab.</p>
+          ) : (
+            <>
+              <ul className="space-y-0.5 text-ink-soft">
+                {airs.map((l) => (
+                  <li key={l}>{l}</li>
+                ))}
+              </ul>
+              {(airs.length > 1 || (usedOn?.length ?? 0) > 1) && (
+                <p className="text-ink-faint mt-1.5">Changes apply everywhere it airs.</p>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       <Section title="Look">
         <div className="grid gap-3">

@@ -55,11 +55,21 @@ whenever it has nothing else to show, instead of going to black:
 
 Configure it per channel on the **Fillers** tab:
 
+- **Fillers on this channel** — every filler that airs on the channel, listed
+  once, with an **Edit** button. It's the same editor as the Studio's, and the
+  preview uses this channel's (or block's) logo. The editor always says where
+  else the filler airs, because an edit changes it everywhere. If a filler is
+  shared and you want it different here only, **Make a copy for this channel**
+  gives the channel (and its blocks) their own copy and leaves the original
+  airing everywhere else.
 - **Filler mode** — per block, whether it fills its leftover time (off /
   between programs / at the end).
 - **Channel default** — the clips used in any slot where the active block has
   none of its own.
 - **Per-block filler** — a block can override that with its own set.
+
+The lists under **Channel default** and each block only assign fillers; editing
+happens in one place per channel, the list at the top.
 
 A channel with no filler of its own uses the **default station ident**, set
 under **Studio → Fillers** from a filler's ⋯ menu (**Make default station
@@ -87,6 +97,8 @@ leaving the channel.
 
 Anything uploaded that no filler uses shows under **Unused clips** at the
 bottom of the list, so nothing becomes unreachable — normally it's empty.
+A filler that isn't assigned anywhere (and isn't the default station ident) is
+marked **Not on any channel** — it's in the library but never airs.
 
 ### Filler styles
 

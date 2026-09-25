@@ -129,9 +129,77 @@ fillersRouter.post('/preview', async (req, res) => {
 
 // ── Library CRUD ──────────────────────────────────────────────────────────
 
-// GET /api/fillers -> the whole global filler library.
+// Where a filler airs: each channel it's the default for, and each block it's
+// assigned to (with that block's channel), so an editor can say what an edit
+// reaches before it's made.
+const USAGE = {
+  assignments: {
+    orderBy: { id: 'asc' as const },
+    select: {
+      channel: { select: { id: true, name: true, number: true } },
+      timeBlock: {
+        select: {
+          id: true,
+          days: true,
+          startMinute: true,
+          endMinute: true,
+          collection: { select: { name: true } },
+          channel: { select: { id: true, name: true, number: true } },
+        },
+      },
+    },
+  },
+}
+
+type WithUsage = Awaited<ReturnType<typeof listFillers>>[number]
+const listFillers = () => prisma.filler.findMany({ orderBy: { createdAt: 'asc' }, include: USAGE })
+
+// A filler row as the API returns it: its columns plus `usedOn`.
+function withUsage({ assignments, ...f }: WithUsage) {
+  const usedOn = assignments.flatMap((a) => {
+    const ch = a.channel ?? a.timeBlock?.channel
+    if (!ch) return []
+    const b = a.timeBlock
+    return [
+      {
+        channelId: ch.id,
+        channelName: ch.name,
+        channelNumber: ch.number,
+        block: b ? { id: b.id, name: b.collection.name, days: b.days, startMinute: b.startMinute, endMinute: b.endMinute } : null,
+      },
+    ]
+  })
+  return { ...f, usedOn }
+}
+
+// GET /api/fillers -> the whole global filler library, each with where it airs.
 fillersRouter.get('/', async (_req, res) => {
-  res.json(await prisma.filler.findMany({ orderBy: { createdAt: 'asc' } }))
+  res.json((await listFillers()).map(withUsage))
+})
+
+// POST /api/fillers/:id/copy { channelId } -> a copy of a shared filler that
+// only this channel uses: the copy takes over every place the channel (and its
+// blocks) used the original, in the same turn order, and the original keeps
+// airing everywhere else. For changing a filler here without changing it there.
+fillersRouter.post('/:id/copy', async (req, res) => {
+  const id = Number(req.params.id)
+  const channelId = Number(req.body?.channelId)
+  const src = await prisma.filler.findUnique({ where: { id } })
+  if (!src || !channelId) return res.status(404).json({ error: 'Filler not found' })
+  const here = await prisma.fillerAssignment.findMany({
+    where: { fillerId: id, OR: [{ channelId }, { timeBlock: { channelId } }] },
+  })
+  const copy = await prisma.$transaction(async (tx) => {
+    const { id: _id, createdAt: _c, generatedAssetId: _g, channelId: _ch, timeBlockId: _tb, collectionId: _col, ...fields } = src
+    const f = await tx.filler.create({ data: { ...fields, name: `${src.name?.trim() || 'Filler'} (copy)` } })
+    for (const a of here) await tx.fillerAssignment.update({ where: { id: a.id }, data: { fillerId: f.id } })
+    // Not assigned here at all: it airs here as the default station ident. The
+    // copy becomes the channel's own filler instead, or it would air nowhere.
+    if (here.length === 0) await tx.fillerAssignment.create({ data: { fillerId: f.id, channelId, order: 0 } })
+    return f
+  })
+  warmFiller().catch(() => {})
+  res.status(201).json(withUsage((await prisma.filler.findUnique({ where: { id: copy.id }, include: USAGE }))!))
 })
 
 // POST /api/fillers -> create a global filler definition.

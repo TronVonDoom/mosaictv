@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, assetFileUrl, type Asset, type Channel, type Filler, type FillerInput } from '../../lib/api'
+import { api, assetFileUrl, type Asset, type Channel, type Filler } from '../../lib/api'
 import { confirmDialog } from '../../lib/confirm'
 import { errorMessage } from '../../lib/errors'
 import { toast } from '../../lib/toast'
-import FillerEditor, { fillerStyleLabel as styleLabel } from '../FillerEditor'
+import FillerEditor, { draftOf, fillerStyleLabel as styleLabel } from '../FillerEditor'
 import Icon from '../Icon'
 import { Badge, Banner, Button, EmptyState, IconTile, Menu, ProgressBar, Select, Skeleton, cx } from '../ui'
 import Workspace, { InspectorPlaceholder } from './Workspace'
@@ -19,17 +19,6 @@ function fmtSize(bytes: number | null): string {
   }
   return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${u[i]}`
 }
-
-const draftOf = (f: Filler): FillerInput => ({
-  name: f.name,
-  style: f.style,
-  assetId: f.assetId,
-  audioAssetId: f.audioAssetId,
-  logoId: f.logoId,
-  resolution: f.resolution,
-  logoScale: f.logoScale,
-  divider: f.divider,
-})
 
 /** A clip's first second as its thumbnail; plays muted while hovered. */
 function ClipThumb({ assetId }: { assetId: number }) {
@@ -288,6 +277,8 @@ export default function FillersStudio({ onCount }: { onCount: (n: number) => voi
           editId={current.id}
           initial={draftOf(current)}
           previewOwner={previewChannelId != null ? { channelId: previewChannelId } : undefined}
+          usedOn={current.usedOn}
+          isDefault={current.id === defaultId}
           onCancel={() => setSelected(null)}
           onSaved={() => {
             toast.success('Filler saved')
@@ -360,7 +351,8 @@ export default function FillersStudio({ onCount }: { onCount: (n: number) => voi
         placeholder={
           <InspectorPlaceholder icon={<IconTile name="clip" size="lg" />} title="Select a filler">
             Watch it, change its look and music, or build a fresh preview. Assign fillers from a channel's Fillers
-            tab, or make one the default station ident (from its ⋯ menu) for every channel without fillers of its own.
+            tab — which can edit them too, in the same editor — or make one the default station ident (from its ⋯
+            menu) for every channel without fillers of its own.
           </InspectorPlaceholder>
         }
       >
@@ -428,12 +420,18 @@ export default function FillersStudio({ onCount }: { onCount: (n: number) => voi
                         <Badge>No preview</Badge>
                       )}
                     </div>
-                    {f.id === defaultId && (
+                    {f.id === defaultId ? (
                       <div className="absolute top-2 right-2" title="Airs on any channel with no filler of its own">
                         <Badge tone="accent">
                           <Icon name="star" size={11} /> Default ident
                         </Badge>
                       </div>
+                    ) : (
+                      f.usedOn?.length === 0 && (
+                        <div className="absolute top-2 right-2" title="Assign it from a channel's Fillers tab to put it on air">
+                          <Badge tone="warn">Not on any channel</Badge>
+                        </div>
+                      )
                     )}
                     {pct != null && <ProgressBar value={pct / 100} className="absolute inset-x-0 bottom-0 h-1 rounded-none" />}
                   </div>

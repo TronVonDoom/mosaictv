@@ -298,6 +298,13 @@ export type FillerOwner = { channelId?: number; timeBlockId?: number }
 export type FillerVisual = 'animated' | 'frosted' | 'spotlight' | 'custom' | 'logowall' | 'pulse' | 'retro' | 'vintage'
 /** 'auto' = Match channel: rendered at the size of the channel it airs on. */
 export type FillerResolution = 'auto' | '720p' | '1080p' | '1440p'
+/** One place a filler airs: a channel's default, or a block (with its channel). */
+export type FillerUse = {
+  channelId: number
+  channelName: string
+  channelNumber: number | null
+  block: { id: number; name: string; days: string; startMinute: number; endMinute: number } | null
+}
 export type Filler = {
   id: number
   channelId: number | null
@@ -313,6 +320,8 @@ export type Filler = {
   /** Frosted glass: a divider between the two halves. */
   divider: boolean
   order: number
+  /** Where it airs — on the library list only (not on create/update replies). */
+  usedOn?: FillerUse[]
 }
 export type FillerInput = {
   name?: string | null
@@ -799,6 +808,10 @@ export const api = {
     request<Filler>(`/api/fillers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   // Deleting a custom filler also deletes the clip it was created with, unless
   // another filler shares it or `keepSource` is set.
+  // A copy of a shared filler that takes over this channel's (and its blocks')
+  // uses of it, so it can change here without changing elsewhere.
+  copyFillerForChannel: (id: number, channelId: number) =>
+    request<Filler>(`/api/fillers/${id}/copy`, { method: 'POST', body: JSON.stringify({ channelId }) }),
   deleteFiller: (id: number, keepSource = false) =>
     request<void>(`/api/fillers/${id}${keepSource ? '?keepSource=1' : ''}`, { method: 'DELETE' }),
   // `owner` brands the generated preview with that channel's/block's logo — the

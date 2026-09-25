@@ -5,11 +5,24 @@ import { toast } from '../lib/toast'
 import FillerEditor, { fillerSummary, fillerStyleLabel } from './FillerEditor'
 import { Button, Modal } from './ui'
 
-// Assign fillers from the global library (managed under Media) to a channel
-// (its default gap filler) or a time block. Checking a box assigns it; "+ New"
-// creates one here and assigns it, so building a filler doesn't mean leaving
-// the channel for the Studio page and navigating back.
-export default function FillerAssignmentPicker({ owner, hint }: { owner: FillerOwner; hint?: string }) {
+// Assign fillers from the shared library to a channel (its default gap filler)
+// or a time block. Checking a box assigns it; "+ New" creates one here and
+// assigns it, so building a filler doesn't mean leaving the channel. Editing
+// isn't done here — each filler would show up in every block's list — but
+// once, from the channel's "Fillers on this channel" list (or the Studio).
+// `reloadKey` changing re-reads the library (after an edit elsewhere on the
+// page); `onChange` reports an assignment made or a filler created here.
+export default function FillerAssignmentPicker({
+  owner,
+  hint,
+  reloadKey = 0,
+  onChange,
+}: {
+  owner: FillerOwner
+  hint?: string
+  reloadKey?: number
+  onChange?: () => void
+}) {
   const [fillers, setFillers] = useState<Filler[]>([])
   const [assigned, setAssigned] = useState<Set<number>>(new Set())
   const [creating, setCreating] = useState(false)
@@ -31,7 +44,7 @@ export default function FillerAssignmentPicker({ owner, hint }: { owner: FillerO
       ? `the default station ident, “${defaultFiller.name || fillerStyleLabel(defaultFiller.style)}”`
       : 'the frosted-glass ident built from its logo'
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(load, [ownerKey])
+  useEffect(load, [ownerKey, reloadKey])
 
   async function toggle(id: number, on: boolean) {
     setAssigned((prev) => {
@@ -43,6 +56,7 @@ export default function FillerAssignmentPicker({ owner, hint }: { owner: FillerO
     try {
       if (on) await api.assignFiller(owner, id)
       else await api.unassignFiller(owner, id)
+      onChange?.()
     } catch {
       load() // revert to the server's truth on failure
     }
@@ -58,6 +72,7 @@ export default function FillerAssignmentPicker({ owner, hint }: { owner: FillerO
       toast.success('Filler created — assign it below')
     }
     load()
+    onChange?.()
   }
 
   return (
@@ -104,7 +119,7 @@ export default function FillerAssignmentPicker({ owner, hint }: { owner: FillerO
             <p className="text-[11px] text-ink-faint mt-1">Nothing assigned — gaps use {fallback}.</p>
           )}
           {assigned.size > 1 && (
-            <p className="text-[11px] text-ink-faint mt-1">{assigned.size} assigned — each gap plays one of them, rotating by start time.</p>
+            <p className="text-[11px] text-ink-faint mt-1">{assigned.size} assigned — breaks take turns through them, in the order they were added.</p>
           )}
         </div>
       )}

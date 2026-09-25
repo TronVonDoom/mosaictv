@@ -965,6 +965,12 @@ function sweepUnused(wanted: Set<string>): void {
   if (n) log('info', 'system', `Removed ${n} filler clip${n === 1 ? '' : 's'} nothing airs any more (${(bytes / 1e6).toFixed(0)} MB)`)
 }
 
+// A pass in progress, whether another was asked for meanwhile, and whether
+// the boot-time scratch sweep has run.
+let warming: Promise<void> | null = null
+let warmAgain = false
+let booted = false
+
 /**
  * Build every clip a break could need, so no break waits on a render. For each
  * channel that's every place a break can fall — outside its blocks, and in
@@ -996,6 +1002,10 @@ async function warmPass(): Promise<void> {
     const channelHeight = resolveProfile(ch.profile).height
     const chFillers = ch.fillerAssignments.map((a) => a.filler)
     for (const block of [null, ...ch.timeBlocks]) {
+      // Something changed since this pass read the settings (an edit asked
+      // for another pass): stop here rather than spend minutes building clips
+      // for the old ones. The next pass starts over — and does the sweep.
+      if (warmAgain) return
       const blockFillers = block?.fillerAssignments.map((a) => a.filler) ?? []
       const pool = blockFillers.length > 0 ? blockFillers : chFillers.length > 0 ? chFillers : defaultFiller ? [defaultFiller] : []
       const logo = await localLogo(logoFor(ch, block, logos).raw)
@@ -1005,10 +1015,6 @@ async function warmPass(): Promise<void> {
   }
   sweepUnused(wanted)
 }
-
-let warming: Promise<void> | null = null
-let warmAgain = false
-let booted = false
 
 /**
  * Build ahead (warmPass) — at boot, and after any change that could change a
