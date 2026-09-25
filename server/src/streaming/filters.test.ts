@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { cardAnchor, cardEntry, comingUpWindows, placeCard } from './filters.js'
+import { audioFades, cardAnchor, cardEntry, comingUpWindows, placeCard } from './filters.js'
 import { DEFAULT_COMINGUP, parseComingUp, sanitizeComingUp } from './overlays.js'
 import { fitText, textWidth } from './card.js'
 import { cleanEpisodeTitle, episodeCodeLabel, runtimeLabel } from './cardContent.js'
@@ -141,4 +141,18 @@ test('a card slides in from its own edge', () => {
   assert.deepEqual(cardEntry('top-center'), [0, -1])
   assert.equal(cardAnchor('top-right'), 'right')
   assert.equal(cardAnchor('bottom-center'), 'center')
+})
+
+test('a break fades its sound in at the top and out before the show', () => {
+  // A 90s break from the top: in over half a second, out over the last 1.5s.
+  assert.equal(
+    audioFades({ audioFadeInSec: 0.5, audioFadeOutSec: 1.5, durationSec: 90 }),
+    'afade=t=in:d=0.500,afade=t=out:st=88.500:d=1.500,',
+  )
+  // Resumed mid-break: no fade in, still out at the end.
+  assert.equal(audioFades({ audioFadeInSec: 0, audioFadeOutSec: 1.5, durationSec: 40 }), 'afade=t=out:st=38.500:d=1.500,')
+  // A program: no fades at all, so the chain is unchanged.
+  assert.equal(audioFades({ durationSec: 1800 }), '')
+  // A fade out can't start before the segment does.
+  assert.equal(audioFades({ audioFadeOutSec: 1.5 }), '')
 })

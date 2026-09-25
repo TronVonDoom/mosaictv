@@ -25,7 +25,7 @@ import { cardAnchor, cardEntry, cardRect, comingUpWindows, ffmpegArgs, placeCard
 import { renderCard, type CardContent } from './card.js'
 import { nowPlayingContent, upNextContent } from './cardContent.js'
 import { activeBlockAt, activeLogo, localLogo } from './logo.js'
-import { FILLER_H, FILLER_W, ensureAnimatedFiller, ensureFrostedFiller, resolveFillerClip } from './filler.js'
+import { FILLER_H, FILLER_W, ensureAnimatedFiller, ensureStationIdent, fillerTurn, resolveFillerClip } from './filler.js'
 
 // The channel shape the builder needs — timeBlocks with their collection +
 // ordered filler assignments, the channel-level filler assignments, plus the
@@ -116,7 +116,6 @@ export async function buildItemArgs(params: BuildItemParams): Promise<BuiltItem>
   let label: string
 
   if (item.kind === 'filler' || !mi) {
-    const genStart = Date.now()
     // Filler pool: the active block's assigned fillers → the channel's → the
     // default station ident → the built-in frosted/animated fallback.
     const poolBlock = activeBlockAt(channel.timeBlocks, item.startTime)
@@ -124,30 +123,57 @@ export async function buildItemArgs(params: BuildItemParams): Promise<BuiltItem>
     const channelPool = channel.fillerAssignments.map((a) => a.filler)
     const pool = blockPool.length > 0 ? blockPool : channelPool.length > 0 ? channelPool : defaultFiller ? [defaultFiller] : []
     const src = blockPool.length > 0 ? ' [block]' : channelPool.length > 0 ? ' [channel]' : defaultFiller ? ' [default]' : ''
+    const poolKey = blockPool.length > 0 ? `${channel.id}:b${poolBlock?.id}` : `${channel.id}:ch`
     let clip: string | undefined
     let music: string | undefined
+    let standIn = ''
     if (pool.length > 0) {
-      const f = pool[Math.floor(item.startTime.getTime() / 1000) % pool.length]
-      const r = await resolveFillerClip(f, logo)
+      const turn = await fillerTurn(poolKey, item.startTime.getTime(), pool.length)
+      const f = pool[turn]
+      const name = (x: Filler) => x.name || x.style
+      // Never wait on a render here — it would eat the stream's lead. A clip
+      // that isn't built yet starts building, and this break airs a stand-in
+      // under the filler's own music: the next filler in the pool that's
+      // already built for this logo (the channel's own look), else the ident.
+      const r = await resolveFillerClip(f, logo, { channelHeight: profile.height, wait: false })
       clip = r.clip
       music = r.music
-    } else {
-      // No filler configured: default to the frosted-glass station ident built
-      // from the channel/block logo, falling back to the animated gradient.
-      clip =
-        (logo ? await ensureFrostedFiller(logo).catch(() => undefined) : undefined) ??
-        (await ensureAnimatedFiller())
+      if (!clip) {
+        let by = ''
+        for (let i = 1; i < pool.length && !clip; i++) {
+          const other = pool[(turn + i) % pool.length]
+          clip = (await resolveFillerClip(other, logo, { channelHeight: profile.height, build: false })).clip
+          if (clip) by = `“${name(other)}”`
+        }
+        // …else the station ident, if it happens to be built for this logo.
+        if (!clip && logo) clip = await ensureStationIdent(logo, profile.height, { build: false })
+        if (clip && !by) by = 'the station ident'
+        by ||= 'the animated ident'
+        standIn = ` (${by} standing in for “${name(f)}”)`
+        log('info', 'stream', `Channel ${channelNumber}: filler “${name(f)}” isn't built for this logo yet — ${by} stands in while it builds`, undefined, tag)
+      }
+    } else if (logo) {
+      // No filler configured: the frosted-glass station ident from the
+      // channel/block logo, built in the background if it has to be.
+      clip = await ensureStationIdent(logo, profile.height, { wait: false })
     }
-    const genMs = Date.now() - genStart
-    if (genMs > 500) log('warn', 'system', `Channel ${channelNumber}: filler resolve blocked ${genMs}ms (should be pre-warmed)`, undefined, tag)
+    // Last resort: the animated gradient (built at boot — the one clip worth a
+    // wait, and only ever on a first boot).
+    clip ??= await ensureAnimatedFiller()
     const fillerHw =
       enc === 'h264_nvenc' && clip && path.basename(clip).startsWith('filler-')
         ? await nvdecIfReady('h264')
         : false
+    // Ease the sound in at the top of the break and out before the show comes
+    // back, rather than cutting it mid-note. A hold airs its ident in 30s
+    // chunks, so it's left alone: fading each chunk would dip every 30s.
+    const hold = item.id < 0
+    const audioFadeInSec = !hold && offset < 0.25 ? Math.min(0.5, segDur / 4) : 0
+    const audioFadeOutSec = hold ? 0 : Math.min(1.5, segDur / 3)
     if (clip && segDur > 0.3) {
-      seg = { filePath: clip, offsetSec: 0, loop: true, durationSec: segDur, hasAudio: true, logo, wmEpochSec, mediaWidth: FILLER_W, mediaHeight: FILLER_H, musicPath: music, isFiller: true, fadeInSec: 0, fadeOutSec: 0, hwDecode: fillerHw }
+      seg = { filePath: clip, offsetSec: 0, loop: true, durationSec: segDur, hasAudio: true, logo, wmEpochSec, mediaWidth: FILLER_W, mediaHeight: FILLER_H, musicPath: music, isFiller: true, fadeInSec: 0, fadeOutSec: 0, audioFadeInSec, audioFadeOutSec, hwDecode: fillerHw }
     }
-    label = `filler (${Math.round(segDur)}s)${music ? ' +music' : ''}${src}`
+    label = `filler (${Math.round(segDur)}s)${music ? ' +music' : ''}${src}${standIn}`
     if (!clip) log('error', 'stream', `Channel ${channelNumber}: no filler clip — a ${Math.round(segDur)}s gap will play black`, undefined, tag)
   } else if (fs.existsSync(mi.path) && offset >= (mi.durationSec ?? Infinity) - 0.2) {
     // The file is shorter than the slot it was given. Seeking past its end would

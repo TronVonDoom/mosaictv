@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import type { CollectionItem } from '@prisma/client'
 import { prisma } from '../db.js'
+import { warmFiller } from '../streaming/filler.js'
 import { asPlaybackOrder, collectionCount, resolveCollection } from '../collections.js'
 
 export const collectionsRouter = Router()
@@ -210,6 +211,8 @@ collectionsRouter.patch('/:id', async (req, res) => {
   if (filterGenre !== undefined) data.filterGenre = filterGenre || null
   const c = await prisma.collection.update({ where: { id }, data }).catch(() => null)
   if (!c) return res.status(404).json({ error: 'Not found' })
+  // A block with no logo of its own airs its collection's: new filler clips.
+  if (logoId !== undefined) warmFiller().catch(() => {})
   res.json(c)
 })
 

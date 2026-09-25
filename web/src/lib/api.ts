@@ -296,7 +296,8 @@ export type CollectionItem = {
 
 export type FillerOwner = { channelId?: number; timeBlockId?: number }
 export type FillerVisual = 'animated' | 'frosted' | 'spotlight' | 'custom' | 'logowall' | 'pulse' | 'retro' | 'vintage'
-export type FillerResolution = '720p' | '1080p' | '1440p'
+/** 'auto' = Match channel: rendered at the size of the channel it airs on. */
+export type FillerResolution = 'auto' | '720p' | '1080p' | '1440p'
 export type Filler = {
   id: number
   channelId: number | null
@@ -307,8 +308,6 @@ export type Filler = {
   audioAssetId: number | null
   logoId: number | null
   generatedAssetId: number | null
-  durationMode: 'fixed' | 'audio'
-  durationSec: number
   resolution: FillerResolution
   logoScale: number
   /** Frosted glass: a divider between the two halves. */
@@ -321,8 +320,6 @@ export type FillerInput = {
   assetId?: number | null
   audioAssetId?: number | null
   logoId?: number | null
-  durationMode: 'fixed' | 'audio'
-  durationSec: number
   resolution: FillerResolution
   logoScale: number
   divider?: boolean

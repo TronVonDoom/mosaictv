@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import os from 'node:os'
 
 export type ProgressCb = (percent: number) => void
 
@@ -10,9 +11,18 @@ export type ProgressCb = (percent: number) => void
  * NOTE: only for generation — never for the streaming pipe, which needs
  * stdout for the media itself (see pipeSegment in channel.ts).
  */
-export function runFfmpeg(args: string[], onProgress?: ProgressCb, totalSec?: number): Promise<void> {
+export function runFfmpeg(args: string[], onProgress?: ProgressCb, totalSec?: number, opts: { background?: boolean } = {}): Promise<void> {
   return new Promise((resolve, reject) => {
     const p = spawn('ffmpeg', ['-progress', 'pipe:1', ...args])
+    // A background render yields the CPU to the live encodes: it only has to
+    // finish, not keep up.
+    if (opts.background && p.pid) {
+      try {
+        os.setPriority(p.pid, 10)
+      } catch {
+        /* not permitted here — it just runs at normal priority */
+      }
+    }
     let err = ''
     p.stderr?.on('data', (d) => (err += d))
     if (onProgress && totalSec && totalSec > 0) {

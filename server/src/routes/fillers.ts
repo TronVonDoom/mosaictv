@@ -3,14 +3,22 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { prisma } from '../db.js'
 import { assetsDir } from '../paths.js'
-import { DEFAULT_FILLER_KEY, warmFiller, resolveFillerClipById, generateDraftStill, removeFillerCache } from '../streaming/filler.js'
+import { runFfmpeg } from '../streaming/run.js'
+import {
+  DEFAULT_FILLER_KEY,
+  FILLER_RESOLUTIONS,
+  warmFiller,
+  resolveFillerClipById,
+  generateDraftStill,
+  removeFillerCache,
+} from '../streaming/filler.js'
 
 export const fillersRouter = Router()
 
 const STYLES = ['animated', 'frosted', 'spotlight', 'custom', 'logowall', 'pulse', 'retro', 'vintage']
-const RESOLUTIONS = ['720p', '1080p', '1440p']
-
-// Clamp an incoming Filler definition payload.
+// Clamp an incoming Filler definition payload. (A filler no longer has a
+// length: its clip is a seamless loop, and the break's length is the
+// schedule's — durationMode/durationSec are left as they were.)
 function fillerData(body: Record<string, unknown>) {
   const style = STYLES.includes(String(body?.style)) ? String(body.style) : 'frosted'
   const scale = Number(body?.logoScale)
@@ -20,9 +28,7 @@ function fillerData(body: Record<string, unknown>) {
     assetId: body?.assetId != null && body.assetId !== '' ? Number(body.assetId) : null,
     audioAssetId: body?.audioAssetId != null && body.audioAssetId !== '' ? Number(body.audioAssetId) : null,
     logoId: body?.logoId != null && body.logoId !== '' ? Number(body.logoId) : null,
-    durationMode: body?.durationMode === 'audio' ? 'audio' : 'fixed',
-    durationSec: Math.max(5, Math.min(600, Number(body?.durationSec) || 30)),
-    resolution: RESOLUTIONS.includes(String(body?.resolution)) ? String(body.resolution) : '1080p',
+    resolution: FILLER_RESOLUTIONS.includes(String(body?.resolution)) ? String(body.resolution) : '1080p',
     logoScale: Math.max(0.4, Math.min(2, Number.isFinite(scale) ? scale : 1)),
     divider: body?.divider === true || body?.divider === 'true',
   }
@@ -83,6 +89,8 @@ fillersRouter.delete('/assignments', async (req, res) => {
   await prisma.fillerAssignment.deleteMany({
     where: { fillerId, ...(channelId != null ? { channelId } : { timeBlockId }) },
   })
+  // Its breaks may now fall back to the channel's fillers or an ident.
+  warmFiller().catch(() => {})
   res.status(204).end()
 })
 
@@ -101,8 +109,6 @@ fillersRouter.post('/preview', async (req, res) => {
         style: d.style,
         assetId: d.assetId,
         audioAssetId: d.audioAssetId,
-        durationMode: d.durationMode,
-        durationSec: d.durationSec,
         logoId: d.logoId,
         resolution: d.resolution,
         logoScale: d.logoScale,
@@ -143,9 +149,16 @@ async function dropAsset(assetId: number | null): Promise<void> {
   await prisma.asset.delete({ where: { id: a.id } }).catch(() => {})
 }
 
-// Everything that changes how the clip renders. `name` is only a label, so
-// renaming a filler shouldn't throw away a clip that's still correct.
-const RENDER_FIELDS = ['style', 'assetId', 'audioAssetId', 'logoId', 'durationMode', 'durationSec', 'resolution', 'logoScale', 'divider'] as const
+// Everything that changes the rendered clip. `name` is only a label, and the
+// music is laid over the clip as it airs, so neither throws away a clip that's
+// still correct.
+const RENDER_FIELDS = ['style', 'assetId', 'logoId', 'resolution', 'logoScale', 'divider'] as const
+// …and what the Studio's preview copy carries on top: the music, mixed in so
+// the preview sounds like the break.
+const PREVIEW_FIELDS = [...RENDER_FIELDS, 'audioAssetId'] as const
+
+type FillerFields = Record<(typeof PREVIEW_FIELDS)[number], unknown>
+const changed = (fields: readonly (typeof PREVIEW_FIELDS)[number][], a: FillerFields, b: FillerFields) => fields.some((k) => a[k] !== b[k])
 
 fillersRouter.patch('/:id', async (req, res) => {
   const id = Number(req.params.id)
@@ -153,18 +166,17 @@ fillersRouter.patch('/:id', async (req, res) => {
   if (!before) return res.status(404).json({ error: 'Filler not found' })
 
   const data = fillerData(req.body ?? {})
-  // A kept clip would silently be the old settings — Preview claimed to show
-  // what airs, so an edit has to invalidate it rather than leave it stale. Its
-  // cached renders (one per branding logo, etc.) go too, so old settings don't
-  // pile up in the data dir.
-  const restyled = RENDER_FIELDS.some((k) => before[k] !== data[k])
-  if (restyled) {
-    await dropAsset(before.generatedAssetId)
-    removeFillerCache(id)
-  }
+  // A kept preview would silently be the old settings — it claims to show what
+  // airs, so an edit has to invalidate it rather than leave it stale. A change
+  // to the look also drops the cached renders (one per branding logo, etc.) at
+  // once; the pre-build below makes the new ones.
+  const restyled = changed(RENDER_FIELDS, before, data)
+  const stalePreview = changed(PREVIEW_FIELDS, before, data)
+  if (stalePreview) await dropAsset(before.generatedAssetId)
+  if (restyled) removeFillerCache(id)
 
   const f = await prisma.filler
-    .update({ where: { id }, data: restyled ? { ...data, generatedAssetId: null } : data })
+    .update({ where: { id }, data: stalePreview ? { ...data, generatedAssetId: null } : data })
     .catch(() => null)
   if (!f) return res.status(404).json({ error: 'Filler not found' })
   warmFiller().catch(() => {})
@@ -193,6 +205,8 @@ fillersRouter.delete('/:id', async (req, res) => {
   await prisma.filler.delete({ where: { id } }).catch(() => {})
   // Deleting the default station ident leaves no default, not a dangling one.
   await prisma.setting.deleteMany({ where: { key: DEFAULT_FILLER_KEY, value: String(id) } })
+  // Where it aired, breaks fall back to other fillers or an ident: build those.
+  warmFiller().catch(() => {})
   res.status(204).end()
 })
 
@@ -218,20 +232,48 @@ export function fillerJobs(): (GenState & { fillerId: number })[] {
   return [...genJobs].map(([fillerId, s]) => ({ fillerId, ...s }))
 }
 
+// Write the Studio's preview copy of a clip to `dest`: the clip as it airs,
+// with the filler's music mixed in over it (on air it's laid over the break
+// live, so the clip itself carries only its soft tone).
+async function writePreview(clip: string, music: string | undefined, dest: string): Promise<void> {
+  const tmp = `${dest}.${process.pid}.tmp.mp4`
+  try {
+    if (music) {
+      await runFfmpeg(
+        ['-y', '-i', clip, '-stream_loop', '-1', '-i', music, '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-shortest', tmp],
+        undefined,
+        undefined,
+        { background: true },
+      )
+    } else {
+      fs.copyFileSync(clip, tmp)
+    }
+    fs.renameSync(tmp, dest)
+  } finally {
+    fs.rmSync(tmp, { force: true })
+  }
+}
+
 // Save a freshly-built clip as a Media asset (kind "filler"), reusing the
 // filler's previous generated asset on regenerate.
-async function registerGeneratedAsset(fillerId: number, name: string, clip: string, prevAssetId: number | null): Promise<number> {
-  const size = fs.statSync(clip).size
+async function registerGeneratedAsset(fillerId: number, name: string, clip: string, music: string | undefined, prevAssetId: number | null): Promise<number> {
   let asset = prevAssetId != null ? await prisma.asset.findUnique({ where: { id: prevAssetId } }) : null
   if (asset) {
-    fs.copyFileSync(clip, path.join(assetsDir(), asset.filename))
-    await prisma.asset.update({ where: { id: asset.id }, data: { name, sizeBytes: size } })
+    const dest = path.join(assetsDir(), asset.filename)
+    await writePreview(clip, music, dest)
+    await prisma.asset.update({ where: { id: asset.id }, data: { name, sizeBytes: fs.statSync(dest).size } })
     return asset.id
   }
-  asset = await prisma.asset.create({ data: { name, kind: 'filler', filename: 'pending', mime: 'video/mp4', sizeBytes: size } })
+  asset = await prisma.asset.create({ data: { name, kind: 'filler', filename: 'pending', mime: 'video/mp4', sizeBytes: 0 } })
   const filename = `asset-${asset.id}.mp4`
-  fs.copyFileSync(clip, path.join(assetsDir(), filename))
-  await prisma.asset.update({ where: { id: asset.id }, data: { filename } })
+  const dest = path.join(assetsDir(), filename)
+  try {
+    await writePreview(clip, music, dest)
+  } catch (e) {
+    await prisma.asset.delete({ where: { id: asset.id } }).catch(() => {})
+    throw e
+  }
+  await prisma.asset.update({ where: { id: asset.id }, data: { filename, sizeBytes: fs.statSync(dest).size } })
   await prisma.filler.update({ where: { id: fillerId }, data: { generatedAssetId: asset.id } })
   return asset.id
 }
@@ -257,7 +299,12 @@ fillersRouter.post('/:id/generate', async (req, res) => {
         if (s) s.percent = pct
       })
       if (!r?.clip || !fs.existsSync(r.clip)) throw new Error('Generation produced no clip — check the Logs.')
-      const assetId = await registerGeneratedAsset(id, name, r.clip, filler.generatedAssetId)
+      // The filler may have been edited (or deleted) while this built. Saving
+      // the old look as its preview would show something that no longer airs.
+      const now = await prisma.filler.findUnique({ where: { id } })
+      if (!now) throw new Error('The filler was deleted while its preview was building.')
+      if (changed(PREVIEW_FIELDS, filler, now)) throw new Error('The filler changed while its preview was building — generate it again to see the new look.')
+      const assetId = await registerGeneratedAsset(id, name, r.clip, r.music, now.generatedAssetId)
       genJobs.set(id, { percent: 100, done: true, assetId, startedAt, finishedAt: Date.now() })
     } catch (e) {
       genJobs.set(id, {

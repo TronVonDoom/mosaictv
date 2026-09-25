@@ -3,6 +3,7 @@ import { prisma } from '../db.js'
 import { MAX_HORIZON_HOURS, buildPlayout, horizonHours, prunePlayout, resetPlayout } from '../playout.js'
 import { sanitizeComingUp } from '../streaming/overlays.js'
 import { comingUpPreview } from '../streaming/cardPreview.js'
+import { warmFiller } from '../streaming/filler.js'
 import { restyleSegmenter, segmenterViewers } from '../streaming/segmenter.js'
 import { activeBlockAt } from '../streaming/logo.js'
 import { asOrderSetting } from '../collections.js'
@@ -100,6 +101,7 @@ channelsRouter.post('/', async (req, res) => {
         logoId: logoId != null ? Number(logoId) : null,
       },
     })
+    warmFiller().catch(() => {}) // its station ident, built ahead
     res.status(201).json(c)
   } catch {
     res.status(409).json({ error: 'A channel with that number already exists.' })
@@ -149,6 +151,8 @@ channelsRouter.patch('/:id', async (req, res) => {
     const before = await prisma.channel.findUnique({ where: { id } })
     const c = await prisma.channel.update({ where: { id }, data })
     if (before && c.number != null && lookChanged(before, c)) restyleSegmenter(c.number)
+    // A new logo or picture size means new filler clips; build them ahead.
+    if (logoId !== undefined || logoUrl !== undefined || profileId !== undefined) warmFiller().catch(() => {})
     res.json(c)
   } catch {
     res.status(409).json({ error: 'Update failed — is that channel number already in use?' })
@@ -171,6 +175,7 @@ channelsRouter.post('/:id/coming-up/preview', async (req, res) => {
 
 channelsRouter.delete('/:id', async (req, res) => {
   await prisma.channel.delete({ where: { id: Number(req.params.id) } }).catch(() => {})
+  warmFiller().catch(() => {}) // sweeps the clips only it used
   res.status(204).end()
 })
 
@@ -230,6 +235,7 @@ channelsRouter.post('/:id/blocks', async (req, res) => {
       comingUp: asComingUp(comingUp),
     },
   })
+  warmFiller().catch(() => {}) // fillers for its logo, built ahead
   res.status(201).json(b)
 })
 
@@ -291,11 +297,13 @@ channelsRouter.patch('/:id/blocks/:blockId', async (req, res) => {
       if (ch?.number != null) restyleSegmenter(ch.number)
     }
   }
+  if (logoId !== undefined || logoUrl !== undefined || collectionId !== undefined) warmFiller().catch(() => {})
   res.json(b)
 })
 
 channelsRouter.delete('/:id/blocks/:blockId', async (req, res) => {
   await prisma.timeBlock.delete({ where: { id: Number(req.params.blockId) } }).catch(() => {})
+  warmFiller().catch(() => {})
   res.status(204).end()
 })
 

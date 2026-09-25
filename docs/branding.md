@@ -67,7 +67,10 @@ ident**). With none set, it uses a frosted-glass ident built from the
 channel's logo. A generated default is still branded with each channel's own
 logo, unless the filler pins a logo of its own.
 
-Assign more than one and each gap plays one of them, rotating by start time.
+Assign more than one and breaks take turns through them in the order they're
+listed, so no filler plays twice in a row. The order carries on across a
+restart, and a break that's rebuilt (a retry, a restart mid-break) keeps the
+filler it had.
 Fillers come from a shared library that lives under **Studio → Fillers**; the
 **+ New filler** button on the Fillers tab creates one and assigns it without
 leaving the channel.
@@ -101,23 +104,43 @@ on a retired style keep playing and stay editable, but new ones can't pick it.
 (`animated` also remains the internal fallback whenever a branded clip can't be
 built.)
 
-You can attach an **audio track** to have the music baked in and the clip
-length matched to it.
+You can attach a **music track**. It isn't part of the clip: it's laid over
+the break as it airs, starting at the top of every break and playing straight
+through, looping if the break outlasts the song. Every break's sound fades in
+over half a second and out over the last second and a half, rather than cutting
+in and out. Changing the music never rebuilds a clip.
+
+A generated clip is a **seamless loop** — every moving part comes back to where
+it started by the end, so a long break shows no jump where the clip repeats.
+Spotlight loops every 30 seconds; frosted glass every two minutes or so, the
+time its slowest lights take to rise back round.
+
+**Resolution** is either a fixed size or **Match channel**, which builds each
+channel's copy at that channel's own resolution (720p for a 720p channel, and so
+on up to 1440p) instead of rendering more than it can show.
 
 **Generating is for previewing.** A filler plays on air whether or not you ever
-press it — the clip is built and cached on demand. Because a generated style
-composites *the logo of wherever it's playing*, one filler renders differently
-per channel, so the library's **Preview as** selector picks which channel's
-branding to build; without one it uses wherever the filler is first assigned.
-The result is discarded automatically when you edit the filler, so a preview
-never shows stale settings.
+press it. Because a generated style composites *the logo of wherever it's
+playing*, one filler renders a separate clip for every logo (and, with Match
+channel, every picture size) it airs with. MosaicTV builds all of them ahead,
+in the background and at low priority so live channels come first: at startup,
+and whenever a filler is edited or assigned, a channel's or block's logo or
+profile changes, or a logo image is replaced. A break never waits on a build —
+if its clip isn't ready yet (say, moments after an edit), the station ident
+stands in under the filler's music until it is. Clips nothing airs any more
+(an old look, a replaced logo) are deleted automatically.
+
+The library's **Preview as** selector picks which channel's branding to build
+the preview with; without one it uses wherever the filler is first assigned.
+The preview includes the music, and is discarded automatically when you change
+the filler's look or music, so it never shows stale settings.
 
 Generation runs **on the server**, not in the page: the progress bar shows a
 percentage, and leaving the Studio page (or reloading) doesn't cancel anything —
 come back and the bar picks up where the build actually is, or shows the
 finished clip.
 
-Filler is looped/trimmed to exactly fill each gap, so blocks always land on
+Filler is looped and trimmed to exactly fill each gap, so blocks always land on
 their boundaries. The watermark stays off during filler; "up next" cards
 never show on filler either.
 

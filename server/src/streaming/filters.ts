@@ -23,6 +23,10 @@ export type Segment = {
   mediaHeight: number
   musicPath?: string // looped ambient audio (filler only) — overrides clip audio
   isFiller: boolean
+  // Fade the sound in over the first / out over the last this-many seconds
+  // (filler: in at the top of a break, out before the show). 0 = a hard cut.
+  audioFadeInSec?: number
+  audioFadeOutSec?: number
   // Ramp the watermark up/down across a boundary where it is about to appear or
   // disappear (i.e. next to filler that isn't showing it). 0 = no ramp.
   fadeInSec: number
@@ -361,6 +365,22 @@ function outputArgs(output: FfmpegOutput): string[] {
   return ['-mpegts_flags', '+resend_headers', '-f', 'mpegts', '-muxpreload', '0', '-muxdelay', '0', 'pipe:1']
 }
 
+/**
+ * The segment's audio fades, as filters to chain (each ending in a comma), or
+ * '' for none. They sit after the loudness leveller, which would otherwise
+ * lift the quiet ends straight back up.
+ */
+export function audioFades(seg: Pick<Segment, 'audioFadeInSec' | 'audioFadeOutSec' | 'durationSec'>): string {
+  const fin = seg.audioFadeInSec ?? 0
+  const fout = seg.audioFadeOutSec ?? 0
+  const dur = seg.durationSec ?? 0
+  let f = ''
+  if (fin > 0) f += `afade=t=in:d=${fin.toFixed(3)},`
+  // Out needs to know where the segment ends.
+  if (fout > 0 && dur > fout) f += `afade=t=out:st=${(dur - fout).toFixed(3)}:d=${fout.toFixed(3)},`
+  return f
+}
+
 /** The ffmpeg command that encodes one on-air segment — to MPEG-TS on stdout by
  *  default, or to on-disk HLS segments when `output` says so (the v2 segmenter). */
 export function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: StreamProfile, cards: CardOverlay[] = [], readrate?: string[], output: FfmpegOutput = { kind: 'mpegts-pipe' }): string[] {
@@ -467,7 +487,7 @@ export function ffmpegArgs(seg: Segment, enc: string, wm: WatermarkConfig, p: St
   // (measured: 1.0s -> 3.0s to first byte). dynaudnorm adapts continuously and
   // costs nothing at startup — less exact than R128, but this is live TV.
   const loud = p.normalizeLoudness ? 'dynaudnorm=f=150:g=5,' : ''
-  const af = `[${aIn}]asetpts=PTS-STARTPTS,${loud}aresample=48000,aformat=channel_layouts=${layout}[a]`
+  const af = `[${aIn}]asetpts=PTS-STARTPTS,${loud}aresample=48000,${audioFades(seg)}aformat=channel_layouts=${layout}[a]`
 
   a.push('-filter_complex', `${vf};${af}`, '-map', '[v]', '-map', '[a]')
   if (p.threads > 0) a.push('-threads', String(p.threads))

@@ -26,8 +26,6 @@ const draftOf = (f: Filler): FillerInput => ({
   assetId: f.assetId,
   audioAssetId: f.audioAssetId,
   logoId: f.logoId,
-  durationMode: f.durationMode,
-  durationSec: f.durationSec,
   resolution: f.resolution,
   logoScale: f.logoScale,
   divider: f.divider,
@@ -171,7 +169,7 @@ export default function FillersStudio({ onCount }: { onCount: (n: number) => voi
     setUploading(true)
     try {
       const asset = await api.uploadAsset('filler', name, file)
-      const f = await api.addFiller({ name, style: 'custom', assetId: asset.id, audioAssetId: null, durationMode: 'fixed', durationSec: 30, resolution: '1080p', logoScale: 1 })
+      const f = await api.addFiller({ name, style: 'custom', assetId: asset.id, audioAssetId: null, resolution: '1080p', logoScale: 1 })
       toast.success(`Added ${name}`)
       await refresh()
       refreshAssets()
@@ -361,7 +359,7 @@ export default function FillersStudio({ onCount }: { onCount: (n: number) => voi
         onCloseInspector={() => setSelected(null)}
         placeholder={
           <InspectorPlaceholder icon={<IconTile name="clip" size="lg" />} title="Select a filler">
-            Watch it, change its look, music and length, or build a fresh preview. Assign fillers from a channel's Fillers
+            Watch it, change its look and music, or build a fresh preview. Assign fillers from a channel's Fillers
             tab, or make one the default station ident (from its ⋯ menu) for every channel without fillers of its own.
           </InspectorPlaceholder>
         }
@@ -445,8 +443,8 @@ export default function FillersStudio({ onCount }: { onCount: (n: number) => voi
                         {f.name || (f.style === 'custom' ? src?.name ?? 'Custom clip' : styleLabel(f.style))}
                       </div>
                       <div className="text-[12px] text-ink-faint truncate">
-                        {styleLabel(f.style)} · {f.durationMode === 'audio' ? 'matches its audio' : `${f.durationSec}s`}
-                        {f.audioAssetId != null && ` · ♪ ${audioName(f.audioAssetId) ?? 'audio'}`}
+                        {styleLabel(f.style)}
+                        {f.audioAssetId != null && ` · ♪ ${audioName(f.audioAssetId) ?? 'music'}`}
                       </div>
                     </div>
                     <span onClick={(e) => e.stopPropagation()}>

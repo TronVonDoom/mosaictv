@@ -39,7 +39,20 @@ export function activeLogo(
   logoPath: Map<number, string>,
   at: Date,
 ): { id: number | null; raw: string | null } {
-  const block = activeBlockAt(blocks, at)
+  return logoFor(channel, activeBlockAt(blocks, at), logoPath)
+}
+
+/**
+ * The logo a block airs with — or the channel, outside any block (`block`
+ * null): the block's own → its collection's → the channel's. The one rule the
+ * stream and the filler pre-build both use, so a clip built ahead is exactly
+ * the one a break asks for.
+ */
+export function logoFor(
+  channel: { logoId: number | null; logoUrl: string | null },
+  block: { logoId: number | null; logoUrl: string | null; collection: { logoId: number | null } } | null,
+  logoPath: Map<number, string>,
+): { id: number | null; raw: string | null } {
   const id = block?.logoId ?? block?.collection.logoId ?? channel.logoId
   if (id != null && logoPath.has(id)) return { id, raw: logoPath.get(id) as string }
   return { id: null, raw: block?.logoUrl || channel.logoUrl || null }

@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { prisma } from '../db.js'
 import { resolveProfile, DEFAULT_PROFILE } from '../streaming/profile.js'
+import { warmFiller } from '../streaming/filler.js'
 
 export const profilesRouter = Router()
 
@@ -46,11 +47,13 @@ profilesRouter.patch('/:id', async (req, res) => {
     .update({ where: { id }, data: { name, ...sanitize(req.body ?? {}) } })
     .catch(() => null)
   if (!updated) return res.status(404).json({ error: 'Profile not found' })
+  warmFiller().catch(() => {}) // Match-channel fillers follow the picture size
   res.json(updated)
 })
 
 profilesRouter.delete('/:id', async (req, res) => {
   // Channels referencing it fall back to the built-in default (FK onDelete: SetNull).
   await prisma.encodingProfile.delete({ where: { id: Number(req.params.id) } }).catch(() => {})
+  warmFiller().catch(() => {})
   res.status(204).end()
 })

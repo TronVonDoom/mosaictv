@@ -12,9 +12,7 @@ export const emptyFillerDraft: FillerInput = {
   assetId: null,
   audioAssetId: null,
   logoId: null,
-  durationMode: 'fixed',
-  durationSec: 30,
-  resolution: '1080p',
+  resolution: 'auto',
   logoScale: 1,
   divider: false,
 }
@@ -33,6 +31,7 @@ export const STYLES: { id: FillerInput['style']; label: string; desc: string }[]
 ]
 
 const RESOLUTIONS: { id: FillerInput['resolution']; label: string }[] = [
+  { id: 'auto', label: 'Match channel' },
   { id: '720p', label: '720p · HD' },
   { id: '1080p', label: '1080p · Full HD' },
   { id: '1440p', label: '1440p · QHD' },
@@ -53,8 +52,7 @@ export const isLegacyStyle = (s: string): boolean => s in LEGACY_LABELS
 
 /** One-line summary of a filler, shared by the library and the assignment list. */
 export function fillerSummary(f: Filler): string {
-  const len = f.durationMode === 'audio' ? 'match audio' : `${f.durationSec}s`
-  return `${fillerStyleLabel(f.style)} · ${len}`
+  return `${fillerStyleLabel(f.style)}${f.audioAssetId != null ? ' · with music' : ''}`
 }
 
 // The render-affecting inputs that change how a still looks — when any of these
@@ -242,33 +240,23 @@ export default function FillerEditor({
         </Section>
       )}
 
-      <Section title="Audio & timing">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Audio (optional)" className="col-span-2">
-            <Select value={draft.audioAssetId ?? ''} onChange={(e) => set('audioAssetId', e.target.value ? Number(e.target.value) : null)}>
-              <option value="">None</option>
-              {audioAssets.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </Select>
-          </Field>
-          <Field label="Length">
-            <Select value={draft.durationMode} onChange={(e) => set('durationMode', e.target.value as FillerInput['durationMode'])}>
-              <option value="fixed">Fixed</option>
-              <option value="audio" disabled={draft.audioAssetId == null}>Match audio</option>
-            </Select>
-          </Field>
-          {draft.durationMode === 'fixed' && (
-            <Field label="Seconds">
-              <Input type="number" min={5} max={600} value={draft.durationSec} onChange={(e) => set('durationSec', Number(e.target.value))} />
-            </Field>
-          )}
-        </div>
+      <Section title="Music">
+        <Field
+          label="Track (optional)"
+          hint="Starts at the top of every break and plays straight through, looping if the break runs longer than the song. It fades in and out with the break."
+        >
+          <Select value={draft.audioAssetId ?? ''} onChange={(e) => set('audioAssetId', e.target.value ? Number(e.target.value) : null)}>
+            <option value="">None</option>
+            {audioAssets.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </Select>
+        </Field>
       </Section>
 
       {draft.style !== 'custom' && (
         <Section title="Quality">
           <Field
             label="Resolution"
-            hint="Higher looks sharper on HD channels but takes longer to generate. Playback still scales to each channel’s own resolution."
+            hint="Match channel builds it at each channel’s own resolution. A fixed size is used everywhere — higher looks sharper but takes longer to generate."
             className="sm:max-w-xs"
           >
             <Select value={draft.resolution} onChange={(e) => set('resolution', e.target.value as FillerInput['resolution'])}>
@@ -324,8 +312,8 @@ export default function FillerEditor({
         </Button>
       </div>
       <p className="text-[11px] text-ink-faint">
-        Uploaded clips &amp; music live on the Studio page. Fillers stretch to fill each gap; the chosen audio is
-        baked into generated clips, and “Match audio” makes the loop equal the track length.
+        Uploaded clips &amp; music live on the Studio page. A generated filler is a seamless loop, repeated for as
+        long as each break lasts.
       </p>
     </div>
   )

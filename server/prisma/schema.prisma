@@ -203,15 +203,19 @@ model Filler {
   name         String?
   style        String      @default("frosted") // "animated" | "frosted" | "custom"
   assetId      Int? // custom visual (Asset kind "filler"); null for generated styles
-  audioAssetId Int? // ambient audio (Asset kind "audio"); baked into generated clips
+  audioAssetId Int? // music (Asset kind "audio"), laid over the break as it airs — never part of the clip
   // Explicit brand logo for the generated (frosted/logo) styles. Null = derive
   // from whichever channel/block the filler airs in (the per-owner default).
   logo         Logo?       @relation(fields: [logoId], references: [id], onDelete: SetNull)
   logoId       Int?
   generatedAssetId Int? // the last generated output clip, saved as a Media asset (for preview/reuse)
-  durationMode String      @default("fixed") // "fixed" | "audio" (match the audio length)
+  // Unused: a filler's clip used to be this long (or its track's length). Clips
+  // are now seamless loops of a length each style picks, and the music plays
+  // over the break, so nothing reads these. Kept so existing databases push.
+  durationMode String      @default("fixed")
   durationSec  Int         @default(30)
-  // Render resolution of the generated clip ("720p" | "1080p" | "1440p").
+  // Render resolution of the generated clip ("720p" | "1080p" | "1440p"), or
+  // "auto" (Match channel): the size of the channel it airs on.
   // Playback still scales to the channel profile, but a higher source keeps a
   // filler sharp on a 1080p channel instead of upscaling a 720p clip.
   resolution   String      @default("1080p")

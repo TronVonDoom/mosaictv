@@ -4,6 +4,7 @@ import path from 'node:path'
 import { prisma } from '../db.js'
 import { logosDir } from '../paths.js'
 import { parseWatermark, sanitizeWatermark } from '../streaming/overlays.js'
+import { warmFiller } from '../streaming/filler.js'
 
 export const logosRouter = Router()
 
@@ -96,6 +97,8 @@ logosRouter.put('/:id/image', async (req, res) => {
   fs.writeFileSync(path.join(logosDir(), filename), buf)
   if (previous && previous !== filename) fs.rm(path.join(logosDir(), previous), () => {})
   const updated = await prisma.logo.update({ where: { id }, data: { filename, mime } })
+  // Every filler branded with it needs rebuilding with the new image.
+  warmFiller().catch(() => {})
   res.json({
     id: updated.id,
     name: updated.name,
@@ -112,6 +115,7 @@ logosRouter.delete('/:id', async (req, res) => {
     const file = path.join(logosDir(), logo.filename)
     fs.rm(file, () => {})
     await prisma.logo.delete({ where: { id } }).catch(() => {})
+    warmFiller().catch(() => {})
   }
   res.status(204).end()
 })
